@@ -125,7 +125,7 @@
                 &lt 4 DELETE    &tog 1       &lt 1 BACKSPACE  &kp LS(LG(N4))  &lt 2 SPACE  &lt 3 ESC    &lt 3 BACKSPACE  &lt 2 ENTER  &kp LS(LG(N4))  &kp F1       &kp F2       &lt 4 F12
             >;
 
-            sensor-bindings = <&rsr_scrl &rsr_scrl>;
+            #sensor-bindings = <&rsr_scrl &rsr_scrl>;
         };
 
         layer_1 {
@@ -147,7 +147,7 @@
                 &kp LCTRL       &kp LEFT_WIN  &kp LEFT_ALT   &trans         &kp K_BACK      &kp C_AC_BACK    &kp KP_ENTER  &kp KP_N0        &trans     &kp KP_DOT  &kp KP_EQUAL  &kp F12
             >;
 
-            sensor-bindings = <&encoder_kp C_VOL_UP C_VOL_DN>;
+            #sensor-bindings = <&encoder_kp C_VOL_UP C_VOL_DN>;
         };
 
         layer_3 {
