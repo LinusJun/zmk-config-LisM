@@ -12,19 +12,6 @@
     };
 };
 
-//锁轴DTS
-&axis_lock_vertical {
-    compatible = "zmk,input-processor";
-    label = "vertical_lock";
-    process = "function(input) { input.x = 0; return input; }";
-};
-
-&axis_lock_horizontal {
-    compatible = "zmk,input-processor";
-    label = "horizontal_lock";
-    process = "function(input) { input.y = 0; return input; }";
-};
-
 
 // ペリフェラル（split経由）のリスナーを有効化
 &peripheral_listener {
@@ -45,7 +32,6 @@
     axis_lock_scroll {
         layers = <3>;
         input-processors =
-            <&axis_lock_horizontal>,   // 周边设备锁 X
             <&zip_xy_to_scroll_mapper>,
             <&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
             <&zip_scroll_scaler 1 16>;
@@ -71,7 +57,6 @@
     axis_lock_scroll {
         layers = <3>;
         input-processors =
-            <&axis_lock_vertical>,   // 中央设备锁 Y
             <&zip_xy_to_scroll_mapper>,
             <&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
             <&zip_scroll_scaler 1 16>;
