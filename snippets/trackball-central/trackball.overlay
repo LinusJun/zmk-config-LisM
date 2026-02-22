@@ -13,13 +13,13 @@
 };
 
 //锁轴DTS
-axis_lock_vertical: zip_input_processor {
+&axis_lock_vertical {
     compatible = "zmk,input-processor";
     label = "vertical_lock";
     process = "function(input) { input.x = 0; return input; }";
 };
 
-axis_lock_horizontal: zip_input_processor {
+&axis_lock_horizontal {
     compatible = "zmk,input-processor";
     label = "horizontal_lock";
     process = "function(input) { input.y = 0; return input; }";
