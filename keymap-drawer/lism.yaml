@@ -11,16 +11,16 @@ layers:
   - I
   - O
   - P
-  - A
-  - {t: S, h: LALT}
-  - {t: D, h: LSHIFT}
+  - {t: A, h: LEFT ALT}
+  - {t: S, h: LSHFT}
+  - {t: D, h: LCTRL}
   - {t: F, h: LGUI}
-  - {t: G, h: LCTRL}
-  - {t: H, h: RCTRL}
+  - G
+  - H
   - {t: J, h: RGUI}
-  - {t: K, h: RSHIFT}
-  - {t: L, h: RALT}
-  - {t: ;, h: Mark Layer}
+  - {t: K, h: RCTRL}
+  - {t: L, h: RSHFT}
+  - {t: ;, h: RALT}
   - Z
   - X
   - C
@@ -33,15 +33,15 @@ layers:
   - /
   - {t: DEL, h: Device Layer}
   - {t: Mouse Layer, h: toggle}
-  - {t: TAB, h: Mouse Layer}
+  - {t: BS, h: Mouse Layer}
   - Sft+Gui+4
   - {t: SPACE, h: Number Layer}
   - {t: ESC, h: Mark Layer}
   - {t: BS, h: Mark Layer}
   - {t: ENTER, h: Number Layer}
   - Sft+Gui+4
-  - F7
-  - F10
+  - F1
+  - F2
   - {t: F12, h: Device Layer}
   Mouse Layer:
   - {t: ▽, type: trans}
@@ -87,90 +87,90 @@ layers:
   - {t: ▽, type: trans}
   - Gui+W
   Number Layer:
-  - {t: ▽, type: trans}
-  - '7'
-  - '8'
-  - '9'
-  - '='
-  - F1
-  - F2
-  - F7
-  - F10
-  - RSHIFT
-  - '*'
-  - {t: '4', h: LALT}
-  - {t: '5', h: LSHIFT}
-  - {t: '6', h: LGUI}
-  - {t: '-', h: LCTRL}
-  - '&mkp MB1'
-  - ←
+  - TAB
+  - HOME
   - ↑
-  - →
-  - RGUI
-  - /
-  - '1'
-  - '2'
-  - '3'
-  - +
-  - '&mkp MB2'
-  - ''
+  - END
+  - ESC
+  - '='
+  - KP 7
+  - KP 8
+  - KP 9
+  - KP NUMLOCK
+  - CAPSLOCK
+  - ←
   - ↓
-  - ''
-  - RALT
+  - →
+  - AC CLOSE
+  - KP MULTIPLY
+  - KP 4
+  - KP 5
+  - KP 6
+  - KP PLUS
+  - LEFT SHIFT
+  - PAGE UP
+  - AC HOME
+  - PAGE DOWN
+  - MENU ESC
+  - KP DIVIDE
+  - KP 1
+  - KP 2
+  - KP 3
+  - KP MINUS
+  - LCTRL
+  - LEFT WIN
+  - LEFT ALT
   - {t: ▽, type: trans}
-  - .
-  - '0'
+  - {t: BACK, type: held}
+  - AC BACK
+  - KP ENTER
+  - KP 0
   - {t: ▽, type: trans}
-  - {t: LANG2, type: held}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - LANG1
-  - {t: ▽, type: trans}
-  - Sft+Ctl+TAB
-  - Ctl+TAB
+  - KP DOT
+  - KP EQUAL
   - F12
   Mark Layer:
-  - Sft+Gui+4
-  - F4
-  - (
-  - )
-  - ''
-  - '~'
   - '!'
   - '@'
   - '#'
   - $
-  - '&emoji'
-  - F5
-  - '['
-  - ']'
-  - ''
-  - '`'
-  - _
-  - ''''
-  - '"'
-  - {t: \, type: held}
-  - KP NUMLOCK
-  - F11
-  - '{'
-  - '}'
-  - ''
-  - '|'
   - '%'
   - ^
   - '&'
   - '*'
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
+  - ''''
+  - '"'
+  - '1'
+  - '2'
+  - '3'
+  - '4'
+  - '5'
+  - '6'
+  - '7'
+  - '8'
+  - '9'
   - '0'
+  - '~'
+  - '`'
+  - (
+  - )
+  - '{'
+  - '}'
+  - '['
+  - ']'
+  - '|'
+  - \
+  - '&emoji'
+  - F5
+  - F4
   - {t: ▽, type: trans}
-  - SPACE
+  - '-'
+  - {type: held}
   - {t: ▽, type: trans}
+  - UNDERSCORE
   - {t: ▽, type: trans}
-  - ENTER
-  - {t: ▽, type: trans}
-  - ''
-  - ''
+  - F8
+  - F11
   - F12
   Device Layer:
   - ''
@@ -185,12 +185,12 @@ layers:
   - {t: BT, h: '4'}
   - ''
   - ''
+  - OUT BLE
+  - OUT USB
+  - {t: ▽, type: trans}
   - ''
-  - ''
-  - ''
-  - ''
-  - ''
-  - ''
+  - OUT USB
+  - OUT BLE
   - ''
   - ''
   - Reset
