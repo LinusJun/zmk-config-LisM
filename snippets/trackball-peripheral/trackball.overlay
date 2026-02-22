@@ -14,5 +14,12 @@
 &trackball_split {
     device = <&trackball_peripheral>;
     input-processors = 
-        <&zip_xy_transform (INPUT_TRANSFORM_X_INVERT | INPUT_TRANSFORM_Y_INVERT)>;  
+        <&zip_xy_transform (INPUT_TRANSFORM_X_INVERT | INPUT_TRANSFORM_Y_INVERT)>;
+
+    scroller {
+        layers = <2>;
+        input-processors = 
+            <&zip_xy_to_scroll_mapper>,
+            <&zip_scroll_scaler 1 16>;
+    };    
 };
