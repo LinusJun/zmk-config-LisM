@@ -92,7 +92,7 @@ layers:
   - ↑
   - END
   - ESC
-  - '='
+  - KP EQUAL
   - KP 7
   - KP 8
   - KP 9
@@ -126,9 +126,9 @@ layers:
   - KP ENTER
   - KP 0
   - {t: ▽, type: trans}
+  - KP 0
   - KP DOT
-  - KP EQUAL
-  - F12
+  - KP DOT
   Mark Layer:
   - '!'
   - '@'
@@ -160,7 +160,7 @@ layers:
   - ']'
   - '|'
   - \
-  - '&emoji'
+  - F7
   - F5
   - F4
   - {t: ▽, type: trans}
@@ -184,14 +184,14 @@ layers:
   - {t: BT, h: '3'}
   - {t: BT, h: '4'}
   - ''
-  - ''
-  - ''
-  - ''
+  - OUT BLE
+  - OUT USB
+  - OUT TOG
   - {t: ▽, type: trans}
   - ''
-  - ''
-  - ''
-  - ''
+  - OUT TOG
+  - OUT USB
+  - OUT BLE
   - ''
   - Reset
   - ''
