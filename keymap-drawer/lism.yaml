@@ -185,12 +185,12 @@ layers:
   - {t: BT, h: '4'}
   - ''
   - ''
-  - OUT BLE
-  - OUT USB
+  - ''
+  - ''
   - {t: ▽, type: trans}
   - ''
-  - OUT USB
-  - OUT BLE
+  - ''
+  - ''
   - ''
   - ''
   - Reset
