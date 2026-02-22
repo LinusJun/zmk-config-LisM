@@ -23,7 +23,7 @@
         layers = <2 4>;
         input-processors = 
             <&zip_xy_to_scroll_mapper>,
-            <&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
+            //<&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
             <&zip_scroll_transform INPUT_TRANSFORM_Y_INVERT>,   //滚动的Y轴反转
             <&zip_scroll_scaler 1 16>;
     };
@@ -32,6 +32,7 @@
         layers = <3>;
         input-processors =
             <&zip_xy_to_scroll_mapper>,
+            <&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
             <&zip_scroll_scaler 1 16>;
     };
 };
@@ -47,7 +48,7 @@
         layers = <2 4>;
         input-processors = 
             <&zip_xy_to_scroll_mapper>,
-            <&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
+            //<&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
             <&zip_scroll_transform INPUT_TRANSFORM_Y_INVERT>,   //滚动的Y轴反转
             <&zip_scroll_scaler 1 16>;
     };
@@ -56,6 +57,7 @@
         layers = <3>;
         input-processors =
             <&zip_xy_to_scroll_mapper>,
+            <&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
             <&zip_scroll_scaler 1 16>;
     };
 };
