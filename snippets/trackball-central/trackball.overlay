@@ -15,6 +15,18 @@
 // ペリフェラル（split経由）のリスナーを有効化
 &peripheral_listener {
     status = "okay";
+
+    input-processors = 
+        <&zip_xy_transform (INPUT_TRANSFORM_X_INVERT | INPUT_TRANSFORM_Y_INVERT)>;
+
+    scroller {
+        layers = <2 4>;
+        input-processors = 
+            <&zip_xy_to_scroll_mapper>,
+            // <&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
+            // <&zip_scroll_transform INPUT_TRANSFORM_Y_INVERT>,   //滚动的Y轴反转
+            <&zip_scroll_scaler 1 16>;
+    };
 };
 
 // セントラルのリスナーを有効化し、deviceを紐付け
