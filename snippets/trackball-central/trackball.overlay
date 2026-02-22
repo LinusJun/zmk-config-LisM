@@ -32,7 +32,7 @@
         layers = <3>;
 
         input-processors =
-            <&zip_xy_transform INPUT_TRANSFORM_Y_ZERO>,   // 锁 Y 轴
+            <&zip_xy_transform (INPUT_TRANSFORM_X_INVERT | INPUT_TRANSFORM_Y_INVERT)>,   // 锁 Y 轴
             <&zip_xy_to_scroll_mapper>,
             <&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
             <&zip_scroll_scaler 1 16>;
@@ -59,7 +59,7 @@
         layers = <3>;
 
         input-processors =
-            <&zip_xy_transform INPUT_TRANSFORM_X_ZERO>,   // 锁 X 轴
+            <&zip_xy_transform (INPUT_TRANSFORM_X_INVERT | INPUT_TRANSFORM_Y_INVERT)>,   // 锁 X 轴
             <&zip_xy_to_scroll_mapper>,
             <&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
             <&zip_scroll_scaler 1 16>;
