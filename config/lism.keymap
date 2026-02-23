@@ -113,6 +113,16 @@
             bindings = <&kp LG(LS(NUMBER_4))>;
             key-positions = <0 1>;
         };
+
+        rleftclk2 {
+            bindings = <&mkp MB1>;
+            key-positions = <6 7>;
+        };
+
+        rrightclk2 {
+            bindings = <&mkp MB2>;
+            key-positions = <8 7>;
+        };
     };
 
     keymap {
@@ -121,10 +131,10 @@
         default_layer {
             display-name = "Default Layer";
             bindings = <
-&kp Q           &kp W        &kp E            &kp R           &kp T                                      &kp Y        &kp U           &kp I        &kp O        &kp P
-&mt LEFT_ALT A  &mt LSHFT S  &mt LCTRL D      &mt LGUI F      &kp G                                      &kp H        &mt RGUI J      &mt RCTRL K  &mt RSHFT L  &mt RALT SEMICOLON
-&kp Z           &kp X        &kp C            &kp V           &kp B                                      &kp N        &kp M           &kp COMMA    &kp DOT      &kp SLASH
-&lt 4 DELETE    &tog 1       &lt 1 BACKSPACE  &kp LS(LG(N4))  &lt 2 SPACE  &lt 3 ESC    &lt 3 BACKSPACE  &lt 2 ENTER  &kp LS(LG(N4))  &kp F1       &kp F2       &lt 4 F12
+&kp Q         &kp W       &kp E            &kp R           &kp T                                      &kp Y        &kp U           &kp I       &kp O       &kp P
+&mt LSHIFT A  &mt LALT S  &mt LGUI D       &mt LCTRL F     &kp G                                      &kp H        &mt RCTRL J     &mt RGUI K  &mt RALT L  &mt RSHIFT SEMICOLON
+&kp Z         &kp X       &kp C            &kp V           &kp B                                      &kp N        &kp M           &kp COMMA   &kp DOT     &kp SLASH
+&lt 4 DELETE  &tog 1      &lt 1 BACKSPACE  &kp LS(LG(N4))  &lt 2 SPACE  &lt 3 ESC    &lt 3 BACKSPACE  &lt 2 ENTER  &kp LS(LG(N4))  &kp F1      &kp F2      &lt 4 ESC
             >;
 
             sensor-bindings = <&encoder_msc SCRL_DOWN SCRL_UP>;
