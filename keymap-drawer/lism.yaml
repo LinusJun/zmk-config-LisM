@@ -11,16 +11,16 @@ layers:
   - I
   - O
   - P
-  - {t: A, h: LEFT ALT}
-  - {t: S, h: LSHFT}
-  - {t: D, h: LCTRL}
-  - {t: F, h: LGUI}
+  - {t: A, h: LSHIFT}
+  - {t: S, h: LALT}
+  - {t: D, h: LGUI}
+  - {t: F, h: LCTRL}
   - G
   - H
-  - {t: J, h: RGUI}
-  - {t: K, h: RCTRL}
-  - {t: L, h: RSHFT}
-  - {t: ;, h: RALT}
+  - {t: J, h: RCTRL}
+  - {t: K, h: RGUI}
+  - {t: L, h: RALT}
+  - {t: ;, h: RSHIFT}
   - Z
   - X
   - C
@@ -42,7 +42,7 @@ layers:
   - Sft+Gui+4
   - F1
   - F2
-  - {t: F12, h: Device Layer}
+  - {t: ESC, h: Device Layer}
   Mouse Layer:
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
@@ -242,3 +242,7 @@ combos:
   k: '&mkp MB3'
 - p: [0, 1]
   k: Gui+Sft+4
+- p: [6, 7]
+  k: '&mkp MB1'
+- p: [8, 7]
+  k: '&mkp MB2'
