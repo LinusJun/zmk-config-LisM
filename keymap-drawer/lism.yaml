@@ -13,12 +13,12 @@ layers:
   - P
   - {t: A, h: LSHIFT}
   - {t: S, h: LALT}
-  - {t: D, h: LGUI}
-  - {t: F, h: LCTRL}
+  - {t: D, h: LCTRL}
+  - {t: F, h: LGUI}
   - G
   - H
-  - {t: J, h: RCTRL}
-  - {t: K, h: RGUI}
+  - {t: J, h: RGUI}
+  - {t: K, h: RCTRL}
   - {t: L, h: RALT}
   - {t: ;, h: RSHIFT}
   - Z
@@ -246,3 +246,5 @@ combos:
   k: '&mkp MB1'
 - p: [8, 7]
   k: '&mkp MB2'
+- p: [11, 13]
+  k: Ctl+A
