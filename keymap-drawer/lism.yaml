@@ -101,7 +101,7 @@ layers:
   - ←
   - ↓
   - →
-  - AC CLOSE
+  - Ctl+TAB
   - KP MULTIPLY
   - KP 4
   - KP 5
@@ -111,7 +111,7 @@ layers:
   - PAGE UP
   - AC HOME
   - PAGE DOWN
-  - MENU ESC
+  - Ctl+Sft+TAB
   - KP DIVIDE
   - KP 1
   - KP 2
