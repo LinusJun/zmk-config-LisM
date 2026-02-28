@@ -50,7 +50,7 @@ include:
   - board: seeeduino_xiao_ble
     shield: lism_left rgbled_adapter
     snippet: trackball-central
-    artifact-name: lism_left_central_trackball
+    artifact-name: lism_left_peripheral_trackball
     cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=n
   
   # - board: seeeduino_xiao_ble
