@@ -3,7 +3,7 @@
 / {
     chosen {
         zmk,kscan = &mock_kscan;
-        zmk,physical-layout = &physical_layout0;  // New item added    };
+        zmk,matrix_transform = &transform_40keymap;  // New item added    };
 
     mock_kscan: mock_kscan_0 {
         compatible = "zmk,kscan-mock";
@@ -24,26 +24,5 @@
             RC(3,4) RC(3,3) RC(3,2)         RC(3,0) RC(3,1)    RC(3,6) RC(3,5)         RC(3,7) RC(3,8) RC(3,9)
         >;
     };
-    
-    // 論理キー配列へ
-    transform_42keymap: transform_42keymap {
-        compatible = "zmk,matrix-transform";
-        columns = <12>;
-        rows = <5>; 
-        map = <
-            RC(0,4) RC(0,3) RC(0,2) RC(0,1) RC(0,0)                    RC(0,5) RC(0,6)  RC(0,7) RC(0,8) RC(0,9)
-            RC(1,4) RC(1,3) RC(1,2) RC(1,1) RC(1,0)                    RC(1,5) RC(1,6)  RC(1,7) RC(1,8) RC(1,9)
-            RC(2,4) RC(2,3) RC(2,2) RC(2,1) RC(2,0)                    RC(2,5) RC(2,6)  RC(2,7) RC(2,8) RC(2,9)
-            RC(3,4) RC(3,3) RC(3,2) RC(4,5) RC(3,0) RC(3,1)    RC(3,6) RC(3,5) RC(4,10) RC(3,7) RC(3,8) RC(3,9)
-        >;
-    };
 
-};
-
-/ {
-    physical_layout0: physical_layout_0 {
-        compatible = "zmk,physical-layout";
-        display-name = "Default Layout";
-        transform = <&transform_40keymap>;
-    };
 };
