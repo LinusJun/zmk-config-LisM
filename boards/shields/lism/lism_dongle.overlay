@@ -91,31 +91,5 @@
         };
     };
 
-    split_inputs {
-        #address-cells = <1>;
-        #size-cells = <0>;
-
-        trackball_split: trackball_split@0 {
-            compatible = "zmk,input-split";
-            reg = <0>;
-        };
-    };
-
-    // ペリフェラル->セントラルのためのリスナー
-    peripheral_listener: peripheral_listener {
-        compatible = "zmk,input-listener";
-        status = "disabled";
-        device = <&trackball_split>;
-        // input-processors = 
-        //     <&zip_xy_transform INPUT_TRANSFORM_Y_INVERT>,
-        //     <&zip_xy_to_scroll_mapper>,
-        //     <&zip_scroll_scaler 1 16>;
-    };
-
-    // セントラルのためのリスナー（後でdeviceを割当）
-    central_listener: central_listener {
-        compatible = "zmk,input-listener";
-        status = "disabled";
-    };
 
 };
