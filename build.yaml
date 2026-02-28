@@ -65,8 +65,9 @@ include:
   #   cmake-args: -DCONFIG_ZMK_STUDIO=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=y
   
   - board: seeeduino_xiao_ble
-    shield: lism_dongle rgbled_adapter
-    
+    shield: lism_dongle
+    cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=y
+  
   # Reset
   - board: seeeduino_xiao_ble
     shield: settings_reset
