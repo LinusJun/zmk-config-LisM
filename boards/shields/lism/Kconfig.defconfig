@@ -1,4 +1,4 @@
-if SHIELD_LISM_L || SHIELD_LISM_R
+if SHIELD_LISM_L || SHIELD_LISM_R || SHIELD_LISM_DONGLE
     config ZMK_KEYBOARD_NAME
         default "LisM"
 
@@ -22,6 +22,9 @@ if SHIELD_LISM_L || SHIELD_LISM_R
     
     config SPI
         default y
+
+    config ZMK_BLE
+        default y   
 endif
 
 if SHIELD_LISM_DONGLE
@@ -34,6 +37,9 @@ config ZMK_SPLIT_ROLE_CENTRAL
     default y
 
 config ZMK_SPLIT
+    default y
+
+config ZMK_USB
     default y
 
 # Set this to the number of peripherals your dongle will have.
