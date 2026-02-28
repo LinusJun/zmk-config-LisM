@@ -3,7 +3,7 @@
 / {
     chosen {
         zmk,kscan = &mock_kscan;
-    };
+        zmk,physical-layout = &physical_layout0;  // New item added    };
 
     mock_kscan: mock_kscan_0 {
         compatible = "zmk,kscan-mock";
@@ -38,4 +38,12 @@
         >;
     };
 
+};
+
+/ {
+    physical_layout0: physical_layout_0 {
+        compatible = "zmk,physical-layout";
+        display-name = "Default Layout";
+        transform = <&transform_40keymap>;
+    };
 };
