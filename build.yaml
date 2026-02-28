@@ -39,7 +39,7 @@ include:
   #   artifact-name: lism_right_peripheral_non_trackball
   - board: seeeduino_xiao_ble
     shield: lism_right rgbled_adapter
-    snippet: trackball-peripheral
+    snippet: trackball-peripheral-R
     artifact-name: lism_right_peripheral_trackball
     cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=n
   # - board: seeeduino_xiao_ble
@@ -49,7 +49,7 @@ include:
   #   cmake-args: -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=y
   - board: seeeduino_xiao_ble
     shield: lism_left rgbled_adapter
-    snippet: trackball-central
+    snippet: trackball-peripheral-L
     artifact-name: lism_left_peripheral_trackball
     cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=n
   
