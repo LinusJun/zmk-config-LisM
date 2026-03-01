@@ -12,8 +12,8 @@
 #include <dt-bindings/zmk/input_transform.h>
 // #include <behaviors/input_gestures_accel.dtsi>
 
-&physical_layout0 {
-    transform = <&default_transform>;
+&physical_40key_layout {
+    transform = <&transform_40keymap>;
 };
 
 /* https://github.com/oleksandrmaslov/zmk-pointing-acceleration?tab=readme-ov-file#configure-acceleration */
