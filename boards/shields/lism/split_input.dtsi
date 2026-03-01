@@ -22,4 +22,9 @@
         status = "disabled"; // disable for .keymap to add input processors without undefined reference error
         device = <&trackball_split_input>;
     };
+
+    trackball_split_listener_right: trackball_split_listener_right {
+        compatible = "zmk,input-listener";
+        status = "disabled";
+    };
 };
