@@ -31,15 +31,20 @@
 // look into <split_input.dtsi> for mother node.
 &trackball_split_listener {
 	status = "okay";
+
     input-processors =
         <&zip_zxy>, // decompressor by badjeff
         <&pointer_accel>;
+		<&zip_xy_transform (INPUT_TRANSFORM_X_INVERT | INPUT_TRANSFORM_Y_INVERT)>;
+
 	scroll {
-		layers = <5>; // SCROLL
+		layers = <2 4>; // SCROLL
 		input-processors =
             <&zip_zxy>, // decompressor by badjeff
-            <&zip_xy_transform (INPUT_TRANSFORM_Y_INVERT)>,
+            //<&zip_xy_transform (INPUT_TRANSFORM_Y_INVERT)>,
+			<&zip_scroll_transform INPUT_TRANSFORM_Y_INVERT>,   //滚动的Y轴反转
             <&zip_xy_scaler 1 16>,
+			<&zip_scroll_scaler 1 16>;
             <&zip_xy_to_scroll_mapper>;
 	};
 };
