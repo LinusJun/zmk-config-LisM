@@ -8,12 +8,12 @@ manifest:
       url-base: https://github.com/caksoylar
     - name: 4mplelab
       url-base: https://github.com/4mplelab
-    - name: badjeff
-      url-base: https://github.com/badjeff/
-    - name: efogdev
-      url-base: https://github.com/efogdev
-    - name: oleksandrmaslov
-      url-base: https://github.com/oleksandrmaslov
+    # - name: badjeff
+    # url-base: https://github.com/badjeff/
+    # - name: efogdev
+    #   url-base: https://github.com/efogdev
+    # - name: oleksandrmaslov
+    #   url-base: https://github.com/oleksandrmaslov
   projects:
     - name: zmk
       remote: zmkfirmware
@@ -28,14 +28,14 @@ manifest:
     - name: zmk-feature-charge-indicator
       remote: 4mplelab
       revision: main
-      - name: zmk-input-processor-report-rate-limit
-      remote: badjeff
-      revision: main
-    - name: zmk-input-processor-xyz
-      remote: badjeff
-      revision: main
-    - name: zmk-pointing-acceleration
-      remote: oleksandrmaslov
-      revision: main
+    # - name: zmk-input-processor-report-rate-limit
+    #   remote: badjeff
+    #   revision: main
+    # - name: zmk-input-processor-xyz
+    #   remote: badjeff
+    #   revision: main
+    #  - name: zmk-pointing-acceleration
+    #  remote: oleksandrmaslov
+    #  revision: main
   self:
     path: config
