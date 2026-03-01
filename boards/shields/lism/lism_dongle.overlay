@@ -8,7 +8,7 @@
 #include "split_input.dtsi"
 #include "lism-layouts.dtsi"
 #include <input/processors.dtsi>
-// #include <input/processors/xyz.dtsi>
+#include <input/processors/xyz.dtsi>
 #include <dt-bindings/zmk/input_transform.h>
 // #include <behaviors/input_gestures_accel.dtsi>
 
@@ -33,14 +33,14 @@
 	status = "okay";
 
     input-processors =
-        //<&zip_zxy>, // decompressor by badjeff
+        <&zip_zxy>, // decompressor by badjeff
         //<&pointer_accel>;
 		<&zip_xy_transform (INPUT_TRANSFORM_X_INVERT | INPUT_TRANSFORM_Y_INVERT)>;
 
 	scroll {
 		layers = <2 4>; // SCROLL
 		input-processors =
-            //<&zip_zxy>, // decompressor by badjeff
+            <&zip_zxy>, // decompressor by badjeff
             //<&zip_xy_transform (INPUT_TRANSFORM_Y_INVERT)>,
 			<&zip_scroll_transform INPUT_TRANSFORM_Y_INVERT>,   //滚动的Y轴反转
             <&zip_xy_scaler 1 16>,
