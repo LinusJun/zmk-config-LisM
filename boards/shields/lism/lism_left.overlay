@@ -11,7 +11,7 @@
 };
 
 &trackball_split_input { // local trackball *split* input device child node
-	device = <&trackball>;
+	input = <&trackball>;
 	input-processors =
 		<&zip_xyz>; // compressor by badjeff
 };
