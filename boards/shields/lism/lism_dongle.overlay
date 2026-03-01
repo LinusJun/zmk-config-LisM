@@ -43,11 +43,11 @@
 		layers = <2 4>; // SCROLL
 		input-processors =
             <&zip_zxy>, // decompressor by badjeff
+			<&zip_xy_to_scroll_mapper>,
             //<&zip_xy_transform (INPUT_TRANSFORM_Y_INVERT)>,
 			<&zip_scroll_transform INPUT_TRANSFORM_Y_INVERT>,   //滚动的Y轴反转
             <&zip_xy_scaler 1 16>,
-			<&zip_scroll_scaler 1 16>,
-            <&zip_xy_to_scroll_mapper>;
+			<&zip_scroll_scaler 1 16>;
 	};
 
     axis_lock_scroll {
@@ -73,11 +73,11 @@
 		layers = <2 4>; // SCROLL
 		input-processors =
             <&zip_zxy>, // decompressor by badjeff
+			<&zip_xy_to_scroll_mapper>,
             //<&zip_xy_transform (INPUT_TRANSFORM_Y_INVERT)>,
-			//<&zip_scroll_transform INPUT_TRANSFORM_Y_INVERT>,   //滚动的Y轴反转
+			<&zip_scroll_transform INPUT_TRANSFORM_Y_INVERT>,   //滚动的Y轴反转
             <&zip_xy_scaler 1 16>,
-			<&zip_scroll_scaler 1 16>,
-            <&zip_xy_to_scroll_mapper>;
+			<&zip_scroll_scaler 1 16>;
 	};
 
     axis_lock_scroll {
