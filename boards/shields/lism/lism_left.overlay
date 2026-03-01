@@ -2,7 +2,7 @@
 #include "paw3222.dtsi"
 #include "split_input.dtsi"
 #include "lism-layouts.dtsi"
-// #include <input/processors/xyz.dtsi>
+#include <input/processors/xyz.dtsi>
 #include <dt-bindings/zmk/input_transform.h>
 // #include <input/processors/report_rate_limit.dtsi>
 
@@ -18,7 +18,7 @@
 	device = <&trackball>;
 	//input-processors =
 		//<&zip_report_rate_limit 8>, // rate limiter by badjeff
-		//<&zip_xyz>; // compressor by badjeff
+		<&zip_xyz>; // compressor by badjeff
 };
 
 / {
