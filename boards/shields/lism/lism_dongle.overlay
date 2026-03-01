@@ -74,7 +74,7 @@
 / {
     chosen {
         zmk,kscan = &mock_kscan;
-        zmk,physical-layout = &physical_layout0;
+        zmk,physical-layout = &physical_42key_layout;
     };
 
     mock_kscan: kscan_1 {
