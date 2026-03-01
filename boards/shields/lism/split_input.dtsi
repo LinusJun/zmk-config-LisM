@@ -16,10 +16,10 @@
             reg = <0>;
         };
 
-        trackball_split_input_right: trackball_split_input_right@0 { // trackball's split input device
-            compatible = "zmk,input-split";
-            reg = <0>;
-        };
+//        trackball_split_input_right: trackball_split_input_right@0 { // trackball's split input device
+//            compatible = "zmk,input-split";
+//            reg = <0>;
+//        };
     };
 
     trackball_split_listener: trackball_split_listener { // listener for split input device
@@ -31,6 +31,6 @@
     trackball_split_listener_right: trackball_split_listener_right {
         compatible = "zmk,input-listener";
         status = "disabled";
-        device = <&trackball_split_input_right>;
+        device = <&trackball_split_input>;
     };
 };
