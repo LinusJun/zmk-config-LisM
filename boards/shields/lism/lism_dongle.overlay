@@ -6,6 +6,7 @@
 
 #include "lism.dtsi"
 #include "split_input.dtsi"
+#include "split_input_right.dtsi"
 #include "lism-layouts.dtsi"
 #include <input/processors.dtsi>
 #include <input/processors/xyz.dtsi>
