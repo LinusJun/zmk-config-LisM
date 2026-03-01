@@ -1,95 +1,59 @@
-#include <dt-bindings/zmk/matrix_transform.h>
-#include <dt-bindings/zmk/input_transform.h>
-#include <physical_layouts.dtsi>
-#include <zephyr/dt-bindings/input/input-event-codes.h>
+// Can't have the kscan0 here, that one's physical
+/* 
+    Central side is the only one that is aware of .keymap,
+    so put all input processors you want to take effect in input listener here.
+*/
+
+#include "lism.dtsi"
+#include "split_input.dtsi"
+#include "lism-layouts.dtsi"
 #include <input/processors.dtsi>
+#include <input/processors/xyz.dtsi>
+#include <dt-bindings/zmk/input_transform.h>
+#include <behaviors/input_gestures_accel.dtsi>
+
+&physical_layout0 {
+    transform = <&default_transform>;
+};
+
+/* https://github.com/oleksandrmaslov/zmk-pointing-acceleration?tab=readme-ov-file#configure-acceleration */
+&pointer_accel {
+    input-type = <INPUT_EV_REL>;  // For relative input devices
+    min-factor = <600>;           // 0.6x at very slow speeds
+    max-factor = <4000>;          // 4.0x at fast speeds
+    speed-threshold = <1000>;     // 1000 counts/sec for 1x
+    speed-max = <6000>;           // 6000 counts/sec for max accel
+    acceleration-exponent = <3>;  // 1:linear, 2:quadratic, 3:cubic
+    track-remainders;             // accumulate fractional movements
+};
+
+/* local trackball input split device child node, receiving events from the peripheral and raising them locally. */
+// look into <split_input.dtsi> for mother node.
+&trackball_split_listener {
+	status = "okay";
+    input-processors =
+        <&zip_zxy>, // decompressor by badjeff
+        <&pointer_accel>;
+	scroll {
+		layers = <5>; // SCROLL
+		input-processors =
+            <&zip_zxy>, // decompressor by badjeff
+            <&zip_xy_transform (INPUT_TRANSFORM_Y_INVERT)>,
+            <&zip_xy_scaler 1 16>,
+            <&zip_xy_to_scroll_mapper>;
+	};
+};
 
 / {
     chosen {
         zmk,kscan = &mock_kscan;
-        zmk,physical-layout = &physical_40key_layout;
+        zmk,physical-layout = &physical_layout0;
     };
 
-    mock_kscan: mock_kscan_0 {
+    mock_kscan: kscan_1 {
         compatible = "zmk,kscan-mock";
         columns = <0>;
         rows = <0>;
         events = <0>;
     };
-
-    physical_40key_layout: physical_40key_layout {
-        compatible = "zmk,physical-layout";
-        display-name = "40-Key Layout";
-        transform = <&transform_40keymap>;
-        keys  //                     w   h    x    y     rot    rx    ry
-            = <&key_physical_attrs 100 100    0    0       0     0     0>
-            , <&key_physical_attrs 100 100  100    0       0     0     0>
-            , <&key_physical_attrs 100 100  200    0       0     0     0>
-            , <&key_physical_attrs 100 100  300    0       0     0     0>
-            , <&key_physical_attrs 100 100  400    0       0     0     0>
-            , <&key_physical_attrs 100 100  800    0       0     0     0>
-            , <&key_physical_attrs 100 100  900    0       0     0     0>
-            , <&key_physical_attrs 100 100 1000    0       0     0     0>
-            , <&key_physical_attrs 100 100 1100    0       0     0     0>
-            , <&key_physical_attrs 100 100 1200    0       0     0     0>
-            , <&key_physical_attrs 100 100    0  100       0     0     0>
-            , <&key_physical_attrs 100 100  100  100       0     0     0>
-            , <&key_physical_attrs 100 100  200  100       0     0     0>
-            , <&key_physical_attrs 100 100  300  100       0     0     0>
-            , <&key_physical_attrs 100 100  400  100       0     0     0>
-            , <&key_physical_attrs 100 100  800  100       0     0     0>
-            , <&key_physical_attrs 100 100  900  100       0     0     0>
-            , <&key_physical_attrs 100 100 1000  100       0     0     0>
-            , <&key_physical_attrs 100 100 1100  100       0     0     0>
-            , <&key_physical_attrs 100 100 1200  100       0     0     0>
-            , <&key_physical_attrs 100 100    0  200       0     0     0>
-            , <&key_physical_attrs 100 100  100  200       0     0     0>
-            , <&key_physical_attrs 100 100  200  200       0     0     0>
-            , <&key_physical_attrs 100 100  300  200       0     0     0>
-            , <&key_physical_attrs 100 100  400  200       0     0     0>
-            , <&key_physical_attrs 100 100  800  200       0     0     0>
-            , <&key_physical_attrs 100 100  900  200       0     0     0>
-            , <&key_physical_attrs 100 100 1000  200       0     0     0>
-            , <&key_physical_attrs 100 100 1100  200       0     0     0>
-            , <&key_physical_attrs 100 100 1200  200       0     0     0>
-            , <&key_physical_attrs 100 100    0  300       0     0     0>
-            , <&key_physical_attrs 100 100  100  300       0     0     0>
-            , <&key_physical_attrs 100 100  200  300       0     0     0>
-            , <&key_physical_attrs 100 100  400  300       0     0     0>
-            , <&key_physical_attrs 100 100  500  300       0     0     0>
-            , <&key_physical_attrs 100 100  700  300       0     0     0>
-            , <&key_physical_attrs 100 100  800  300       0     0     0>
-            , <&key_physical_attrs 100 100 1000  300       0     0     0>
-            , <&key_physical_attrs 100 100 1100  300       0     0     0>
-            , <&key_physical_attrs 100 100 1200  300       0     0     0>
-            ;
-    };
-
-    // 論理キー配列へ
-    transform_40keymap: transform_40keymap {
-        compatible = "zmk,matrix-transform";
-        columns = <10>;
-        rows = <4>; 
-        map = <
-            RC(0,4) RC(0,3) RC(0,2) RC(0,1) RC(0,0)                    RC(0,5) RC(0,6) RC(0,7) RC(0,8) RC(0,9)
-            RC(1,4) RC(1,3) RC(1,2) RC(1,1) RC(1,0)                    RC(1,5) RC(1,6) RC(1,7) RC(1,8) RC(1,9)
-            RC(2,4) RC(2,3) RC(2,2) RC(2,1) RC(2,0)                    RC(2,5) RC(2,6) RC(2,7) RC(2,8) RC(2,9)
-            RC(3,4) RC(3,3) RC(3,2)         RC(3,0) RC(3,1)    RC(3,6) RC(3,5)         RC(3,7) RC(3,8) RC(3,9)
-        >;
-    };
-
-    position_map {
-        compatible = "zmk,physical-layout-position-map";
-
-        physical_40key_layout {
-            physical-layout = <&physical_40key_layout>;
-            positions = < 0  1  2  3  4  5  6  7  8  9>
-                      , <10 11 12 13 14 15 16 17 18 19>
-                      , <20 21 22 23 24 25 26 27 28 29>
-                      , <30 31 32 40 33 34 35 36 41 37>
-                      , <38 39>;
-        };
-    };
-
-
 };
