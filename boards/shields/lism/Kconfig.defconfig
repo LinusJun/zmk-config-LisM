@@ -59,3 +59,49 @@ config BT_MAX_PAIRED
     default 6
 
 endif
+
+if SHIELD_LISM_L
+    config NFCT_PINS_AS_GPIOS
+        default y
+
+    config ZMK_SPLIT
+        default y
+
+    config ZMK_POINTING
+        default y
+
+    config ZMK_MOUSE
+        default y
+    
+    config PAW3222
+        default y
+    
+    config INPUT
+        default y
+    
+    config SPI
+        default y
+endif
+
+if SHIELD_LISM_R
+    config NFCT_PINS_AS_GPIOS
+        default y
+
+    config ZMK_SPLIT
+        default y
+
+    config ZMK_POINTING
+        default y
+
+    config ZMK_MOUSE
+        default y
+    
+    config PAW3222
+        default y
+    
+    config INPUT
+        default y
+    
+    config SPI
+        default y
+endif
