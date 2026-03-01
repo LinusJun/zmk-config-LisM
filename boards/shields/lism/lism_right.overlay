@@ -6,8 +6,12 @@
 #include <dt-bindings/zmk/input_transform.h>
 // #include <input/processors/report_rate_limit.dtsi>
 
-&default_transform {
-	col-offset = <5>;
+&transform_42keymap {
+    col-offset = <5>;
+};
+
+&transform_40keymap {
+    col-offset = <5>;
 };
 
 &spi0 {
