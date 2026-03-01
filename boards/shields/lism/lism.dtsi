@@ -2,10 +2,10 @@
 
 / {
     chosen {
-        zmk,physical-layout = &physical_layout0;
+        zmk,physical-layout = &physical_42key_layout;
     };
 
-    default_transform: keymap_transform_0 {
+    transform_40keymap: transform_40keymap {
         compatible = "zmk,matrix-transform";
         columns = <10>;
         rows = <4>; 
@@ -16,6 +16,31 @@
             RC(3,4) RC(3,3) RC(3,2)         RC(3,0) RC(3,1)    RC(3,6) RC(3,5)         RC(3,7) RC(3,8) RC(3,9)
         >;
     };
+    
+    // 論理キー配列へ
+    transform_42keymap: transform_42keymap {
+        compatible = "zmk,matrix-transform";
+        columns = <12>;
+        rows = <5>; 
+        map = <
+            RC(0,4) RC(0,3) RC(0,2) RC(0,1) RC(0,0)                    RC(0,5) RC(0,6)  RC(0,7) RC(0,8) RC(0,9)
+            RC(1,4) RC(1,3) RC(1,2) RC(1,1) RC(1,0)                    RC(1,5) RC(1,6)  RC(1,7) RC(1,8) RC(1,9)
+            RC(2,4) RC(2,3) RC(2,2) RC(2,1) RC(2,0)                    RC(2,5) RC(2,6)  RC(2,7) RC(2,8) RC(2,9)
+            RC(3,4) RC(3,3) RC(3,2) RC(4,5) RC(3,0) RC(3,1)    RC(3,6) RC(3,5) RC(4,10) RC(3,7) RC(3,8) RC(3,9)
+        >;
+    };
+
+    position_map {
+        compatible = "zmk,physical-layout-position-map";
+
+        physical_42key_layout {
+            physical-layout = <&physical_42key_layout>;
+            positions = < 0  1  2  3  4  5  6  7  8  9>
+                      , <10 11 12 13 14 15 16 17 18 19>
+                      , <20 21 22 23 24 25 26 27 28 29>
+                      , <30 31 32 33 34 35 36 37 38 39>
+                      , <40 41>;
+        };
 
         /* 充電ステータス */
     chg_stat: chg_stat {
