@@ -7,6 +7,8 @@ requires: [seeeduino_xiao_ble]
 siblings:
   - lism_left
   - lism_right
+  - lism_dongle
 features:
   - keys
   - pointer
+  - dongle
