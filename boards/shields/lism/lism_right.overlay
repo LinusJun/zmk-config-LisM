@@ -18,8 +18,8 @@
     status = "okay";
 };
 
-&trackball_split_listener_right { // local trackball *split* input device child node
-	input = <&trackball_right>;
+&trackball_split_input_right { // local trackball *split* input device child node
+	device = <&trackball_right>;
 	input-processors =
 		<&zip_xyz>; // compressor by badjeff
 };
