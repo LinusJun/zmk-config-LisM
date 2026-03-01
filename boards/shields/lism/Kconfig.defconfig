@@ -1,7 +1,4 @@
 if SHIELD_LISM_L || SHIELD_LISM_R || SHIELD_LISM_DONGLE
-    config ZMK_KEYBOARD_NAME
-        default "LisM"
-
     config NFCT_PINS_AS_GPIOS
         default y
 
@@ -21,10 +18,7 @@ if SHIELD_LISM_L || SHIELD_LISM_R || SHIELD_LISM_DONGLE
         default y
     
     config SPI
-        default y
-
-    config ZMK_BLE
-        default y   
+        default y 
 endif
 
 if SHIELD_LISM_DONGLE
