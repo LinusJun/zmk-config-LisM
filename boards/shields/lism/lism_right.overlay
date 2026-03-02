@@ -21,8 +21,8 @@
 &trackball_split_input_right { // local trackball *split* input device child node
 	device = <&trackball_right>;
 	input-processors =
-		<&zip_xyz>, // compressor by badjeff
-		<&zip_report_rate_limit 16>; // Add the rate limit to 16ms, default is 16ms
+		<&zip_report_rate_limit 8>, // rate limiter by badjeff, default is 16ms
+		<&zip_xyz>; // compressor by badjeff
 };
 
 / {
