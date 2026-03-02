@@ -63,7 +63,7 @@
     input-processors =
         <&zip_zxy>, // decompressor by badjeff
         //<&pointer_accel>;
-		<&zip_xy_transform (INPUT_TRANSFORM_X_INVERT | INPUT_TRANSFORM_Y_INVERT)>;
+		<&zip_xy_transform (INPUT_TRANSFORM_X_INVERT | INPUT_TRANSFORM_Y_INVERT)>,
 		<&zip_xy_scaler 1 2>;    //光标移动速度1/2倍的CPI(800)=CPI400
 
 	scroller {
