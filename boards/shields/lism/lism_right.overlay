@@ -4,7 +4,7 @@
 #include "lism-layouts.dtsi"
 #include <input/processors/xyz.dtsi>
 #include <dt-bindings/zmk/input_transform.h>
-// #include <input/processors/report_rate_limit.dtsi>
+#include <input/processors/report_rate_limit.dtsi>
 
 &transform_42keymap {
     col-offset = <5>;
@@ -21,7 +21,8 @@
 &trackball_split_input_right { // local trackball *split* input device child node
 	device = <&trackball_right>;
 	input-processors =
-		<&zip_xyz>; // compressor by badjeff
+		<&zip_xyz>, // compressor by badjeff
+		<&zip_report_rate_limit 16>; // Add the rate limit to 16ms, default is 16ms
 };
 
 / {
