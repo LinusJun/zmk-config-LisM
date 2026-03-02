@@ -20,6 +20,7 @@
 };
 
 / {
+    /* 专门锁定水平滚动的处理器 */
     input_processors {
         zip_scroll_x_scaler: zip_scroll_x_scaler {
             compatible = "zmk,input-processor-scaler";
@@ -30,6 +31,18 @@
         };
     };
 };
+
+/ {
+    /* 专门锁定垂直滚动的处理器 */
+    zip_scroll_y_scaler: zip_scroll_y_scaler {
+        compatible = "zmk,input-processor-scaler";
+        #input-processor-cells = <2>;
+        type = <INPUT_EV_REL>;
+        codes = <INPUT_REL_WHEEL>; // 锁定垂直滚动轴 (Y轴)
+        track-remainders;
+    };
+};
+
 
 /* https://github.com/oleksandrmaslov/zmk-pointing-acceleration?tab=readme-ov-file#configure-acceleration */
 // &pointer_accel {
@@ -64,11 +77,13 @@
 			<&zip_scroll_scaler 1 16>;
 	};
 
-    axis_lock_scroll {
+    scrolloriginal {
         layers = <3>;
         input-processors =
+			<&zip_zxy>, // decompressor by badjeff
             <&zip_xy_to_scroll_mapper>,
-            <&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
+			<&zip_scroll_y_scaler 0 1>,          // 锁定 Y 轴（垂直）：将产生的Y轴滚动信号乘 0
+			<&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
             <&zip_scroll_scaler 1 16>;
     };
 
@@ -94,11 +109,13 @@
 			<&zip_scroll_scaler 1 16>;
 	};
 
-    axis_lock_scroll {
+    scrolloriginal {
         layers = <3>;
         input-processors =
+			<&zip_zxy>, // decompressor by badjeff
             <&zip_xy_to_scroll_mapper>,
-            <&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
+			<&zip_scroll_y_scaler 0 1>,          // 锁定 Y 轴（垂直）
+			<&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
             <&zip_scroll_scaler 1 16>;
     };
 
