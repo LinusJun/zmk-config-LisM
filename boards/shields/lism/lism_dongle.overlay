@@ -11,12 +11,25 @@
 #include <input/processors.dtsi>
 #include <input/processors/xyz.dtsi>
 #include <dt-bindings/zmk/input_transform.h>
+#include <zephyr/dt-bindings/input/input-event-codes.h>
 // #include <behaviors/input_gestures_accel.dtsi>
+
 
 &physical_42key_layout {
     transform = <&transform_42keymap>;
 };
 
+/ {
+    input_processors {
+        zip_scroll_x_scaler: zip_scroll_x_scaler {
+            compatible = "zmk,input-processor-scaler";
+            #input-processor-cells = <2>;
+            type = <INPUT_EV_REL>;
+            codes = <INPUT_REL_HWHEEL>;
+            track-remainders;
+        };
+    };
+};
 
 /* https://github.com/oleksandrmaslov/zmk-pointing-acceleration?tab=readme-ov-file#configure-acceleration */
 // &pointer_accel {
@@ -39,11 +52,12 @@
         //<&pointer_accel>;
 		<&zip_xy_transform (INPUT_TRANSFORM_X_INVERT | INPUT_TRANSFORM_Y_INVERT)>;
 
-	scroll {
+	scroller {
 		layers = <2 4>; // SCROLL
 		input-processors =
             <&zip_zxy>, // decompressor by badjeff
 			<&zip_xy_to_scroll_mapper>,
+            <&zip_scroll_x_lock 0 1>,          // 锁定x轴：将产生的 X 轴滚动信号乘 0
             //<&zip_xy_transform (INPUT_TRANSFORM_Y_INVERT)>,
 			<&zip_scroll_transform INPUT_TRANSFORM_Y_INVERT>,   //滚动的Y轴反转
             //<&zip_xy_scaler 1 16>,
@@ -69,7 +83,7 @@
         //<&pointer_accel>;
 		<&zip_xy_transform (INPUT_TRANSFORM_X_INVERT | INPUT_TRANSFORM_Y_INVERT)>;
 
-	scroll {
+	scroller {
 		layers = <2 4>; // SCROLL
 		input-processors =
             <&zip_zxy>, // decompressor by badjeff
