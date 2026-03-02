@@ -57,7 +57,7 @@
 		input-processors =
             <&zip_zxy>, // decompressor by badjeff
 			<&zip_xy_to_scroll_mapper>,
-            <&zip_scroll_x_lock 0 1>,          // 锁定x轴：将产生的 X 轴滚动信号乘 0
+            <&zip_scroll_x_scaler 0 1>,          // 锁定x轴：将产生的 X 轴滚动信号乘 0
             //<&zip_xy_transform (INPUT_TRANSFORM_Y_INVERT)>,
 			<&zip_scroll_transform INPUT_TRANSFORM_Y_INVERT>,   //滚动的Y轴反转
             //<&zip_xy_scaler 1 16>,
