@@ -38,7 +38,7 @@
         reg = <0>; // refers to the first SPI slave device
         spi-max-frequency = <2000000>;
         irq-gpios = <&xiao_d 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        res-cpi = <600>; 
+        cpi = <600>; 
         // force-awake will cause warping and cursor jumping. Don't recommend now.
     };
 };
