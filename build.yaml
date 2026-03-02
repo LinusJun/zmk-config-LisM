@@ -13,7 +13,8 @@ include:
   
 
   - board: seeeduino_xiao_ble
-    shield: lism_dongle
+    shield: lism_dongle rgbled_adapter
+    artifact-name: lism_dongle_central_trackball
     cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=y
   # Reset
   - board: seeeduino_xiao_ble
