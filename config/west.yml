@@ -28,9 +28,9 @@ manifest:
     - name: zmk-feature-charge-indicator
       remote: 4mplelab
       revision: main
-    # - name: zmk-input-processor-report-rate-limit
-    #   remote: badjeff
-    #   revision: main
+    - name: zmk-input-processor-report-rate-limit
+      remote: badjeff
+      revision: main
     - name: zmk-input-processor-xyz
       remote: badjeff
       revision: main
