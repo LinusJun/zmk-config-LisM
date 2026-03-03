@@ -85,7 +85,8 @@
 			<&zip_zxy>, // decompressor by badjeff
             <&zip_xy_to_scroll_mapper>,
 			<&zip_scroll_y_scaler 0 1>,          // 锁定 Y 轴（垂直）：将产生的Y轴滚动信号乘 0
-			<&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
+			//<&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
+            <&zip_xy_scaler 1 16>,
             <&zip_scroll_scaler 1 16>;
     };
 
@@ -117,7 +118,8 @@
 			<&zip_zxy>, // decompressor by badjeff
             <&zip_xy_to_scroll_mapper>,
 			<&zip_scroll_y_scaler 0 1>,          // 锁定 Y 轴（垂直）
-			<&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
+			//<&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
+            <&zip_xy_scaler 1 16>,
             <&zip_scroll_scaler 1 16>;
     };
 
