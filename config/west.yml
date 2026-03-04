@@ -14,6 +14,8 @@ manifest:
     #   url-base: https://github.com/efogdev
     # - name: oleksandrmaslov
     #   url-base: https://github.com/oleksandrmaslov
+    - name: bwshockley
+      url-base: https://github.com/bwshockley
   projects:
     - name: zmk
       remote: zmkfirmware
@@ -37,5 +39,8 @@ manifest:
     #  - name: zmk-pointing-acceleration
     #  remote: oleksandrmaslov
     #  revision: main
+    - name: zmk-dongle-screen
+      remote: bwshockley
+      revision: main
   self:
     path: config
