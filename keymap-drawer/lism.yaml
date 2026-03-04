@@ -11,16 +11,16 @@ layers:
   - I
   - O
   - P
-  - {t: A, h: LSHIFT}
+  - {t: A, h: LEFT GUI}
   - {t: S, h: LALT}
   - {t: D, h: LCTRL}
-  - {t: F, h: LGUI}
+  - {t: F, h: LEFT SHIFT}
   - G
   - H
-  - {t: J, h: RGUI}
+  - {t: J, h: RSHIFT}
   - {t: K, h: RCTRL}
   - {t: L, h: RALT}
-  - {t: ;, h: RSHIFT}
+  - {t: ;, h: RGUI}
   - Z
   - X
   - C
@@ -97,7 +97,7 @@ layers:
   - KP 8
   - KP 9
   - KP NUMLOCK
-  - CAPSLOCK
+  - Sft+Ctl+TAB
   - ←
   - ↓
   - →
@@ -111,7 +111,7 @@ layers:
   - PAGE UP
   - AC HOME
   - PAGE DOWN
-  - Ctl+Sft+TAB
+  - Ctl+Sft+AC BACK
   - KP DIVIDE
   - KP 1
   - KP 2
@@ -221,7 +221,7 @@ combos:
 - p: [18, 17]
   k: '&mkp MB2'
 - p: [18, 16]
-  k: '&mkp MB3'
+  k: '&mkp MB4'
 - p: [11, 12]
   k: TAB
 - p: [12, 13]
@@ -239,7 +239,7 @@ combos:
 - p: [2, 3]
   k: '&mkp MB1'
 - p: [1, 3]
-  k: '&mkp MB3'
+  k: '&mkp MB4'
 - p: [0, 1]
   k: Gui+Sft+4
 - p: [6, 7]
@@ -248,3 +248,7 @@ combos:
   k: '&mkp MB2'
 - p: [11, 13]
   k: Ctl+A
+- p: [6, 8]
+  k: '&mkp MB4'
+- p: [35, 36]
+  k: CAPSLOCK
