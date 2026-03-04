@@ -13,9 +13,11 @@ include:
   
 
   - board: seeeduino_xiao_ble
-    shield: lism_dongle rgbled_adapter
-    artifact-name: lism_dongle_central_trackball
-    cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=y
+    shield: lism_dongle rgbled_adapter dongle_screen
+    artifact-name: lism_dongle_screen_central_trackball
+    cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=y -DCONFIG_LOG_PROCESS_THREAD_STARTUP_DELAY_MS=8000
+    snippet: zmk-usb-logging
+    
   # Reset
   - board: seeeduino_xiao_ble
     shield: settings_reset
