@@ -158,10 +158,10 @@
         layer_1 {
             display-name = "Mouse Layer";
             bindings = <
-&trans    &trans  &trans  &trans  &trans                    &kp SPACE     &kp RG(LEFT)  &kp RG(RIGHT)  &mkp MB3      &trans
-&mkp MB5  &trans  &trans  &trans  &trans                    &kp LG(UP)    &mkp MB1      &mkp MB2       &msc SCRL_UP  &msc SCRL_DOWN
-&mkp MB4  &trans  &trans  &trans  &trans                    &kp LG(DOWN)  &kp LEFT      &kp UP         &kp RIGHT     &trans
-&trans    &trans  &trans  &trans  &trans  &trans    &trans  &trans        &trans        &kp DOWN       &trans        &kp LG(W)
+&trans    &trans  &trans  &trans  &trans                           &kp KP_DIVIDE    &kp KP_N7  &kp KP_N8  &kp KP_N9   &kp KP_MINUS
+&mkp MB5  &trans  &trans  &trans  &trans                           &kp KP_MULTIPLY  &kp KP_N4  &kp KP_N5  &kp KP_N6   &kp KP_PLUS
+&mkp MB4  &trans  &trans  &trans  &trans                           &kp KP_NUMLOCK   &kp KP_N1  &kp KP_N2  &kp KP_N3   &kp KP_ENTER
+&trans    &trans  &trans  &trans  &trans  &trans    &kp BACKSPACE  &kp KP_N0        &trans     &kp KP_N0  &kp KP_DOT  &kp ESC
             >;
         };
 
