@@ -1,6 +1,6 @@
 layout: {zmk_keyboard: lism}
 layers:
-  Default Layer:
+  Base:
   - Q
   - W
   - E
@@ -31,19 +31,19 @@ layers:
   - ','
   - .
   - /
-  - {t: DEL, h: Device Layer}
-  - {t: Mouse Layer, h: toggle}
-  - {t: BS, h: Mouse Layer}
+  - {t: DEL, h: Device}
+  - {t: Num, h: toggle}
+  - {t: BS, h: Num}
   - Sft+Gui+4
-  - {t: SPACE, h: Number Layer}
-  - {t: ESC, h: Mark Layer}
-  - {t: BS, h: Mark Layer}
-  - {t: ENTER, h: Number Layer}
+  - {t: SPACE, h: NavNum}
+  - {t: ESC, h: Mark}
+  - {t: BS, h: Mark}
+  - {t: ENTER, h: NavNum}
   - Sft+Gui+4
   - F1
   - F2
-  - {t: ESC, h: Device Layer}
-  Mouse Layer:
+  - {t: ESC, h: Device}
+  Num:
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
@@ -86,7 +86,7 @@ layers:
   - KP 0
   - KP DOT
   - ESC
-  Number Layer:
+  NavNum:
   - TAB
   - HOME
   - ↑
@@ -129,7 +129,7 @@ layers:
   - KP 0
   - KP DOT
   - KP DOT
-  Mark Layer:
+  Mark:
   - '!'
   - '@'
   - '#'
@@ -172,7 +172,7 @@ layers:
   - F8
   - F11
   - F12
-  Device Layer:
+  Device:
   - ''
   - ''
   - ''
