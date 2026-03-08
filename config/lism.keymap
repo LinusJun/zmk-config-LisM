@@ -198,7 +198,6 @@
         };
 
         layer_5 {
-            status = "reserved";
             display-name = "Game";
             bindings = <
 &kp N4  &kp Q  &kp W    &kp E   &kp N2                      &kp F1   &trans  &trans  &trans  &to 0
