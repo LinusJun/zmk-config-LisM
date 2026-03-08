@@ -35,10 +35,10 @@ layers:
   - {t: Num, h: toggle}
   - {t: BS, h: Num}
   - Sft+Gui+4
-  - {t: SPACE, h: NavNum}
+  - {t: SPACE, h: Nav}
   - {t: ESC, h: Mark}
   - {t: BS, h: Mark}
-  - {t: ENTER, h: NavNum}
+  - {t: ENTER, h: Nav}
   - Sft+Gui+4
   - F1
   - F2
@@ -86,7 +86,7 @@ layers:
   - KP 0
   - KP DOT
   - ESC
-  NavNum:
+  Nav:
   - TAB
   - HOME
   - ↑
