@@ -16,6 +16,8 @@ manifest:
     #   url-base: https://github.com/oleksandrmaslov
     - name: tku137
       url-base: https://github.com/tku137
+    - name: prospector
+      url-base: https://github.com/t-ogura    
   projects:
     - name: zmk
       remote: zmkfirmware
@@ -42,5 +44,9 @@ manifest:
     - name: zmk-dongle-screen
       remote: tku137
       revision: main
+    - name: prospector-zmk-module
+      remote: prospector
+      revision: v1.0.0
+      path: modules/prospector-zmk-module
   self:
     path: config
