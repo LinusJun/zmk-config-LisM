@@ -201,7 +201,7 @@
             status = "reserved";
             display-name = "Game";
             bindings = <
-&kp N4  &kp Q  &kp W    &kp E   &kp N2                      &trans   &trans  &trans  &trans  &to 0
+&kp N4  &kp Q  &kp W    &kp E   &kp N2                      &kp F1   &trans  &trans  &trans  &to 0
 &kp N3  &kp A  &kp S    &kp D   &kp N1                      &kp TAB  &kp T   &kp H   &kp D   &kp C
 &kp X   &kp R  &kp V    &kp G   &kp I                       &trans   &trans  &trans  &trans  &trans
 &kp Z   &kp M  &kp ESC  &trans  &kp SPACE  &kp F    &trans  &trans   &trans  &trans  &trans  &trans
