@@ -33,7 +33,7 @@ layers:
   - /
   - {t: DEL, h: Device}
   - {t: Num, h: toggle}
-  - {t: BS, h: Num}
+  - BS
   - Sft+Gui+4
   - {t: SPACE, h: Nav}
   - {t: ESC, h: Mark}
@@ -76,7 +76,7 @@ layers:
   - KP ENTER
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
-  - {type: held}
+  - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
@@ -173,7 +173,7 @@ layers:
   - F11
   - F12
   Device:
-  - ''
+  - {t: Game, h: toggle}
   - ''
   - ''
   - ''
@@ -215,6 +215,49 @@ layers:
   - ''
   - ''
   - Boot
+  Game:
+  - '4'
+  - Q
+  - W
+  - E
+  - '2'
+  - F1
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: Base, h: toggle}
+  - '3'
+  - A
+  - S
+  - D
+  - '1'
+  - TAB
+  - T
+  - H
+  - D
+  - C
+  - X
+  - R
+  - V
+  - G
+  - I
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - Z
+  - M
+  - ESC
+  - {t: ▽, type: trans}
+  - SPACE
+  - F
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
 combos:
 - p: [16, 17]
   k: '&mkp MB1'
