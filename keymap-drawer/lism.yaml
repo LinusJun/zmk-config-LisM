@@ -33,7 +33,7 @@ layers:
   - /
   - {t: DEL, h: Device}
   - {t: Num, h: toggle}
-  - BS
+  - {t: Game, h: toggle}
   - Sft+Gui+4
   - {t: SPACE, h: Nav}
   - {t: ESC, h: Mark}
