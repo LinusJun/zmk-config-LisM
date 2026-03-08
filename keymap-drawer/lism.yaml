@@ -32,7 +32,7 @@ layers:
   - .
   - /
   - {t: DEL, h: Device}
-  - {t: Num, h: toggle}
+  - {t: Mouse, h: toggle}
   - {t: Game, h: toggle}
   - Sft+Gui+4
   - {t: SPACE, h: Nav}
@@ -43,49 +43,49 @@ layers:
   - F1
   - F2
   - {t: ESC, h: Device}
-  Num:
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - KP DIVIDE
-  - KP 7
-  - KP 8
-  - KP 9
-  - KP MINUS
-  - '&mkp MB5'
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - KP MULTIPLY
-  - KP 4
-  - KP 5
-  - KP 6
-  - KP PLUS
+  Mouse:
+  - '4'
+  - Q
+  - W
+  - E
+  - '2'
+  - H
   - '&mkp MB4'
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - KP NUMLOCK
-  - KP 1
-  - KP 2
-  - KP 3
-  - KP ENTER
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - BS
-  - KP 0
-  - {t: ▽, type: trans}
-  - KP 0
-  - KP DOT
+  - '&mkp MB5'
+  - LEFT SHIFT
   - ESC
+  - '3'
+  - A
+  - S
+  - D
+  - '1'
+  - M
+  - '&mkp MB1'
+  - '&mkp MB2'
+  - '&mkp MB3'
+  - I
+  - X
+  - R
+  - V
+  - G
+  - I
+  - Y
+  - T
+  - C
+  - LCTRL
+  - /
+  - Z
+  - M
+  - ESC
+  - {t: ▽, type: trans}
+  - SPACE
+  - F
+  - Z
+  - ENTER
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: Base, h: toggle}
   Nav:
   - TAB
   - HOME
