@@ -216,48 +216,48 @@ layers:
   - ''
   - Boot
   Game:
-  - '4'
+  - '1'
   - Q
   - W
   - E
+  - R
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - ESC
   - '2'
-  - F1
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: Base, h: toggle}
-  - '3'
   - A
   - S
   - D
-  - '1'
   - TAB
-  - T
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
   - H
-  - D
-  - C
-  - X
-  - R
-  - V
+  - '3'
   - G
-  - I
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - Z
   - M
-  - ESC
+  - V
+  - T
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - X
+  - '4'
+  - I
+  - Z
   - {t: ▽, type: trans}
   - SPACE
   - F
+  - {t: Base, h: toggle}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
+  - B
 combos:
 - p: [16, 17]
   k: '&mkp MB1'
