@@ -225,7 +225,7 @@ layers:
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
-  - ESC
+  - I
   - '2'
   - A
   - S
@@ -238,16 +238,16 @@ layers:
   - H
   - '3'
   - G
-  - M
+  - ESC
   - V
   - T
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
-  - X
+  - Y
   - '4'
-  - I
+  - X
   - Z
   - {t: ▽, type: trans}
   - SPACE
@@ -256,8 +256,8 @@ layers:
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - B
+  - LEFT GUI
+  - C
 combos:
 - p: [16, 17]
   k: '&mkp MB1'
