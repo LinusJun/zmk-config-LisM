@@ -244,10 +244,10 @@ layers:
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
   - Y
-  - '4'
   - X
+  - '4'
+  - M
   - Z
   - {t: ▽, type: trans}
   - SPACE
