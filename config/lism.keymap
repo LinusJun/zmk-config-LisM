@@ -200,10 +200,10 @@
         layer_5 {
             display-name = "Game";
             bindings = <
-&kp NUMBER_1  &kp Q  &kp W  &kp E   &kp R                      &trans  &trans  &trans  &trans  &kp ESC
-&kp NUMBER_2  &kp A  &kp S  &kp D   &kp TAB                    &trans  &trans  &trans  &trans  &kp H
-&kp NUMBER_3  &kp G  &kp M  &kp V   &kp T                      &trans  &trans  &trans  &trans  &kp X
-&kp NUMBER_4  &kp I  &kp Z  &trans  &kp SPACE  &kp F    &to 0  &trans  &trans  &trans  &trans  &kp B
+&kp NUMBER_1  &kp Q  &kp W    &kp E   &kp R                      &trans  &trans  &trans  &trans        &kp I
+&kp NUMBER_2  &kp A  &kp S    &kp D   &kp TAB                    &trans  &trans  &trans  &trans        &kp H
+&kp NUMBER_3  &kp G  &kp ESC  &kp V   &kp T                      &trans  &trans  &trans  &trans        &kp Y
+&kp NUMBER_4  &kp X  &kp Z    &trans  &kp SPACE  &kp F    &to 0  &trans  &trans  &trans  &kp LEFT_GUI  &kp C
             >;
         };
 
