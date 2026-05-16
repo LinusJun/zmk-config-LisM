@@ -202,7 +202,7 @@
             bindings = <
 &kp TAB       &kp Q  &kp W    &kp E   &kp NUMBER_1                  &trans  &trans  &trans  &trans        &kp I
 &kp R         &kp A  &kp S    &kp D   &kp NUMBER_2                  &trans  &trans  &trans  &trans        &kp X
-&kp NUMBER_3  &kp Z  &kp V    &kp G   &kp T                         &trans  &trans  &trans  &kp Y         &kp H
+&kp NUMBER_3  &kp Z  &kp X    &kp G   &kp V                         &trans  &trans  &trans  &kp Y         &kp H
 &kp NUMBER_4  &kp M  &kp ESC  &trans  &kp SPACE     &kp F    &to 0  &trans  &trans  &trans  &kp LEFT_GUI  &kp C
             >;
         };
