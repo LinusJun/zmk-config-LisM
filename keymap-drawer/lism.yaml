@@ -32,7 +32,7 @@ layers:
   - .
   - /
   - {t: DEL, h: Device}
-  - {t: Mouse, h: toggle}
+  - F1
   - BS
   - Sft+Gui+4
   - {t: SPACE, h: Nav}
@@ -43,49 +43,49 @@ layers:
   - F1
   - F2
   - {t: ESC, h: Device}
-  Mouse:
-  - '4'
+  Game:
+  - TAB
   - Q
   - W
   - E
-  - '2'
-  - H
+  - '1'
+  - {t: Base, h: toggle}
   - '&mkp MB4'
   - '&mkp MB5'
   - LEFT SHIFT
-  - ESC
-  - '3'
+  - I
+  - R
   - A
   - S
   - D
-  - '1'
+  - '2'
   - M
   - '&mkp MB1'
   - '&mkp MB2'
   - '&mkp MB3'
-  - I
+  - T
+  - '3'
+  - Z
   - X
-  - R
-  - V
   - G
-  - I
+  - V
   - Y
   - T
   - C
-  - LCTRL
-  - /
-  - Z
+  - Y
+  - H
+  - '4'
   - M
   - ESC
   - {t: ▽, type: trans}
   - SPACE
   - F
-  - Z
+  - LEFT GUI
   - ENTER
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: Base, h: toggle}
+  - LEFT ALT
+  - C
   Nav:
   - TAB
   - HOME
@@ -215,7 +215,7 @@ layers:
   - ''
   - ''
   - Boot
-  Game:
+  Game2:
   - TAB
   - Q
   - W
