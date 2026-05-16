@@ -235,12 +235,12 @@ layers:
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
-  - X
+  - T
   - '3'
   - Z
-  - V
+  - X
   - G
-  - T
+  - V
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
