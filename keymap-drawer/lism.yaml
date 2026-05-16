@@ -216,7 +216,7 @@ layers:
   - ''
   - Boot
   Game:
-  - R
+  - TAB
   - Q
   - W
   - E
@@ -226,7 +226,7 @@ layers:
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - I
-  - TAB
+  - R
   - A
   - S
   - D
