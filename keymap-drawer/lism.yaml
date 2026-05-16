@@ -216,39 +216,39 @@ layers:
   - ''
   - Boot
   Game:
-  - '1'
+  - R
   - Q
   - W
   - E
-  - R
+  - '1'
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - I
-  - '2'
+  - TAB
   - A
   - S
   - D
-  - TAB
+  - '2'
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
-  - H
+  - X
   - '3'
-  - G
-  - ESC
+  - Z
   - V
+  - G
   - T
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - Y
-  - X
+  - H
   - '4'
   - M
-  - Z
+  - ESC
   - {t: ▽, type: trans}
   - SPACE
   - F
