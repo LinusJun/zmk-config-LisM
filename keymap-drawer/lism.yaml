@@ -44,7 +44,7 @@ layers:
   - F2
   - {t: ESC, h: Device}
   Game:
-  - TAB
+  - ESC
   - Q
   - W
   - E
@@ -75,8 +75,8 @@ layers:
   - Y
   - H
   - '4'
+  - H
   - M
-  - ESC
   - {t: ▽, type: trans}
   - SPACE
   - F
