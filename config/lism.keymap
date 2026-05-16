@@ -138,6 +138,16 @@
             bindings = <&kp CAPSLOCK>;
             key-positions = <35 36>;
         };
+
+        gameI {
+            bindings = <&kp I>;
+            key-positions = <31 32>;
+        };
+
+        gameT {
+            bindings = <&kp T>;
+            key-positions = <4 3>;
+        };
     };
 
     keymap {
