@@ -295,3 +295,7 @@ combos:
   k: '&mkp MB4'
 - p: [35, 36]
   k: CAPSLOCK
+- p: [31, 32]
+  k: I
+- p: [4, 3]
+  k: T
