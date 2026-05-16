@@ -158,10 +158,10 @@
         layer_1 {
             display-name = "Game";
             bindings = <
-&kp TAB       &kp Q  &kp W    &kp E   &kp NUMBER_1                         &to 0      &mkp MB4  &mkp MB5  &kp LEFT_SHIFT  &kp I
-&kp R         &kp A  &kp S    &kp D   &kp NUMBER_2                         &kp M      &mkp MB1  &mkp MB2  &mkp MB3        &kp T
-&kp NUMBER_3  &kp Z  &kp X    &kp G   &kp V                                &kp Y      &kp T     &kp C     &kp Y           &kp H
-&kp NUMBER_4  &kp M  &kp ESC  &trans  &kp SPACE     &kp F    &kp LEFT_GUI  &kp ENTER  &trans    &trans    &kp LEFT_ALT    &kp C
+&kp ESC       &kp Q  &kp W  &kp E   &kp NUMBER_1                         &to 0      &mkp MB4  &mkp MB5  &kp LEFT_SHIFT  &kp I
+&kp R         &kp A  &kp S  &kp D   &kp NUMBER_2                         &kp M      &mkp MB1  &mkp MB2  &mkp MB3        &kp T
+&kp NUMBER_3  &kp Z  &kp X  &kp G   &kp V                                &kp Y      &kp T     &kp C     &kp Y           &kp H
+&kp NUMBER_4  &kp H  &kp M  &trans  &kp SPACE     &kp F    &kp LEFT_GUI  &kp ENTER  &trans    &trans    &kp LEFT_ALT    &kp C
             >;
         };
 
