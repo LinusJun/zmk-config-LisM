@@ -48,33 +48,33 @@ layers:
   - Q
   - W
   - E
-  - '1'
+  - R
   - {t: Base, h: toggle}
   - '&mkp MB4'
   - '&mkp MB5'
   - LEFT SHIFT
   - I
-  - R
+  - '1'
   - A
   - S
   - D
-  - '2'
+  - '3'
   - M
   - '&mkp MB1'
   - '&mkp MB2'
   - '&mkp MB3'
   - T
-  - '3'
-  - Z
-  - X
+  - '2'
   - G
+  - X
   - V
+  - '4'
   - Y
   - T
   - C
   - Y
   - H
-  - '4'
+  - Z
   - H
   - M
   - {t: ▽, type: trans}
