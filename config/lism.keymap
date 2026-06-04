@@ -212,9 +212,9 @@
             display-name = "Game";
             bindings = <
 &kp ESC       &kp Q  &kp W  &kp E   &kp R                                &to 0      &mkp MB4  &mkp MB5  &kp LEFT_SHIFT  &kp I
-&kp NUMBER_1  &kp A  &kp S  &kp D   &kp NUMBER_3                         &kp M      &mkp MB1  &mkp MB2  &mkp MB3        &kp T
-&kp NUMBER_2  &kp G  &kp X  &kp V   &kp NUMBER_4                         &kp Y      &kp T     &kp C     &kp Y           &kp H
-&kp Z         &kp H  &kp M  &trans  &kp SPACE     &kp F    &kp LEFT_GUI  &kp ENTER  &trans    &trans    &kp LEFT_ALT    &kp C
+&kp NUMBER_3  &kp A  &kp S  &kp D   &kp NUMBER_1                         &kp M      &mkp MB1  &mkp MB2  &mkp MB3        &kp T
+&kp NUMBER_4  &kp G  &kp X  &kp V   &kp NUMBER_2                         &kp Y      &kp T     &kp C     &kp Y           &kp H
+&kp Z         &kp Y  &kp C  &trans  &kp SPACE     &kp F    &kp LEFT_GUI  &kp ENTER  &trans    &trans    &kp LEFT_ALT    &kp LS(F2)
             >;
         };
 
