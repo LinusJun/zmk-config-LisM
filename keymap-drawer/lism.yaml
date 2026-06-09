@@ -87,11 +87,11 @@ layers:
   - LEFT ALT
   - Sft+F2
   Nav:
-  - TAB
+  - Gui+Sft+←
   - HOME
   - ↑
   - END
-  - ESC
+  - Sft+Gui+→
   - KP EQUAL
   - KP 7
   - KP 8
@@ -102,21 +102,21 @@ layers:
   - ↓
   - →
   - Ctl+TAB
-  - KP MULTIPLY
+  - KP PLUS
   - KP 4
   - KP 5
   - KP 6
-  - KP PLUS
+  - KP MINUS
   - LEFT SHIFT
   - PAGE UP
   - AC HOME
   - PAGE DOWN
   - Ctl+Sft+AC BACK
-  - KP DIVIDE
+  - KP MULTIPLY
   - KP 1
   - KP 2
   - KP 3
-  - KP MINUS
+  - KP DIVIDE
   - LCTRL
   - LEFT WIN
   - LEFT ALT
