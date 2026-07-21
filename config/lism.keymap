@@ -60,7 +60,7 @@
         };
 
         MmidClkR {
-            bindings = <&mkp MB4>;
+            bindings = <&mkp MB3>;
             key-positions = <18 16>;
         };
 
@@ -113,7 +113,7 @@
         };
 
         MmidClkL {
-            bindings = <&mkp MB4>;
+            bindings = <&mkp MB3>;
             key-positions = <1 3>;
             layers = <0>;
         };
@@ -141,7 +141,7 @@
         };
 
         MmidClkR2 {
-            bindings = <&mkp MB4>;
+            bindings = <&mkp MB3>;
             key-positions = <6 8>;
         };
 
@@ -170,7 +170,7 @@
 
         gameTab {
             bindings = <&kp TAB>;
-            key-positions = <10 11>;
+            key-positions = <11 12>;
             layers = <1>;
         };
 
