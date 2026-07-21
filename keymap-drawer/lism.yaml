@@ -264,7 +264,7 @@ combos:
 - p: [18, 17]
   k: '&mkp MB2'
 - p: [18, 16]
-  k: '&mkp MB4'
+  k: '&mkp MB3'
 - p: [11, 12]
   k: TAB
   l: [Base]
@@ -290,7 +290,7 @@ combos:
   k: '&mkp MB1'
   l: [Base]
 - p: [1, 3]
-  k: '&mkp MB4'
+  k: '&mkp MB3'
   l: [Base]
 - p: [0, 1]
   k: Gui+Sft+4
@@ -303,7 +303,7 @@ combos:
   k: Ctl+A
   l: [Base]
 - p: [6, 8]
-  k: '&mkp MB4'
+  k: '&mkp MB3'
 - p: [35, 36]
   k: CAPSLOCK
 - p: [23, 22]
@@ -315,7 +315,7 @@ combos:
 - p: [23, 21]
   k: H
   l: [Game]
-- p: [10, 11]
+- p: [11, 12]
   k: TAB
   l: [Game]
 - p: [32, 31]
