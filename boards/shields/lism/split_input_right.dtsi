@@ -11,9 +11,9 @@
         #address-cells = <1>;
         #size-cells = <0>;
 
-        trackball_split_input_right: trackball_split_input_right@0 { // trackball's split input device
+        trackball_split_input_right: trackball_split_input_right@1 { // right trackball split input device
             compatible = "zmk,input-split";
-            reg = <0>;
+            reg = <1>;
         };
 
 

@@ -8,39 +8,26 @@ manifest:
       url-base: https://github.com/caksoylar
     - name: 4mplelab
       url-base: https://github.com/4mplelab
-    - name: badjeff
-      url-base: https://github.com/badjeff/
-    # - name: efogdev
-    #   url-base: https://github.com/efogdev
-    # - name: oleksandrmaslov
-    #   url-base: https://github.com/oleksandrmaslov
-    - name: tku137
-      url-base: https://github.com/tku137
+    - name: carrefinho
+      url-base: https://github.com/carrefinho
   projects:
     - name: zmk
       remote: zmkfirmware
-      revision: v0.3.0
+      # ZMK main @ 2026-09-15 (Zephyr 4.1; required by the Prospector screen branch).
+      revision: 9ebbeff0a8b69a42f14aec022cdf16c7a107b9e0
       import: app/west.yml
     - name: zmk-driver-paw3222
       remote: sekigon-gonnoc
       revision: main
     - name: zmk-rgbled-widget
       remote: caksoylar
-      revision: v0.3
+      # v0.3 is for ZMK v0.3; main tracks current ZMK/Zephyr 4.x.
+      revision: main
     - name: zmk-feature-charge-indicator
       remote: 4mplelab
       revision: main
-    - name: zmk-input-processor-report-rate-limit
-      remote: badjeff
-      revision: main
-    - name: zmk-input-processor-xyz
-      remote: badjeff
-      revision: main
-    #  - name: zmk-pointing-acceleration
-    #  remote: oleksandrmaslov
-    #  revision: main
-    - name: zmk-dongle-screen
-      remote: tku137
-      revision: main
+    - name: prospector-zmk-module
+      remote: carrefinho
+      revision: feat/new-status-screens
   self:
     path: config

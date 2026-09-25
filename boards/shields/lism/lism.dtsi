@@ -43,3 +43,13 @@
     output-ohms = <503000>;
     full-ohms = <(1000000 + 503000)>;
 };
+
+/* NFCT pins are used as GPIOs by the LisM matrix. Zephyr 4.1 configures this in DTS. */
+&uicr {
+    nfct-pins-as-gpios;
+};
+
+/* Reserved for the Prospector adapter on dongle builds. */
+&spi2 {
+    status = "disabled";
+};

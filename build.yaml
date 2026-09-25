@@ -1,24 +1,24 @@
 # This file generates the GitHub Actions matrix.
 ---
 include:
-  - board: seeeduino_xiao_ble
+  - board: xiao_ble//zmk
     shield: lism_right rgbled_adapter
     artifact-name: lism_right_peripheral_trackball
     cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=n
 
-  - board: seeeduino_xiao_ble
+  - board: xiao_ble//zmk
     shield: lism_left rgbled_adapter
     artifact-name: lism_left_peripheral_trackball
     cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=n
   
 
-  - board: seeeduino_xiao_ble
-    shield: lism_dongle dongle_screen
-    artifact-name: lism_dongle_screen_central_trackball
+  - board: xiao_ble//zmk
+    shield: lism_dongle prospector_adapter
+    artifact-name: lism_dongle_prospector_operator
     cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=y -DCONFIG_LOG_PROCESS_THREAD_STARTUP_DELAY_MS=8000
     snippet: zmk-usb-logging
     
   # Reset
-  - board: seeeduino_xiao_ble
+  - board: xiao_ble//zmk
     shield: settings_reset
-    artifact-name: settings_reset-seeeduino_xiao_ble-zmk
+    artifact-name: settings_reset-xiao_ble-zmk
