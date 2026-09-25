@@ -1,0 +1,136 @@
+#include <input/processors/runtime-input-processor.dtsi>
+#include <dt-bindings/zmk/runtime_input_processor.h>
+
+/*
+ * Six separately exposed DYA Studio processors preserve the existing LisM
+ * defaults while allowing each pointer/scroll mode to be tuned at runtime.
+ * Layer masks use the existing keymap indices:
+ *   pointer: 0, 1, 5, 6, 7 = 0xE3
+ *   vertical/free scroll: 2 and 4 = 0x14
+ *   horizontal scroll: 3 = 0x08
+ */
+/ {
+    lism_left_pointer: lism_left_pointer {
+        compatible = "zmk,input-processor-runtime";
+        processor-label = "L mouse";
+        type = <INPUT_EV_REL>;
+        x-codes = <INPUT_REL_X>;
+        y-codes = <INPUT_REL_Y>;
+        scale-multiplier = <1>;
+        scale-divisor = <1>;
+        rotation-degrees = <0>;
+        active-layers = <0x000000E3>;
+        x-invert;
+        y-invert;
+        track-remainders;
+        temp-layer-transparent-behavior = <&trans>;
+        temp-layer-kp-behavior = <&kp>;
+        temp-layer-keep-keycodes = <LEFT_CONTROL LEFT_SHIFT LEFT_ALT LEFT_GUI RIGHT_CONTROL RIGHT_SHIFT RIGHT_ALT RIGHT_GUI>;
+        #input-processor-cells = <0>;
+    };
+
+    lism_left_vertical_scroll: lism_left_vertical_scroll {
+        compatible = "zmk,input-processor-runtime";
+        processor-label = "L vert";
+        type = <INPUT_EV_REL>;
+        x-codes = <INPUT_REL_X>;
+        y-codes = <INPUT_REL_Y>;
+        scale-multiplier = <1>;
+        scale-divisor = <16>;
+        rotation-degrees = <0>;
+        active-layers = <0x00000014>;
+        xy-to-scroll-enabled;
+        y-invert;
+        axis-snap-mode = <AXIS_SNAP_MODE_Y>;
+        axis-snap-threshold = <100>;
+        axis-snap-timeout-ms = <1000>;
+        track-remainders;
+        temp-layer-transparent-behavior = <&trans>;
+        temp-layer-kp-behavior = <&kp>;
+        temp-layer-keep-keycodes = <LEFT_CONTROL LEFT_SHIFT LEFT_ALT LEFT_GUI RIGHT_CONTROL RIGHT_SHIFT RIGHT_ALT RIGHT_GUI>;
+        #input-processor-cells = <0>;
+    };
+
+    lism_left_horizontal_scroll: lism_left_horizontal_scroll {
+        compatible = "zmk,input-processor-runtime";
+        processor-label = "L horiz";
+        type = <INPUT_EV_REL>;
+        x-codes = <INPUT_REL_X>;
+        y-codes = <INPUT_REL_Y>;
+        scale-multiplier = <1>;
+        scale-divisor = <16>;
+        rotation-degrees = <0>;
+        active-layers = <0x00000008>;
+        xy-to-scroll-enabled;
+        axis-snap-mode = <AXIS_SNAP_MODE_X>;
+        axis-snap-threshold = <100>;
+        axis-snap-timeout-ms = <1000>;
+        track-remainders;
+        temp-layer-transparent-behavior = <&trans>;
+        temp-layer-kp-behavior = <&kp>;
+        temp-layer-keep-keycodes = <LEFT_CONTROL LEFT_SHIFT LEFT_ALT LEFT_GUI RIGHT_CONTROL RIGHT_SHIFT RIGHT_ALT RIGHT_GUI>;
+        #input-processor-cells = <0>;
+    };
+
+    lism_right_pointer: lism_right_pointer {
+        compatible = "zmk,input-processor-runtime";
+        processor-label = "R mouse";
+        type = <INPUT_EV_REL>;
+        x-codes = <INPUT_REL_X>;
+        y-codes = <INPUT_REL_Y>;
+        scale-multiplier = <1>;
+        scale-divisor = <1>;
+        rotation-degrees = <0>;
+        active-layers = <0x000000E3>;
+        x-invert;
+        y-invert;
+        track-remainders;
+        temp-layer-transparent-behavior = <&trans>;
+        temp-layer-kp-behavior = <&kp>;
+        temp-layer-keep-keycodes = <LEFT_CONTROL LEFT_SHIFT LEFT_ALT LEFT_GUI RIGHT_CONTROL RIGHT_SHIFT RIGHT_ALT RIGHT_GUI>;
+        #input-processor-cells = <0>;
+    };
+
+    lism_right_free_scroll: lism_right_free_scroll {
+        compatible = "zmk,input-processor-runtime";
+        processor-label = "R free";
+        type = <INPUT_EV_REL>;
+        x-codes = <INPUT_REL_X>;
+        y-codes = <INPUT_REL_Y>;
+        scale-multiplier = <1>;
+        scale-divisor = <16>;
+        rotation-degrees = <0>;
+        active-layers = <0x00000014>;
+        xy-to-scroll-enabled;
+        y-invert;
+        axis-snap-mode = <AXIS_SNAP_MODE_NONE>;
+        axis-snap-threshold = <100>;
+        axis-snap-timeout-ms = <1000>;
+        track-remainders;
+        temp-layer-transparent-behavior = <&trans>;
+        temp-layer-kp-behavior = <&kp>;
+        temp-layer-keep-keycodes = <LEFT_CONTROL LEFT_SHIFT LEFT_ALT LEFT_GUI RIGHT_CONTROL RIGHT_SHIFT RIGHT_ALT RIGHT_GUI>;
+        #input-processor-cells = <0>;
+    };
+
+    lism_right_horizontal_scroll: lism_right_horizontal_scroll {
+        compatible = "zmk,input-processor-runtime";
+        processor-label = "R horiz";
+        type = <INPUT_EV_REL>;
+        x-codes = <INPUT_REL_X>;
+        y-codes = <INPUT_REL_Y>;
+        scale-multiplier = <1>;
+        scale-divisor = <16>;
+        rotation-degrees = <0>;
+        active-layers = <0x00000008>;
+        xy-to-scroll-enabled;
+        axis-snap-mode = <AXIS_SNAP_MODE_X>;
+        axis-snap-threshold = <100>;
+        axis-snap-timeout-ms = <1000>;
+        track-remainders;
+        temp-layer-transparent-behavior = <&trans>;
+        temp-layer-kp-behavior = <&kp>;
+        temp-layer-keep-keycodes = <LEFT_CONTROL LEFT_SHIFT LEFT_ALT LEFT_GUI RIGHT_CONTROL RIGHT_SHIFT RIGHT_ALT RIGHT_GUI>;
+        #input-processor-cells = <0>;
+    };
+};

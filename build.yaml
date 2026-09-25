@@ -5,18 +5,20 @@ include:
     shield: lism_right rgbled_adapter
     artifact-name: lism_right_peripheral_trackball
     cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=n
+    snippet: lism-peripheral
 
   - board: xiao_ble//zmk
     shield: lism_left rgbled_adapter
     artifact-name: lism_left_peripheral_trackball
     cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=n
+    snippet: lism-peripheral
   
 
   - board: xiao_ble//zmk
     shield: lism_dongle prospector_adapter
-    artifact-name: lism_dongle_prospector_operator
+    artifact-name: lism_dongle_dya_studio_prospector_operator
     cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=y -DCONFIG_LOG_PROCESS_THREAD_STARTUP_DELAY_MS=8000
-    snippet: zmk-usb-logging
+    snippet: "lism-dongle-central studio-rpc-usb-uart zmk-usb-logging"
     
   # Reset
   - board: xiao_ble//zmk

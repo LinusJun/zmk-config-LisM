@@ -8,134 +8,31 @@
 #include "split_input.dtsi"
 #include "split_input_right.dtsi"
 #include "lism-layouts.dtsi"
-#include <input/processors.dtsi>
-#include <dt-bindings/zmk/input_transform.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
-// #include <behaviors/input_gestures_accel.dtsi>
+#include "../../../snippets/lism-dya-input-processors.dtsi"
 
 
 &physical_42key_layout {
     transform = <&transform_42keymap>;
 };
 
-/ {
-    /* 专门锁定水平滚动的处理器 */
-    input_processors {
-        zip_scroll_x_scaler: zip_scroll_x_scaler {
-            compatible = "zmk,input-processor-scaler";
-            #input-processor-cells = <2>;
-            type = <INPUT_EV_REL>;
-            codes = <INPUT_REL_HWHEEL>;
-            track-remainders;
-        };
-    };
-};
-
-/ {
-    /* 专门锁定垂直滚动的处理器 */
-    zip_scroll_y_scaler: zip_scroll_y_scaler {
-        compatible = "zmk,input-processor-scaler";
-        #input-processor-cells = <2>;
-        type = <INPUT_EV_REL>;
-        codes = <INPUT_REL_WHEEL>; // 锁定垂直滚动轴 (Y轴)
-        track-remainders;
-    };
-};
-
-
-/* https://github.com/oleksandrmaslov/zmk-pointing-acceleration?tab=readme-ov-file#configure-acceleration */
-// &pointer_accel {
-//    input-type = <INPUT_EV_REL>;  // For relative input devices
-//    min-factor = <600>;           // 0.6x at very slow speeds
-//     max-factor = <4000>;          // 4.0x at fast speeds
-//     speed-threshold = <1000>;     // 1000 counts/sec for 1x
-//     speed-max = <6000>;           // 6000 counts/sec for max accel
-//     acceleration-exponent = <3>;  // 1:linear, 2:quadratic, 3:cubic
-//     track-remainders;             // accumulate fractional movements
-// };
-
 /* local trackball input split device child node, receiving events from the peripheral and raising them locally. */
 // look into <split_input.dtsi> for mother node.
 &trackball_split_listener {
 	status = "okay";
-
     input-processors =
-        //<&pointer_accel>,
-		//<&zip_xy_scaler 1 3>,   //光标移动速度1/2倍的CPI
-		<&zip_xy_transform (INPUT_TRANSFORM_X_INVERT | INPUT_TRANSFORM_Y_INVERT)>;
-
-
-	scroller {
-		layers = <2 4>; // SCROLL
-		input-processors =
-			<&zip_xy_to_scroll_mapper>,
-            <&zip_scroll_x_scaler 0 1>,          // 锁定x轴：将产生的 X 轴滚动信号乘 0
-            //<&zip_xy_transform (INPUT_TRANSFORM_Y_INVERT)>,
-			<&zip_scroll_transform INPUT_TRANSFORM_Y_INVERT>,   //滚动的Y轴反转
-            <&zip_xy_scaler 1 16>,
-			<&zip_scroll_scaler 1 16>;
-	};
-
-    scrolloriginal {
-        layers = <3>;
-        input-processors =
-            <&zip_xy_to_scroll_mapper>,
-			<&zip_scroll_y_scaler 0 1>,          // 锁定 Y 轴（垂直）：将产生的Y轴滚动信号乘 0
-			//<&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
-            <&zip_xy_scaler 1 16>,
-            <&zip_scroll_scaler 1 16>;
-    };
-
-	// scrollerfree {
-	//	layers = <4>; // SCROLLFREE
-	//	input-processors =
-	//		 <&zip_xy_to_scroll_mapper>,
-    //        //<&zip_xy_transform (INPUT_TRANSFORM_Y_INVERT)>,
-	// 		<&zip_scroll_transform INPUT_TRANSFORM_Y_INVERT>,   //滚动的Y轴反转
-    //        <&zip_xy_scaler 1 16>,
-	//		<&zip_scroll_scaler 1 16>;
-	// };
-
+        <&lism_left_pointer
+         &lism_left_vertical_scroll
+         &lism_left_horizontal_scroll>;
 };
 
 
 &trackball_split_listener_right {
 	status = "okay";
-
     input-processors =
-        //<&pointer_accel>;
-		<&zip_xy_transform (INPUT_TRANSFORM_X_INVERT | INPUT_TRANSFORM_Y_INVERT)>;
-
-	scroller {
-		layers = <2 4>; // SCROLL
-		input-processors =
-			<&zip_xy_to_scroll_mapper>,
-            //<&zip_xy_transform (INPUT_TRANSFORM_Y_INVERT)>,
-			<&zip_scroll_transform INPUT_TRANSFORM_Y_INVERT>,   //滚动的Y轴反转
-            <&zip_xy_scaler 1 16>,
-			<&zip_scroll_scaler 1 16>;
-	};
-
-    scrolloriginal {
-        layers = <3>;
-        input-processors =
-            <&zip_xy_to_scroll_mapper>,
-			<&zip_scroll_y_scaler 0 1>,          // 锁定 Y 轴（垂直）
-			//<&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
-            <&zip_xy_scaler 1 16>,
-            <&zip_scroll_scaler 1 16>;
-    };
-
-	// scrollerfree {
-	//	layers = <4>; // SCROLLFREE
-	//	input-processors =
-	//		<&zip_xy_to_scroll_mapper>,
-    //       //<&zip_xy_transform (INPUT_TRANSFORM_Y_INVERT)>,
-	//		<&zip_scroll_transform INPUT_TRANSFORM_Y_INVERT>,   //滚动的Y轴反转
-    //       <&zip_xy_scaler 1 16>,
-	//		<&zip_scroll_scaler 1 16>;
-	// };
-
+        <&lism_right_pointer
+         &lism_right_free_scroll
+         &lism_right_horizontal_scroll>;
 };
 
 
