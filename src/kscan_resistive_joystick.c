@@ -183,9 +183,9 @@ static const struct kscan_driver_api joystick_api = {
 #define JOYSTICK_DEFINE(inst)                                                                      \
     static struct joystick_data joystick_data_##inst;                                             \
     static const struct joystick_config joystick_config_##inst = {                                \
-        .adc = DEVICE_DT_GET(DT_IO_CHANNELS_CTLR_BY_IDX(DT_DRV_INST(inst), 0)),                   \
-        .x_channel = DT_IO_CHANNELS_INPUT_BY_IDX(DT_DRV_INST(inst), 0),                           \
-        .y_channel = DT_IO_CHANNELS_INPUT_BY_IDX(DT_DRV_INST(inst), 1),                           \
+        .adc = DEVICE_DT_GET(DT_NODELABEL(adc)),                                                   \
+        .x_channel = 2,                                                                            \
+        .y_channel = 3,                                                                            \
         .press = GPIO_DT_SPEC_INST_GET(inst, press_gpios),                                        \
         .poll_ms = DT_INST_PROP(inst, poll_period_ms),                                            \
         .activation = DT_INST_PROP(inst, activation_threshold),                                   \
