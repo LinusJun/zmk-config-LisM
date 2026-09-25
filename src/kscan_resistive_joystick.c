@@ -23,8 +23,9 @@ enum joystick_column {
 };
 
 struct joystick_config {
-    struct adc_dt_spec x;
-    struct adc_dt_spec y;
+    const struct device *adc;
+    uint8_t x_channel;
+    uint8_t y_channel;
     struct gpio_dt_spec press;
     uint16_t poll_ms;
     int16_t activation;
@@ -43,29 +44,29 @@ struct joystick_data {
     uint16_t samples;
 };
 
-static int read_axis(const struct adc_dt_spec *spec, int16_t *value) {
+static int read_axis(const struct device *adc, uint8_t channel, int16_t *value) {
     struct adc_sequence sequence = {
-        .channels = BIT(spec->channel_id),
+        .channels = BIT(channel),
         .buffer = value,
         .buffer_size = sizeof(*value),
         .resolution = 12,
         .oversampling = 0,
     };
-    return adc_read(spec->dev, &sequence);
+    return adc_read(adc, &sequence);
 }
 
-static int setup_axis(const struct adc_dt_spec *spec) {
+static int setup_axis(const struct device *adc, uint8_t channel_id) {
     struct adc_channel_cfg channel = {
         .gain = ADC_GAIN_1_6,
         .reference = ADC_REF_INTERNAL,
         .acquisition_time = ADC_ACQ_TIME_DEFAULT,
-        .channel_id = spec->channel_id,
+        .channel_id = channel_id,
 #ifdef CONFIG_ADC_CONFIGURABLE_INPUTS
-        .input_positive = SAADC_CH_PSELP_PSELP_AnalogInput0 + spec->channel_id,
+        .input_positive = SAADC_CH_PSELP_PSELP_AnalogInput0 + channel_id,
 #endif
     };
 
-    return adc_channel_setup(spec->dev, &channel);
+    return adc_channel_setup(adc, &channel);
 }
 
 static void report(const struct device *dev, enum joystick_column column, bool pressed) {
@@ -99,7 +100,8 @@ static void joystick_work(struct k_work *work) {
         return;
     }
 
-    if (read_axis(&cfg->x, &x) || read_axis(&cfg->y, &y)) {
+    if (read_axis(cfg->adc, cfg->x_channel, &x) ||
+        read_axis(cfg->adc, cfg->y_channel, &y)) {
         LOG_WRN("ADC read failed");
         goto reschedule;
     }
@@ -156,11 +158,11 @@ static int joystick_init(const struct device *dev) {
     const struct joystick_config *cfg = dev->config;
     struct joystick_data *data = dev->data;
 
-    if (!adc_is_ready_dt(&cfg->x) || !adc_is_ready_dt(&cfg->y) ||
-        !gpio_is_ready_dt(&cfg->press)) {
+    if (!device_is_ready(cfg->adc) || !gpio_is_ready_dt(&cfg->press)) {
         return -ENODEV;
     }
-    if (setup_axis(&cfg->x) || setup_axis(&cfg->y)) {
+    if (setup_axis(cfg->adc, cfg->x_channel) ||
+        setup_axis(cfg->adc, cfg->y_channel)) {
         return -EIO;
     }
     if (gpio_pin_configure_dt(&cfg->press, GPIO_INPUT)) {
@@ -181,8 +183,9 @@ static const struct kscan_driver_api joystick_api = {
 #define JOYSTICK_DEFINE(inst)                                                                      \
     static struct joystick_data joystick_data_##inst;                                             \
     static const struct joystick_config joystick_config_##inst = {                                \
-        .x = ADC_DT_SPEC_INST_GET_BY_IDX(inst, 0),                                                \
-        .y = ADC_DT_SPEC_INST_GET_BY_IDX(inst, 1),                                                \
+        .adc = DEVICE_DT_GET(DT_IO_CHANNELS_CTLR_BY_IDX(DT_DRV_INST(inst), 0)),                   \
+        .x_channel = DT_IO_CHANNELS_INPUT_BY_IDX(DT_DRV_INST(inst), 0),                           \
+        .y_channel = DT_IO_CHANNELS_INPUT_BY_IDX(DT_DRV_INST(inst), 1),                           \
         .press = GPIO_DT_SPEC_INST_GET(inst, press_gpios),                                        \
         .poll_ms = DT_INST_PROP(inst, poll_period_ms),                                            \
         .activation = DT_INST_PROP(inst, activation_threshold),                                   \
