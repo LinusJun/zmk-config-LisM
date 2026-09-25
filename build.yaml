@@ -8,13 +8,13 @@ include:
 
   - board: seeeduino_xiao_ble
     shield: lism_left rgbled_adapter
-    artifact-name: lism_left_peripheral_joystick
+    artifact-name: lism_left_peripheral_joystick_shift_wasd
     cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=n
   
 
   - board: seeeduino_xiao_ble
     shield: lism_dongle dongle_screen
-    artifact-name: lism_dongle_screen_central_trackball
+    artifact-name: lism_dongle_screen_central_shift_wasd
     cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=y -DCONFIG_LOG_PROCESS_THREAD_STARTUP_DELAY_MS=8000
     snippet: zmk-usb-logging
     
