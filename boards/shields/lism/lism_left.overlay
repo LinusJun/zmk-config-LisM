@@ -33,7 +33,7 @@
     joystick_kscan: joystick_kscan {
         compatible = "linus,resistive-joystick";
         io-channels = <&adc 2>, <&adc 3>; /* D4/P0.04=X, D5/P0.05=Y */
-        press-gpios = <&xiao_d 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        press-gpios = <&gpio1 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; /* XIAO D6 */
         poll-period-ms = <10>;
         activation-threshold = <550>;
         release-threshold = <400>;
