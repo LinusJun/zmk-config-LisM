@@ -188,7 +188,11 @@ static const struct joystick_config joystick_config = {
     .adc = DEVICE_DT_GET(DT_NODELABEL(adc)),
     .x_channel = 2,
     .y_channel = 3,
-    .press = GPIO_DT_SPEC_GET(JOYSTICK_NODE, press_gpios),
+    .press = {
+        .port = DEVICE_DT_GET(DT_NODELABEL(gpio1)),
+        .pin = 11,
+        .dt_flags = GPIO_ACTIVE_LOW | GPIO_PULL_UP,
+    },
     .poll_ms = DT_PROP(JOYSTICK_NODE, poll_period_ms),
     .activation = DT_PROP(JOYSTICK_NODE, activation_threshold),
     .release = DT_PROP(JOYSTICK_NODE, release_threshold),
