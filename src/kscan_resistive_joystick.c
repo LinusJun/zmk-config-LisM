@@ -180,20 +180,20 @@ static const struct kscan_driver_api joystick_api = {
     .disable_callback = joystick_disable,
 };
 
-#define JOYSTICK_DEFINE(inst)                                                                      \
-    static struct joystick_data joystick_data_##inst;                                             \
-    static const struct joystick_config joystick_config_##inst = {                                \
-        .adc = DEVICE_DT_GET(DT_NODELABEL(adc)),                                                   \
-        .x_channel = 2,                                                                            \
-        .y_channel = 3,                                                                            \
-        .press = GPIO_DT_SPEC_GET(DT_NODELABEL(joystick_kscan), press_gpios),                     \
-        .poll_ms = DT_INST_PROP(inst, poll_period_ms),                                            \
-        .activation = DT_INST_PROP(inst, activation_threshold),                                   \
-        .release = DT_INST_PROP(inst, release_threshold),                                         \
-        .calibration_samples = DT_INST_PROP(inst, calibration_samples),                           \
-    };                                                                                            \
-    DEVICE_DT_INST_DEFINE(inst, joystick_init, NULL, &joystick_data_##inst,                       \
-                          &joystick_config_##inst, POST_KERNEL,                                   \
-                          CONFIG_LISM_RESISTIVE_JOYSTICK_INIT_PRIORITY, &joystick_api);
+#define JOYSTICK_NODE DT_NODELABEL(joystick_kscan)
 
-DT_INST_FOREACH_STATUS_OKAY(JOYSTICK_DEFINE)
+static struct joystick_data joystick_data;
+
+static const struct joystick_config joystick_config = {
+    .adc = DEVICE_DT_GET(DT_NODELABEL(adc)),
+    .x_channel = 2,
+    .y_channel = 3,
+    .press = GPIO_DT_SPEC_GET(JOYSTICK_NODE, press_gpios),
+    .poll_ms = DT_PROP(JOYSTICK_NODE, poll_period_ms),
+    .activation = DT_PROP(JOYSTICK_NODE, activation_threshold),
+    .release = DT_PROP(JOYSTICK_NODE, release_threshold),
+    .calibration_samples = DT_PROP(JOYSTICK_NODE, calibration_samples),
+};
+
+DEVICE_DT_DEFINE(JOYSTICK_NODE, joystick_init, NULL, &joystick_data, &joystick_config, POST_KERNEL,
+                 CONFIG_LISM_RESISTIVE_JOYSTICK_INIT_PRIORITY, &joystick_api);
