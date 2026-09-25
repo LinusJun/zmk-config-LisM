@@ -1,0 +1,14 @@
+menuconfig LISM_RESISTIVE_JOYSTICK
+    bool "LisM resistive joystick kscan driver"
+    default y if DT_HAS_LINUS_RESISTIVE_JOYSTICK_ENABLED
+    select ADC
+    select GPIO
+    select KSCAN
+
+if LISM_RESISTIVE_JOYSTICK
+
+config LISM_RESISTIVE_JOYSTICK_INIT_PRIORITY
+    int "Initialization priority"
+    default 90
+
+endif

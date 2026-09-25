@@ -11,14 +11,8 @@ if SHIELD_LISM_L || SHIELD_LISM_R || SHIELD_LISM_DONGLE
     config ZMK_MOUSE
         default y
     
-    config PAW3222
-        default y
-    
     config INPUT
         default y
-    
-    config SPI
-        default y 
 endif
 
 if SHIELD_LISM_DONGLE
@@ -67,19 +61,10 @@ if SHIELD_LISM_L
     config ZMK_SPLIT
         default y
 
-    config ZMK_POINTING
-        default y
-
-    config ZMK_MOUSE
+    config LISM_RESISTIVE_JOYSTICK
         default y
     
-    config PAW3222
-        default y
-    
-    config INPUT
-        default y
-    
-    config SPI
+    config ADC
         default y
 endif
 

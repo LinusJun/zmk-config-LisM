@@ -203,6 +203,7 @@
 &mt LEFT_GUI A  &mt LALT S  &mt LCTRL D    &mt LEFT_SHIFT F  &kp G                                      &kp H        &mt RSHIFT J    &mt RCTRL K  &mt RALT L  &mt RGUI SEMICOLON
 &kp Z           &kp X       &kp C          &kp V             &kp B                                      &kp N        &kp M           &kp COMMA    &kp DOT     &kp SLASH
 &lt 4 DELETE    &kp F1      &kp BACKSPACE  &kp LS(LG(N4))    &lt 2 SPACE  &lt 3 ESC    &lt 3 BACKSPACE  &lt 2 ENTER  &kp LS(LG(N4))  &kp F1       &kp F2      &lt 4 ESC
+&kp W           &kp S       &kp A          &kp D             &kp SPACE
             >;
 
             sensor-bindings = <&encoder_msc SCRL_DOWN SCRL_UP>;
@@ -215,6 +216,7 @@
 &kp NUMBER_1  &kp A  &kp S  &kp D   &kp NUMBER_2                         &kp M      &mkp MB1  &mkp MB2  &mkp MB3        &kp T
 &kp NUMBER_3  &kp G  &kp X  &kp V   &kp NUMBER_4                         &kp Y      &kp T     &kp C     &kp Y           &kp H
 &kp Z         &kp Y  &kp C  &trans  &kp SPACE     &kp F    &kp LEFT_GUI  &kp ENTER  &trans    &trans    &kp LEFT_ALT    &kp LS(F2)
+&trans        &trans &trans &trans          &trans
             >;
         };
 
@@ -225,6 +227,7 @@
 &kp LS(LC(TAB))   &kp LEFT      &kp DOWN       &kp RIGHT      &kp LC(TAB)                                           &kp KP_PLUS      &kp KP_N4  &kp KP_N5  &kp KP_N6   &kp KP_MINUS
 &kp LEFT_SHIFT    &kp PAGE_UP   &kp C_AC_HOME  &kp PAGE_DOWN  &kp LC(LS(C_AC_BACK))                                 &kp KP_MULTIPLY  &kp KP_N1  &kp KP_N2  &kp KP_N3   &kp KP_DIVIDE
 &kp LCTRL         &kp LEFT_WIN  &kp LEFT_ALT   &trans         &kp K_BACK             &kp C_AC_BACK    &kp KP_ENTER  &kp KP_N0        &trans     &kp KP_N0  &kp KP_DOT  &kp KP_DOT
+&trans            &trans        &trans         &trans          &trans
             >;
 
             #sensor-bindings = <&encoder_kp C_VOL_UP C_VOL_DN>;
@@ -237,6 +240,7 @@
 &kp NUMBER_1     &kp NUMBER_2  &kp NUMBER_3          &kp NUMBER_4           &kp NUMBER_5                      &kp NUMBER_6     &kp NUMBER_7      &kp NUMBER_8       &kp NUMBER_9      &kp NUMBER_0
 &kp TILDE        &kp GRAVE     &kp LEFT_PARENTHESIS  &kp RIGHT_PARENTHESIS  &kp LEFT_BRACE                    &kp RIGHT_BRACE  &kp LEFT_BRACKET  &kp RIGHT_BRACKET  &kp PIPE          &kp BACKSLASH
 &kp F7           &kp F5        &kp F4                &trans                 &kp MINUS       &trans    &trans  &kp UNDERSCORE   &trans            &kp F8             &kp F11           &kp F12
+&trans           &trans        &trans                &trans                 &trans
             >;
         };
 
@@ -247,6 +251,7 @@
 &none        &out OUT_BLE    &out OUT_USB  &out OUT_TOG  &trans                               &none         &out OUT_TOG  &out OUT_USB  &out OUT_BLE  &none
 &sys_reset   &none           &none         &none         &none                                &none         &none         &none         &none         &sys_reset
 &bootloader  &bt BT_CLR_ALL  &none         &none         &none       &none    &studio_unlock  &none         &none         &none         &none         &bootloader
+&trans       &trans          &trans        &trans        &trans
             >;
         };
 
@@ -257,6 +262,7 @@
 &kp R         &kp A  &kp S    &kp D   &kp NUMBER_2                  &trans  &trans  &trans  &trans        &kp T
 &kp NUMBER_3  &kp Z  &kp X    &kp G   &kp V                         &trans  &trans  &trans  &kp Y         &kp H
 &kp NUMBER_4  &kp M  &kp ESC  &trans  &kp SPACE     &kp F    &to 0  &trans  &trans  &trans  &kp LEFT_GUI  &kp C
+&trans        &trans &trans   &trans        &trans
             >;
         };
 
@@ -268,6 +274,7 @@
 &trans  &trans  &trans  &trans  &trans                    &trans  &trans  &trans  &trans  &trans
 &trans  &trans  &trans  &trans  &trans                    &trans  &trans  &trans  &trans  &trans
 &trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
+&trans  &trans  &trans  &trans  &trans
             >;
         };
 
@@ -279,6 +286,7 @@
 &trans  &trans  &trans  &trans  &trans                    &trans  &trans  &trans  &trans  &trans
 &trans  &trans  &trans  &trans  &trans                    &trans  &trans  &trans  &trans  &trans
 &trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
+&trans  &trans  &trans  &trans  &trans
             >;
         };
     };

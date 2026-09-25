@@ -8,7 +8,7 @@ include:
 
   - board: seeeduino_xiao_ble
     shield: lism_left rgbled_adapter
-    artifact-name: lism_left_peripheral_trackball
+    artifact-name: lism_left_peripheral_joystick
     cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=n
   
 
