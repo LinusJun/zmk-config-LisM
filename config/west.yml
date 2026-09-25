@@ -48,7 +48,7 @@ manifest:
       revision: zmk-v0.4.0.0
     - name: zmk-behavior-runtime-sensor-rotate
       remote: cormoran
-      revision: 8b1125ed676c1f5e1415d217984f33d0ebdcef4
+      revision: 8b1125ed676c1f5e14145d217984f33d0ebdcef4
     - name: zmk-feature-device-info
       remote: cormoran
       revision: 8cedd2dd9f04e19ea5a17b94914dd47a09d8db11
