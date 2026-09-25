@@ -1,28 +1,15 @@
 #include "lism.dtsi"
-#include "paw3222.dtsi"
-#include "split_input.dtsi"
 #include "lism-layouts.dtsi"
-#include <input/processors/xyz.dtsi>
-#include <dt-bindings/zmk/input_transform.h>
-#include <input/processors/report_rate_limit.dtsi>
-
-&spi0 {
+&adc {
     status = "okay";
-};
-
-&trackball_split_input { // local trackball *split* input device child node
-	device = <&trackball>;
-	input-processors =
-		<&zip_report_rate_limit 8>, // rate limiter by badjeff, default is 16ms
-		<&zip_xyz>; // compressor by badjeff
 };
 
 / {
 	chosen {
-		zmk,kscan = &kscan0;
+		zmk,kscan = &kscan_composite;
 	};
 
-	kscan0: kscan {
+	kscan_matrix: kscan_matrix {
 		compatible = "zmk,kscan-gpio-matrix";
 		diode-direction = "col2row";
         wakeup-source;
@@ -41,5 +28,33 @@
             , <&xiao_d 7  GPIO_ACTIVE_HIGH>                     // col3: D7
             , <&gpio0  9  GPIO_ACTIVE_HIGH>                     // col4: GPIO9(NFC1)
             ; 
+    };
+
+    joystick_kscan: joystick_kscan {
+        compatible = "linus,resistive-joystick";
+        io-channels = <&adc 2>, <&adc 3>; /* D4/P0.04=X, D5/P0.05=Y */
+        press-gpios = <&gpio1 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; /* XIAO D6 */
+        poll-period-ms = <10>;
+        activation-threshold = <550>;
+        release-threshold = <400>;
+        calibration-samples = <32>;
+    };
+
+    kscan_composite: kscan_composite {
+        compatible = "zmk,kscan-composite";
+        rows = <5>;
+        columns = <5>;
+
+        matrix {
+            kscan = <&kscan_matrix>;
+            row-offset = <0>;
+            column-offset = <0>;
+        };
+
+        joystick {
+            kscan = <&joystick_kscan>;
+            row-offset = <4>;
+            column-offset = <0>;
+        };
     };
 };
