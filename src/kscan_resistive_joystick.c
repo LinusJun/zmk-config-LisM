@@ -44,16 +44,28 @@ struct joystick_data {
 };
 
 static int read_axis(const struct adc_dt_spec *spec, int16_t *value) {
-    struct adc_sequence sequence = {0};
-    int err = adc_sequence_init_dt(spec, &sequence);
-    if (err) {
-        return err;
-    }
-
-    sequence.buffer = value;
-    sequence.buffer_size = sizeof(*value);
-    sequence.oversampling = 0;
+    struct adc_sequence sequence = {
+        .channels = BIT(spec->channel_id),
+        .buffer = value,
+        .buffer_size = sizeof(*value),
+        .resolution = 12,
+        .oversampling = 0,
+    };
     return adc_read(spec->dev, &sequence);
+}
+
+static int setup_axis(const struct adc_dt_spec *spec) {
+    struct adc_channel_cfg channel = {
+        .gain = ADC_GAIN_1_6,
+        .reference = ADC_REF_INTERNAL,
+        .acquisition_time = ADC_ACQ_TIME_DEFAULT,
+        .channel_id = spec->channel_id,
+#ifdef CONFIG_ADC_CONFIGURABLE_INPUTS
+        .input_positive = SAADC_CH_PSELP_PSELP_AnalogInput0 + spec->channel_id,
+#endif
+    };
+
+    return adc_channel_setup(spec->dev, &channel);
 }
 
 static void report(const struct device *dev, enum joystick_column column, bool pressed) {
@@ -148,7 +160,7 @@ static int joystick_init(const struct device *dev) {
         !gpio_is_ready_dt(&cfg->press)) {
         return -ENODEV;
     }
-    if (adc_channel_setup_dt(&cfg->x) || adc_channel_setup_dt(&cfg->y)) {
+    if (setup_axis(&cfg->x) || setup_axis(&cfg->y)) {
         return -EIO;
     }
     if (gpio_pin_configure_dt(&cfg->press, GPIO_INPUT)) {
