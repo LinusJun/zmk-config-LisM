@@ -9,6 +9,7 @@
 #include "split_input_right.dtsi"
 #include "lism-layouts.dtsi"
 #include <input/processors.dtsi>
+#include <input/processors/xyz.dtsi>
 #include <dt-bindings/zmk/input_transform.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 // #include <behaviors/input_gestures_accel.dtsi>
@@ -60,6 +61,7 @@
 	status = "okay";
 
     input-processors =
+        <&zip_zxy>,
         //<&pointer_accel>,
 		//<&zip_xy_scaler 1 3>,   //光标移动速度1/2倍的CPI
 		<&zip_xy_transform (INPUT_TRANSFORM_X_INVERT | INPUT_TRANSFORM_Y_INVERT)>;
@@ -68,6 +70,7 @@
 	scroller {
 		layers = <2 4>; // SCROLL
 		input-processors =
+            <&zip_zxy>,
 			<&zip_xy_to_scroll_mapper>,
             <&zip_scroll_x_scaler 0 1>,          // 锁定x轴：将产生的 X 轴滚动信号乘 0
             //<&zip_xy_transform (INPUT_TRANSFORM_Y_INVERT)>,
@@ -79,6 +82,7 @@
     scrolloriginal {
         layers = <3>;
         input-processors =
+            <&zip_zxy>,
             <&zip_xy_to_scroll_mapper>,
 			<&zip_scroll_y_scaler 0 1>,          // 锁定 Y 轴（垂直）：将产生的Y轴滚动信号乘 0
 			//<&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转
@@ -103,13 +107,16 @@
 	status = "okay";
 
     input-processors =
+        <&zip_zxy>,
         //<&pointer_accel>;
 		<&zip_xy_transform (INPUT_TRANSFORM_X_INVERT | INPUT_TRANSFORM_Y_INVERT)>;
 
 	scroller {
 		layers = <2 4>; // SCROLL
 		input-processors =
+            <&zip_zxy>,
 			<&zip_xy_to_scroll_mapper>,
+            <&zip_scroll_x_scaler 0 1>,          // 与左手一致：锁定横向滚动，仅保留纵向滚动
             //<&zip_xy_transform (INPUT_TRANSFORM_Y_INVERT)>,
 			<&zip_scroll_transform INPUT_TRANSFORM_Y_INVERT>,   //滚动的Y轴反转
             <&zip_xy_scaler 1 16>,
@@ -119,6 +126,7 @@
     scrolloriginal {
         layers = <3>;
         input-processors =
+            <&zip_zxy>,
             <&zip_xy_to_scroll_mapper>,
 			<&zip_scroll_y_scaler 0 1>,          // 锁定 Y 轴（垂直）
 			//<&zip_scroll_transform INPUT_TRANSFORM_X_INVERT>,   //滚动的X轴反转

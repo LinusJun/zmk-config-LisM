@@ -183,7 +183,7 @@ layers:
   - {t: BT, h: '2'}
   - {t: BT, h: '3'}
   - {t: BT, h: '4'}
-  - ''
+  - {t: GameJoystick, h: toggle}
   - OUT BLE
   - OUT USB
   - OUT TOG
@@ -215,7 +215,7 @@ layers:
   - ''
   - ''
   - Boot
-  Game2:
+  GameJoystick:
   - TAB
   - Q
   - W

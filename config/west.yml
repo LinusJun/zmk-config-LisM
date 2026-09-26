@@ -10,6 +10,8 @@ manifest:
       url-base: https://github.com/4mplelab
     - name: carrefinho
       url-base: https://github.com/carrefinho
+    - name: badjeff
+      url-base: https://github.com/badjeff
   projects:
     - name: zmk
       remote: zmkfirmware
@@ -29,5 +31,11 @@ manifest:
     - name: prospector-zmk-module
       remote: carrefinho
       revision: feat/new-status-screens
+    - name: zmk-input-processor-report-rate-limit
+      remote: badjeff
+      revision: b056cb135525933743e2627150fb390f9d4b2461
+    - name: zmk-input-processor-xyz
+      remote: badjeff
+      revision: edb44b7261796a11b3aaecc0f75f1da615789b90
   self:
     path: config
