@@ -183,7 +183,7 @@ layers:
   - {t: BT, h: '2'}
   - {t: BT, h: '3'}
   - {t: BT, h: '4'}
-  - ''
+  - '&studio_unlock'
   - OUT BLE
   - OUT USB
   - OUT TOG
@@ -209,7 +209,7 @@ layers:
   - ''
   - ''
   - ''
-  - '&studio_unlock'
+  - ''
   - ''
   - ''
   - ''
