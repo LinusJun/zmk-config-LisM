@@ -1,0 +1,35 @@
+#include "lism.dtsi"
+#include "lism-layouts.dtsi"
+
+&adc {
+    status = "okay";
+};
+
+/ {
+    chosen {
+        zmk,kscan = &joystick_composite;
+        zmk,physical-layout = &physical_42key_layout;
+    };
+
+    joystick_kscan: joystick_kscan {
+        compatible = "linus,resistive-joystick";
+        io-channels = <&adc 2>, <&adc 3>; /* D4/P0.04=X, D5/P0.05=Y */
+        press-gpios = <&gpio1 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; /* XIAO D6 */
+        poll-period-ms = <10>;
+        activation-threshold = <550>;
+        release-threshold = <400>;
+        calibration-samples = <32>;
+    };
+
+    joystick_composite: kscan_composite {
+        compatible = "zmk,kscan-composite";
+        rows = <5>;
+        columns = <5>;
+
+        joystick {
+            kscan = <&joystick_kscan>;
+            row-offset = <4>;
+            col-offset = <0>;
+        };
+    };
+};

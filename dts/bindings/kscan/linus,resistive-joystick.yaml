@@ -1,0 +1,35 @@
+description: Five-wire resistive joystick exposed as five kscan columns
+
+compatible: "linus,resistive-joystick"
+
+include: kscan.yaml
+
+properties:
+  io-channels:
+    type: phandle-array
+    required: true
+    description: ADC channels in X, Y order
+
+  press-gpios:
+    type: phandle-array
+    required: true
+    description: Active-low joystick push switch
+
+  poll-period-ms:
+    type: int
+    default: 10
+
+  activation-threshold:
+    type: int
+    default: 550
+    description: ADC counts away from the calibrated center needed to press a direction
+
+  release-threshold:
+    type: int
+    default: 400
+    description: ADC counts away from center below which a direction is released
+
+  calibration-samples:
+    type: int
+    default: 32
+    description: Center samples collected while the stick is untouched at startup
