@@ -8,6 +8,7 @@
 #include "split_input.dtsi"
 #include "split_input_right.dtsi"
 #include "lism-layouts.dtsi"
+#include <input/processors/xyz.dtsi>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 #include "../../../snippets/lism-dya-input-processors.dtsi"
 
@@ -19,18 +20,20 @@
 /* local trackball input split device child node, receiving events from the peripheral and raising them locally. */
 // look into <split_input.dtsi> for mother node.
 &trackball_split_listener {
-	status = "okay";
+    status = "okay";
     input-processors =
-        <&lism_left_pointer
+        <&zip_zxy
+         &lism_left_pointer
          &lism_left_vertical_scroll
          &lism_left_horizontal_scroll>;
 };
 
 
 &trackball_split_listener_right {
-	status = "okay";
+    status = "okay";
     input-processors =
-        <&lism_right_pointer
+        <&zip_zxy
+         &lism_right_pointer
          &lism_right_free_scroll
          &lism_right_horizontal_scroll>;
 };

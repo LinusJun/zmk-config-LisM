@@ -2,6 +2,8 @@
 #include "paw3222-right.dtsi"
 #include "split_input_right.dtsi"
 #include "lism-layouts.dtsi"
+#include <input/processors/report_rate_limit.dtsi>
+#include <input/processors/xyz.dtsi>
 
 &transform_42keymap {
     col-offset = <5>;
@@ -17,6 +19,9 @@
 
 &trackball_split_input_right { // local trackball *split* input device child node
 	device = <&trackball_right>;
+	input-processors =
+		<&zip_report_rate_limit 8>,
+		<&zip_xyz>;
 };
 
 / {

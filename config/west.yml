@@ -12,6 +12,8 @@ manifest:
       url-base: https://github.com/carrefinho
     - name: cormoran
       url-base: https://github.com/cormoran
+    - name: badjeff
+      url-base: https://github.com/badjeff
   projects:
     - name: zmk
       remote: cormoran
@@ -31,6 +33,15 @@ manifest:
     - name: prospector-zmk-module
       remote: carrefinho
       revision: feat/new-status-screens
+
+    # Keep the original dongle transport path: cap each peripheral trackball
+    # to an 8 ms report interval and pack XY into one split-input payload.
+    - name: zmk-input-processor-report-rate-limit
+      remote: badjeff
+      revision: b056cb135525933743e2627150fb390f9d4b2461
+    - name: zmk-input-processor-xyz
+      remote: badjeff
+      revision: edb44b7261796a11b3aaecc0f75f1da615789b90
 
     # DYA Studio firmware extensions. These are the revisions used by LisM's
     # upstream dya-studio_zmk-v0.4 branch and are mutually compatible.
