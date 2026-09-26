@@ -4,5 +4,5 @@ config LISM_PROSPECTOR_LOCK_INDICATORS
     depends on PROSPECTOR_STATUS_SCREEN_OPERATOR
     depends on ZMK_HID_INDICATORS
     help
-      Replaces the OPERATOR modifier words with compact symbols and uses
-      the freed top-row space for CAP and NUM host LED indicators.
+      Extends the OPERATOR modifier row with CAP and NUM host LED indicators,
+      using one compact font, baseline, and spacing scheme for all six labels.
