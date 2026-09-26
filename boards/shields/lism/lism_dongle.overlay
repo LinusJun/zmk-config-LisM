@@ -116,6 +116,7 @@
 		input-processors =
             <&zip_zxy>,
 			<&zip_xy_to_scroll_mapper>,
+            <&zip_scroll_x_scaler 0 1>,          // 与左手一致：锁定横向滚动，仅保留纵向滚动
             //<&zip_xy_transform (INPUT_TRANSFORM_Y_INVERT)>,
 			<&zip_scroll_transform INPUT_TRANSFORM_Y_INVERT>,   //滚动的Y轴反转
             <&zip_xy_scaler 1 16>,
