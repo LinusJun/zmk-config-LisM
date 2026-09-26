@@ -1,14 +1,12 @@
 /*
  * LisM OPERATOR status-screen extension.
  *
- * The Prospector OPERATOR screen dedicates the full top row to four textual
- * modifier names. Compacting those names to symbols leaves enough room for
- * host-controlled Caps Lock and Num Lock indicators without reducing the WPM
- * meter, layer display, battery circles, or output status areas.
+ * Extend the Prospector OPERATOR modifier row with host-controlled Caps Lock
+ * and Num Lock indicators. All six labels share one flex container, font,
+ * baseline, and separator style so the row remains visually consistent.
  */
 
 #include <lvgl.h>
-#include <string.h>
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
 
@@ -17,13 +15,7 @@
 #include <zmk/events/hid_indicators_changed.h>
 #include <zmk/hid_indicators.h>
 
-LV_FONT_DECLARE(Symbols_Semibold_32);
 LV_FONT_DECLARE(FG_Medium_20);
-
-#define SYMBOL_COMMAND "\xF4\x80\x86\x94"
-#define SYMBOL_OPTION "\xF4\x80\x86\x95"
-#define SYMBOL_CONTROL "\xF4\x80\x86\x8D"
-#define SYMBOL_SHIFT "\xF4\x80\x86\x9D"
 
 #define HID_INDICATOR_NUM_LOCK 0x01
 #define HID_INDICATOR_CAPS_LOCK 0x02
@@ -42,52 +34,27 @@ static lv_obj_t *num_label;
 static struct k_work_delayable deferred_init_work;
 static struct k_work display_init_work;
 
-static const char *compact_modifier_symbol(const char *text) {
-    if (text == NULL) {
-        return NULL;
-    }
-
-    if (!strcmp(text, "SHFT")) {
-        return SYMBOL_SHIFT;
-    }
-    if (!strcmp(text, "CTRL")) {
-        return SYMBOL_CONTROL;
-    }
-    if (!strcmp(text, "ALT") || !strcmp(text, "OPT")) {
-        return SYMBOL_OPTION;
-    }
-    if (!strcmp(text, "GUI") || !strcmp(text, "CMD") || !strcmp(text, "WIN")) {
-        return SYMBOL_COMMAND;
-    }
-
-    return NULL;
-}
-
-static bool compact_operator_modifier_row(lv_obj_t *screen) {
+static lv_obj_t *get_operator_modifier_row(lv_obj_t *screen) {
     if (lv_obj_get_child_cnt(screen) < 5) {
-        return false;
+        return NULL;
     }
 
     /* OPERATOR creates its modifier container first. Its children alternate
      * label/separator, giving label indices 0, 2, 4, and 6. */
     lv_obj_t *modifiers = lv_obj_get_child(screen, 0);
     if (lv_obj_get_child_cnt(modifiers) < 7) {
-        return false;
+        return NULL;
     }
 
-    lv_obj_set_pos(modifiers, 10, 4);
-    lv_obj_set_size(modifiers, 160, 32);
+    lv_obj_set_pos(modifiers, 10, 8);
+    lv_obj_set_size(modifiers, 300, 24);
 
     for (int index = 0; index < 7; index += 2) {
         lv_obj_t *label = lv_obj_get_child(modifiers, index);
-        const char *symbol = compact_modifier_symbol(lv_label_get_text(label));
-        if (symbol != NULL) {
-            lv_label_set_text(label, symbol);
-            lv_obj_set_style_text_font(label, &Symbols_Semibold_32, LV_PART_MAIN);
-        }
+        lv_obj_set_style_text_font(label, &FG_Medium_20, LV_PART_MAIN);
     }
 
-    return true;
+    return modifiers;
 }
 
 static lv_obj_t *create_lock_label(lv_obj_t *parent, const char *text) {
@@ -98,33 +65,31 @@ static lv_obj_t *create_lock_label(lv_obj_t *parent, const char *text) {
     return label;
 }
 
-static bool create_lock_indicator_row(void) {
-    lv_obj_t *screen = lv_scr_act();
-    if (screen == NULL || !compact_operator_modifier_row(screen)) {
-        return false;
-    }
-
-    lv_obj_t *container = lv_obj_create(screen);
-    lv_obj_set_pos(container, 180, 8);
-    lv_obj_set_size(container, 90, 24);
-    lv_obj_set_style_bg_opa(container, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(container, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(container, 0, LV_PART_MAIN);
-    lv_obj_set_flex_flow(container, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(container, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER,
-                          LV_FLEX_ALIGN_CENTER);
-
-    caps_label = create_lock_label(container, "CAP");
-
-    lv_obj_t *separator = lv_obj_create(container);
+static void create_separator(lv_obj_t *parent) {
+    lv_obj_t *separator = lv_obj_create(parent);
     lv_obj_set_size(separator, 2, 24);
     lv_obj_set_style_bg_color(separator, lv_color_hex(COLOR_SEPARATOR), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(separator, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(separator, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(separator, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(separator, 0, LV_PART_MAIN);
+}
 
-    num_label = create_lock_label(container, "NUM");
+static bool create_lock_indicator_row(void) {
+    lv_obj_t *screen = lv_scr_act();
+    if (screen == NULL) {
+        return false;
+    }
+
+    lv_obj_t *modifiers = get_operator_modifier_row(screen);
+    if (modifiers == NULL) {
+        return false;
+    }
+
+    create_separator(modifiers);
+    caps_label = create_lock_label(modifiers, "CAP");
+    create_separator(modifiers);
+    num_label = create_lock_label(modifiers, "NUM");
     return true;
 }
 
