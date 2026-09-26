@@ -47,12 +47,17 @@ static lv_obj_t *get_operator_modifier_row(lv_obj_t *screen) {
     }
 
     lv_obj_set_pos(modifiers, 10, 8);
-    lv_obj_set_size(modifiers, 300, 24);
+    lv_obj_set_size(modifiers, lv_obj_get_width(screen) - 20, 24);
 
     for (int index = 0; index < 7; index += 2) {
         lv_obj_t *label = lv_obj_get_child(modifiers, index);
         lv_obj_set_style_text_font(label, &FG_Medium_20, LV_PART_MAIN);
     }
+
+    /* Keep the configured GACS order while shortening the two longest labels
+     * so all six indicators fit on the physical display. */
+    lv_label_set_text(lv_obj_get_child(modifiers, 4), "CTL");
+    lv_label_set_text(lv_obj_get_child(modifiers, 6), "SFT");
 
     return modifiers;
 }
