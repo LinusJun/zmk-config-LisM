@@ -1,4 +1,5 @@
-if(CONFIG_LISM_PROSPECTOR_LOCK_INDICATORS)
+if(CONFIG_LISM_PROSPECTOR_LOCK_INDICATORS OR CONFIG_LISM_RESISTIVE_JOYSTICK)
   zephyr_library()
-  zephyr_library_sources(src/prospector_lock_indicators.c)
+  zephyr_library_sources_ifdef(CONFIG_LISM_PROSPECTOR_LOCK_INDICATORS src/prospector_lock_indicators.c)
+  zephyr_library_sources_ifdef(CONFIG_LISM_RESISTIVE_JOYSTICK src/kscan_resistive_joystick.c)
 endif()
