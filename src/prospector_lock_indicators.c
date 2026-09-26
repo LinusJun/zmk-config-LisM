@@ -3,7 +3,7 @@
  *
  * Extend the Prospector OPERATOR modifier row with host-controlled Caps Lock
  * and Num Lock indicators. All six labels share one flex container, font, baseline, and separator style.
- * Modifier order and text come from the Prospector SCAG generic configuration.
+ * Modifier order comes from the Prospector GACS generic configuration; labels are shortened to fit.
  */
 
 #include <lvgl.h>
@@ -49,8 +49,11 @@ static lv_obj_t *get_operator_modifier_row(lv_obj_t *screen) {
     lv_obj_set_pos(modifiers, 10, 8);
     lv_obj_set_size(modifiers, lv_obj_get_width(screen) - 20, 24);
 
-    for (int index = 0; index < 7; index += 2) {
-        lv_obj_t *label = lv_obj_get_child(modifiers, index);
+    static const char *const modifier_labels[] = {"GUI", "ALT", "CTL", "SFT"};
+
+    for (int label_index = 0; label_index < 4; label_index++) {
+        lv_obj_t *label = lv_obj_get_child(modifiers, label_index * 2);
+        lv_label_set_text(label, modifier_labels[label_index]);
         lv_obj_set_style_text_font(label, &FG_Medium_20, LV_PART_MAIN);
     }
 
