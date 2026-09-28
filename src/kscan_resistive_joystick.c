@@ -132,9 +132,6 @@ static void joystick_work(struct k_work *work) {
      */
     if (IS_ENABLED(CONFIG_LISM_JOYSTICK_DIAG_ONLY)) {
         report(dev, JOY_PRESS, pressed);
-        if (now - data->last_log_ms >= JOY_LOG_INTERVAL_MS) {
-            LOG_INF("push logical=%d gpio_result=%d", pressed, button);
-        }
     }
 
     if (button < 0 || read_axis(cfg->adc, cfg->x_channel, &x) ||
@@ -146,7 +143,10 @@ static void joystick_work(struct k_work *work) {
         data->calibrated = false;
         data->armed = false;
         data->samples = 0;
-        LOG_WRN("joystick input read failed; disarmed");
+        if (now - data->last_log_ms >= JOY_LOG_INTERVAL_MS) {
+            LOG_WRN("ADC/GPIO read failed; push=%d gpio_result=%d", pressed, button);
+            data->last_log_ms = now;
+        }
         goto reschedule;
     }
 
