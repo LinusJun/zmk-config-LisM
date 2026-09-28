@@ -1,29 +1,13 @@
-# This file generates the GitHub Actions matrix.
+# Isolated XIAO USB tests; no dongle or keyboard half is built on this branch.
 ---
 include:
   - board: xiao_ble//zmk
-    shield: lism_right rgbled_adapter
-    artifact-name: lism_right_peripheral_trackball
-    cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=n
+    shield: joystick_usb_test
+    artifact-name: joystick_usb_wasd
+    cmake-args: -DCONFIG_ZMK_BLE=n -DCONFIG_ZMK_SPLIT=n
 
   - board: xiao_ble//zmk
-    shield: lism_left rgbled_adapter
-    artifact-name: lism_left_peripheral_trackball
-    cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=n
-  
-
-  - board: xiao_ble//zmk
-    shield: lism_joystick
-    artifact-name: lism_joystick_peripheral_wasd
-    cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=n
-
-  - board: xiao_ble//zmk
-    shield: lism_dongle prospector_adapter
-    artifact-name: lism_dongle_prospector_operator
-    cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=y -DCONFIG_LOG_PROCESS_THREAD_STARTUP_DELAY_MS=8000
+    shield: joystick_usb_test
+    artifact-name: joystick_usb_adc_diagnostic
     snippet: zmk-usb-logging
-    
-  # Reset
-  - board: xiao_ble//zmk
-    shield: settings_reset
-    artifact-name: settings_reset-xiao_ble-zmk
+    cmake-args: -DCONFIG_ZMK_BLE=n -DCONFIG_ZMK_SPLIT=n -DCONFIG_LISM_JOYSTICK_DIAG_ONLY=y -DCONFIG_LOG_PROCESS_THREAD_STARTUP_DELAY_MS=8000
