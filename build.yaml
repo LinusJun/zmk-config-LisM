@@ -4,7 +4,8 @@ include:
   - board: xiao_ble//zmk
     shield: joystick_usb_test
     artifact-name: joystick_usb_wasd
-    cmake-args: -DCONFIG_ZMK_BLE=n -DCONFIG_ZMK_SPLIT=n
+    snippet: zmk-usb-logging
+    cmake-args: -DCONFIG_ZMK_BLE=n -DCONFIG_ZMK_SPLIT=n -DCONFIG_LOG_PROCESS_THREAD_STARTUP_DELAY_MS=8000
 
   - board: xiao_ble//zmk
     shield: joystick_usb_test
