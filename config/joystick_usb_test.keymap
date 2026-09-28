@@ -1,0 +1,14 @@
+#include <behaviors.dtsi>
+#include <dt-bindings/zmk/keys.h>
+
+/ {
+    keymap {
+        compatible = "zmk,keymap";
+
+        default_layer {
+            bindings = <
+                &kp W &kp S &kp A &kp D &kp SPACE
+            >;
+        };
+    };
+};
