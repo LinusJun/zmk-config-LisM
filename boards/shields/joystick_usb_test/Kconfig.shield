@@ -1,0 +1,2 @@
+config SHIELD_JOYSTICK_USB_TEST
+    def_bool $(shields_list_contains,joystick_usb_test)
