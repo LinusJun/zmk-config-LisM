@@ -20,7 +20,7 @@ LOG_MODULE_REGISTER(lism_joystick, CONFIG_ZMK_LOG_LEVEL);
 #define JOY_CENTER_MAX 3400
 #define JOY_CALIBRATION_MAX_SPREAD 100
 #define JOY_SAMPLE_MIN 80
-#define JOY_SAMPLE_MAX 4000
+#define JOY_SAMPLE_MAX 3400
 #define JOY_LOG_INTERVAL_MS 500
 #define JOY_ARM_HOLD_MS 1000
 
@@ -202,7 +202,7 @@ static void joystick_work(struct k_work *work) {
         data->calibrated = false;
         data->armed = false;
         data->samples = 0;
-        LOG_WRN("ADC rail value; disarmed");
+        LOG_WRN("ADC outside safe signal range: x=%d y=%d; disarmed", x, y);
         goto reschedule;
     }
 
