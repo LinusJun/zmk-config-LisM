@@ -52,7 +52,6 @@ struct joystick_data {
     bool state[JOY_COLUMN_COUNT];
     bool calibrated;
     bool armed;
-    bool arm_release_seen;
     int64_t arm_start_ms;
     int64_t last_log_ms;
     int32_t x_center;
@@ -127,19 +126,14 @@ static void joystick_work(struct k_work *work) {
         return;
     }
 
-    /* In diagnostic mode the push switch must work even with X/Y and VCC
-     * intentionally disconnected. Never let an ADC error mask its result.
+    /* Push is a separate digital input. ADC calibration and directional arming
+     * must never suppress Space, including when an axis is disconnected.
      */
-    if (IS_ENABLED(CONFIG_LISM_JOYSTICK_DIAG_ONLY)) {
-        report(dev, JOY_PRESS, pressed);
-    }
+    report(dev, JOY_PRESS, button >= 0 && pressed);
 
     if (button < 0 || read_axis(cfg->adc, cfg->x_channel, &x) ||
         read_axis(cfg->adc, cfg->y_channel, &y)) {
         release_directions(dev);
-        if (!IS_ENABLED(CONFIG_LISM_JOYSTICK_DIAG_ONLY)) {
-            report(dev, JOY_PRESS, false);
-        }
         data->calibrated = false;
         data->armed = false;
         data->samples = 0;
@@ -193,13 +187,11 @@ static void joystick_work(struct k_work *work) {
 
     if (IS_ENABLED(CONFIG_LISM_JOYSTICK_DIAG_ONLY)) {
         release_directions(dev);
-        report(dev, JOY_PRESS, pressed);
         goto reschedule;
     }
 
     if (!data->calibrated) {
         release_directions(dev);
-        report(dev, JOY_PRESS, false);
         data->arm_start_ms = 0;
         goto reschedule;
     }
@@ -207,7 +199,6 @@ static void joystick_work(struct k_work *work) {
     if (x < JOY_SAMPLE_MIN || x > JOY_SAMPLE_MAX ||
         y < JOY_SAMPLE_MIN || y > JOY_SAMPLE_MAX) {
         release_directions(dev);
-        report(dev, JOY_PRESS, false);
         data->calibrated = false;
         data->armed = false;
         data->samples = 0;
@@ -217,23 +208,16 @@ static void joystick_work(struct k_work *work) {
 
     if (IS_ENABLED(CONFIG_LISM_JOYSTICK_REQUIRE_ARM) && !data->armed) {
         release_directions(dev);
-        report(dev, JOY_PRESS, false);
         if (!pressed) {
             data->arm_start_ms = 0;
         } else if (data->arm_start_ms == 0) {
             data->arm_start_ms = now;
         } else if (now - data->arm_start_ms >= JOY_ARM_HOLD_MS) {
             data->armed = true;
-            data->arm_release_seen = false;
             LOG_INF("joystick armed; release push before testing");
         }
         goto reschedule;
     }
-
-    if (!pressed) {
-        data->arm_release_seen = true;
-    }
-    report(dev, JOY_PRESS, data->arm_release_seen && pressed);
 
     const int32_t dx = x - data->x_center;
     const int32_t dy = y - data->y_center;
