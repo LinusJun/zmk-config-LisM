@@ -1,0 +1,8 @@
+file_format: "1"
+id: joystick_usb_test
+name: JP19 USB Test
+type: shield
+url: https://github.com/LinusJun/zmk-config-LisM
+requires: [xiao_ble]
+features:
+  - keys
