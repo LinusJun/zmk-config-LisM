@@ -21,3 +21,13 @@ config LISM_RESISTIVE_JOYSTICK_INIT_PRIORITY
     default 90
 
 endif
+
+config LISM_JOYSTICK_DIAG_ONLY
+    bool "Log joystick ADC readings without directional HID output"
+    default n
+    depends on LISM_RESISTIVE_JOYSTICK
+
+config LISM_JOYSTICK_REQUIRE_ARM
+    bool "Require a one-second stick press before directional HID output"
+    default n
+    depends on LISM_RESISTIVE_JOYSTICK
