@@ -1,0 +1,41 @@
+#include <dt-bindings/zmk/matrix_transform.h>
+#include <physical_layouts.dtsi>
+
+&adc {
+    status = "okay";
+};
+
+/ {
+    chosen {
+        zmk,kscan = &joystick_kscan;
+        zmk,physical-layout = &joystick_usb_layout;
+    };
+
+    joystick_kscan: joystick_kscan {
+        compatible = "linus,resistive-joystick";
+        io-channels = <&adc 2>, <&adc 3>; /* XIAO D4 = X, D5 = Y */
+        press-gpios = <&gpio1 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; /* D6 */
+        poll-period-ms = <10>;
+        activation-threshold = <150>;
+        release-threshold = <90>;
+        calibration-samples = <64>;
+    };
+
+    joystick_transform: joystick_transform {
+        compatible = "zmk,matrix-transform";
+        columns = <5>;
+        rows = <1>;
+        map = <RC(0,0) RC(0,1) RC(0,2) RC(0,3) RC(0,4)>;
+    };
+
+    joystick_usb_layout: joystick_usb_layout {
+        compatible = "zmk,physical-layout";
+        display-name = "Joystick USB Test";
+        transform = <&joystick_transform>;
+        keys = <&key_physical_attrs 50 50 50 0 0 0 0>,
+               <&key_physical_attrs 50 50 50 100 0 0 0>,
+               <&key_physical_attrs 50 50 0 50 0 0 0>,
+               <&key_physical_attrs 50 50 100 50 0 0 0>,
+               <&key_physical_attrs 50 50 50 50 0 0 0>;
+    };
+};
