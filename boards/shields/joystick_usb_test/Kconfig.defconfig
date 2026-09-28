@@ -1,0 +1,12 @@
+if SHIELD_JOYSTICK_USB_TEST
+
+config ZMK_KEYBOARD_NAME
+    default "JP19 USB Test"
+
+config ZMK_USB
+    default y
+
+config LISM_RESISTIVE_JOYSTICK
+    default y
+
+endif
