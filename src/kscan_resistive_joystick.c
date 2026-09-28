@@ -127,10 +127,22 @@ static void joystick_work(struct k_work *work) {
         return;
     }
 
+    /* In diagnostic mode the push switch must work even with X/Y and VCC
+     * intentionally disconnected. Never let an ADC error mask its result.
+     */
+    if (IS_ENABLED(CONFIG_LISM_JOYSTICK_DIAG_ONLY)) {
+        report(dev, JOY_PRESS, pressed);
+        if (now - data->last_log_ms >= JOY_LOG_INTERVAL_MS) {
+            LOG_INF("push logical=%d gpio_result=%d", pressed, button);
+        }
+    }
+
     if (button < 0 || read_axis(cfg->adc, cfg->x_channel, &x) ||
         read_axis(cfg->adc, cfg->y_channel, &y)) {
         release_directions(dev);
-        report(dev, JOY_PRESS, false);
+        if (!IS_ENABLED(CONFIG_LISM_JOYSTICK_DIAG_ONLY)) {
+            report(dev, JOY_PRESS, false);
+        }
         data->calibrated = false;
         data->armed = false;
         data->samples = 0;
