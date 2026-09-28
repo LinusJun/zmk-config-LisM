@@ -29,11 +29,12 @@ unpowered; ADC readings without stick power are meaningless.
 
 The WASD image starts disarmed so it cannot type on USB insertion. Leave the
 stick centered while powering on. Hold the stick push switch for one second,
-then release to arm. Subsequent presses send Space. If both axis centers are
-not stable and away from the ADC rails, arming is refused. The diagnostic
-image does not send directional keys even after arming.
+then release to arm directional keys. Push sends Space immediately, even before
+arming or when ADC calibration fails. If both axis centers are not stable and
+away from the ADC rails, arming is refused. The diagnostic image does not send
+directional keys even after arming.
 
-For the diagnostic image, connect to the USB CDC serial port on macOS, usually
+For either image, connect to the USB CDC serial port on macOS, usually
 `/dev/cu.usbmodem*`, at 115200 baud. Logs report raw 12-bit X/Y readings and
 calibrated center about twice per second. Record center and fully left,
 right, up, down values. Avoid testing in a text field until the WASD image
