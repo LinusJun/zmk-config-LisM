@@ -13,6 +13,11 @@ include:
   
 
   - board: xiao_ble//zmk
+    shield: lism_joystick
+    artifact-name: lism_joystick_peripheral_wasd
+    cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=n
+
+  - board: xiao_ble//zmk
     shield: lism_dongle prospector_adapter
     artifact-name: lism_dongle_prospector_operator
     cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=y -DCONFIG_LOG_PROCESS_THREAD_STARTUP_DELAY_MS=8000

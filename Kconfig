@@ -6,3 +6,18 @@ config LISM_PROSPECTOR_LOCK_INDICATORS
     help
       Extends the OPERATOR modifier row with CAP and NUM host LED indicators,
       using one compact font, baseline, and spacing scheme for all six labels.
+
+menuconfig LISM_RESISTIVE_JOYSTICK
+    bool "LisM resistive joystick kscan driver"
+    default y if DT_HAS_LINUS_RESISTIVE_JOYSTICK_ENABLED
+    select ADC
+    select GPIO
+    select KSCAN
+
+if LISM_RESISTIVE_JOYSTICK
+
+config LISM_RESISTIVE_JOYSTICK_INIT_PRIORITY
+    int "Initialization priority"
+    default 90
+
+endif

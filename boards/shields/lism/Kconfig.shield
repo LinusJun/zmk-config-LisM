@@ -7,3 +7,6 @@ config SHIELD_LISM_L
 
 config SHIELD_LISM_DONGLE
     def_bool $(shields_list_contains,lism_dongle)
+
+config SHIELD_LISM_JOYSTICK
+    def_bool $(shields_list_contains,lism_joystick)
