@@ -3,10 +3,14 @@
 This Circle Pad build replaces the JP19 stick peripheral in the already
 validated three-peripheral LisM dongle setup. Flash
 `lism_circlepad_peripheral_wasd.uf2` to the XIAO inside the Circle Pad
-case. Use the matching `lism_dongle_prospector_operator.uf2` only when
-updating the dongle as well; the left/right peripheral images and the
-four-direction logical row is used; this branch has no joystick press key. Do not run the JP19 and Circle Pad
+case. Flash the matching `lism_dongle_prospector_operator.uf2` to the
+dongle as well, because its logical layout now has four Circle Pad
+positions instead of the JP19 fifth push position. Existing left and
+right peripheral firmware can remain installed. Do not run the JP19 and Circle Pad
 peripherals simultaneously against this three-slot dongle build.
+If the Circle Pad uses a different XIAO from the paired JP19 unit,
+the dongle and Circle Pad may need their saved split pairing cleared
+before pairing the new peripheral.
 
 ## Electrical map and evidence
 
