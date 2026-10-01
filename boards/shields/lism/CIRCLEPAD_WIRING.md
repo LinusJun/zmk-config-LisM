@@ -41,6 +41,20 @@ The BitBuilt thread labels its image as a 3DS nub-to-GameCube-C-stick
 diagram. It is useful background on resistive stick signals, but is
 **not** the pin-number authority for this four-pin New 3DS XL Circle Pad.
 
+## User-observed four-contact order
+
+With the cap facing the viewer and the flex pointing downward, the
+owner's top-view observation is **left to right: X, V+, Y, GND**.
+Wire those signals to XIAO **D4/A4, 3V3, D5/A5, GND** respectively.
+This corresponds to the Phone-Controller electrical pad numbers
+**4, 3, 2, 1** in that viewing direction. When looking at solder vias
+from the *back* of the flipped flex, the apparent left-to-right order
+reverses to **GND, Y, V+, X**. The owner has not yet electrically
+confirmed the tiny physical vias; continuity-check them before power.
+
+A photo-based color wiring sheet is saved in the Circle Pad v0.5
+workspace under `wiring/CirclePad_4P_XIAO_photo_wiring.png`.
+
 ## Behavior
 
 Keep the pad untouched at power-up. The firmware samples a stable
