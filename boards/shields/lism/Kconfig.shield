@@ -10,3 +10,6 @@ config SHIELD_LISM_DONGLE
 
 config SHIELD_LISM_JOYSTICK
     def_bool $(shields_list_contains,lism_joystick)
+
+config SHIELD_LISM_CIRCLEPAD
+    def_bool $(shields_list_contains,lism_circlepad)
