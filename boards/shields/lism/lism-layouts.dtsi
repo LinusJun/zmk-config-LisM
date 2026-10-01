@@ -3,7 +3,7 @@
 / {
     physical_42key_layout: physical_42key_layout {
         compatible = "zmk,physical-layout";
-        display-name = "42-Key Layout";
+        display-name = "42 Keys + 4-Way Circle Pad";
         transform = <&transform_42keymap>;
         keys  //                     w   h    x    y     rot    rx    ry
             = <&key_physical_attrs 100 100    0    0       0     0     0>
@@ -52,13 +52,12 @@
             , <&key_physical_attrs  50  50  500  500       0     0     0> /* joystick down */
             , <&key_physical_attrs  50  50  450  450       0     0     0> /* joystick left */
             , <&key_physical_attrs  50  50  550  450       0     0     0> /* joystick right */
-            , <&key_physical_attrs  50  50  500  450       0     0     0> /* joystick press */
             ;
     };
 
     physical_40key_layout: physical_40key_layout {
         compatible = "zmk,physical-layout";
-        display-name = "40-Key Layout";
+        display-name = "40 Keys + 4-Way Circle Pad";
         transform = <&transform_40keymap>;
         keys  //                     w   h    x    y     rot    rx    ry
             = <&key_physical_attrs 100 100    0    0       0     0     0>
@@ -105,7 +104,6 @@
             , <&key_physical_attrs  50  50  500  500       0     0     0> /* joystick down */
             , <&key_physical_attrs  50  50  450  450       0     0     0> /* joystick left */
             , <&key_physical_attrs  50  50  550  450       0     0     0> /* joystick right */
-            , <&key_physical_attrs  50  50  500  450       0     0     0> /* joystick press */
             ;
     };
 
@@ -119,7 +117,7 @@
                       , <20 21 22 23 24 25 26 27 28 29>
                       , <30 31 32 33 34 35 36 37 38 39>
                       , <40 41>
-                      , <42 43 44 45 46>;
+                      , <42 43 44 45>;
         };
 
         physical_40key_layout {
@@ -129,7 +127,7 @@
                       , <20 21 22 23 24 25 26 27 28 29>
                       , <30 31 32 40 33 34 35 36 41 37>
                       , <38 39>
-                      , <42 43 44 45 46>;
+                      , <42 43 44 45>;
         };
     };
 
