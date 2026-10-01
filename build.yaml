@@ -13,8 +13,8 @@ include:
   
 
   - board: xiao_ble//zmk
-    shield: lism_joystick
-    artifact-name: lism_joystick_peripheral_wasd
+    shield: lism_circlepad
+    artifact-name: lism_circlepad_peripheral_wasd
     cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=n
 
   - board: xiao_ble//zmk

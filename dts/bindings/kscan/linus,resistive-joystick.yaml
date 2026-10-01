@@ -1,4 +1,4 @@
-description: Five-wire resistive joystick exposed as five kscan columns
+description: Resistive joystick with X/Y analog axes and optional push input
 
 compatible: "linus,resistive-joystick"
 
@@ -12,8 +12,7 @@ properties:
 
   press-gpios:
     type: phandle-array
-    required: true
-    description: Active-low joystick push switch
+    description: Optional active-low push switch; absent on four-wire Circle Pad
 
   poll-period-ms:
     type: int
@@ -33,3 +32,40 @@ properties:
     type: int
     default: 32
     description: Center samples collected while the stick is untouched at startup
+
+  center-min:
+    type: int
+    default: 600
+    description: Minimum accepted neutral ADC count
+
+  center-max:
+    type: int
+    default: 3400
+    description: Maximum accepted neutral ADC count
+
+  calibration-max-spread:
+    type: int
+    default: 100
+    description: Maximum ADC spread during startup center sampling
+
+  sample-min:
+    type: int
+    default: 80
+    description: Lower ADC rail guard after calibration
+
+  sample-max:
+    type: int
+    default: 4000
+    description: Upper ADC rail guard after calibration
+
+  invert-x:
+    type: boolean
+    description: Reverse the X direction after sampling
+
+  invert-y:
+    type: boolean
+    description: Reverse the Y direction after sampling
+
+  swap-axes:
+    type: boolean
+    description: Exchange X and Y directions after sampling
