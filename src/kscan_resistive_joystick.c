@@ -36,11 +36,19 @@ struct joystick_config {
     const struct device *adc;
     uint8_t x_channel;
     uint8_t y_channel;
-    struct gpio_dt_spec press;
+    struct gpio_dt_spec press; /* port == NULL for the four-wire Circle Pad */
     uint16_t poll_ms;
     int16_t activation;
     int16_t release;
     uint16_t calibration_samples;
+    uint16_t center_min;
+    uint16_t center_max;
+    uint16_t calibration_max_spread;
+    uint16_t sample_min;
+    uint16_t sample_max;
+    bool invert_x;
+    bool invert_y;
+    bool swap_axes;
 };
 
 struct joystick_data {
@@ -115,8 +123,8 @@ static void joystick_work(struct k_work *work) {
     const struct joystick_config *cfg = dev->config;
     int16_t x = 0;
     int16_t y = 0;
-    int button = gpio_pin_get_dt(&cfg->press);
-    bool pressed = button > 0;
+    int button = cfg->press.port ? gpio_pin_get_dt(&cfg->press) : 0;
+    bool pressed = cfg->press.port && button > 0;
     int64_t now = k_uptime_get();
 
     if (!data->enabled) {
@@ -164,12 +172,12 @@ static void joystick_work(struct k_work *work) {
         if (data->samples >= cfg->calibration_samples) {
             data->x_center /= cfg->calibration_samples;
             data->y_center /= cfg->calibration_samples;
-            if (data->x_center >= JOY_CENTER_MIN &&
-                data->x_center <= JOY_CENTER_MAX &&
-                data->y_center >= JOY_CENTER_MIN &&
-                data->y_center <= JOY_CENTER_MAX &&
-                data->x_max - data->x_min <= JOY_CALIBRATION_MAX_SPREAD &&
-                data->y_max - data->y_min <= JOY_CALIBRATION_MAX_SPREAD) {
+            if (data->x_center >= cfg->center_min &&
+                data->x_center <= cfg->center_max &&
+                data->y_center >= cfg->center_min &&
+                data->y_center <= cfg->center_max &&
+                data->x_max - data->x_min <= cfg->calibration_max_spread &&
+                data->y_max - data->y_min <= cfg->calibration_max_spread) {
                 data->calibrated = true;
                 LOG_INF("neutral accepted: x=%d y=%d", data->x_center, data->y_center);
             } else {
@@ -186,8 +194,8 @@ static void joystick_work(struct k_work *work) {
         goto reschedule;
     }
 
-    if (x < JOY_SAMPLE_MIN || x > JOY_SAMPLE_MAX ||
-        y < JOY_SAMPLE_MIN || y > JOY_SAMPLE_MAX) {
+    if (x < cfg->sample_min || x > cfg->sample_max ||
+        y < cfg->sample_min || y > cfg->sample_max) {
         release_directions(dev);
         data->calibrated = false;
         data->samples = 0;
@@ -195,8 +203,15 @@ static void joystick_work(struct k_work *work) {
         goto reschedule;
     }
 
-    const int32_t dx = x - data->x_center;
-    const int32_t dy = y - data->y_center;
+    int32_t dx = x - data->x_center;
+    int32_t dy = y - data->y_center;
+    if (cfg->swap_axes) {
+        int32_t tmp = dx;
+        dx = dy;
+        dy = tmp;
+    }
+    if (cfg->invert_x) dx = -dx;
+    if (cfg->invert_y) dy = -dy;
     report(dev, JOY_UP, direction_state(dy, data->state[JOY_UP], false, cfg));
     report(dev, JOY_DOWN, direction_state(dy, data->state[JOY_DOWN], true, cfg));
     report(dev, JOY_LEFT, direction_state(dx, data->state[JOY_LEFT], false, cfg));
@@ -234,14 +249,15 @@ static int joystick_disable(const struct device *dev) {
 static int joystick_init(const struct device *dev) {
     const struct joystick_config *cfg = dev->config;
     struct joystick_data *data = dev->data;
-    if (!device_is_ready(cfg->adc) || !gpio_is_ready_dt(&cfg->press)) {
+    if (!device_is_ready(cfg->adc) ||
+        (cfg->press.port && !gpio_is_ready_dt(&cfg->press))) {
         return -ENODEV;
     }
     if (setup_axis(cfg->adc, cfg->x_channel) ||
         setup_axis(cfg->adc, cfg->y_channel)) {
         return -EIO;
     }
-    if (gpio_pin_configure_dt(&cfg->press, GPIO_INPUT)) {
+    if (cfg->press.port && gpio_pin_configure_dt(&cfg->press, GPIO_INPUT)) {
         return -EIO;
     }
     data->dev = dev;
@@ -263,15 +279,20 @@ static const struct joystick_config joystick_config = {
     .adc = DEVICE_DT_GET(DT_NODELABEL(adc)),
     .x_channel = 2,
     .y_channel = 3,
-    .press = {
-        .port = DEVICE_DT_GET(DT_NODELABEL(gpio1)),
-        .pin = 11,
-        .dt_flags = GPIO_ACTIVE_LOW | GPIO_PULL_UP,
-    },
+    .press = GPIO_DT_SPEC_GET_OR(JOYSTICK_NODE, press_gpios, {0}),
     .poll_ms = DT_PROP(JOYSTICK_NODE, poll_period_ms),
     .activation = DT_PROP(JOYSTICK_NODE, activation_threshold),
     .release = DT_PROP(JOYSTICK_NODE, release_threshold),
     .calibration_samples = DT_PROP(JOYSTICK_NODE, calibration_samples),
+    .center_min = DT_PROP_OR(JOYSTICK_NODE, center_min, JOY_CENTER_MIN),
+    .center_max = DT_PROP_OR(JOYSTICK_NODE, center_max, JOY_CENTER_MAX),
+    .calibration_max_spread = DT_PROP_OR(JOYSTICK_NODE, calibration_max_spread,
+                                         JOY_CALIBRATION_MAX_SPREAD),
+    .sample_min = DT_PROP_OR(JOYSTICK_NODE, sample_min, JOY_SAMPLE_MIN),
+    .sample_max = DT_PROP_OR(JOYSTICK_NODE, sample_max, JOY_SAMPLE_MAX),
+    .invert_x = DT_PROP_OR(JOYSTICK_NODE, invert_x, false),
+    .invert_y = DT_PROP_OR(JOYSTICK_NODE, invert_y, false),
+    .swap_axes = DT_PROP_OR(JOYSTICK_NODE, swap_axes, false),
 };
 
 DEVICE_DT_DEFINE(JOYSTICK_NODE, joystick_init, NULL, &joystick_data, &joystick_config,
