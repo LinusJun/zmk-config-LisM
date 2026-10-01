@@ -1,0 +1,42 @@
+#include "lism.dtsi"
+#include "lism-layouts.dtsi"
+
+&adc {
+    status = "okay";
+};
+
+/ {
+    chosen {
+        zmk,kscan = &circlepad_composite;
+        zmk,physical-layout = &physical_42key_layout;
+    };
+
+    /* Four-wire New 3DS XL Circle Pad: X, Y, 3V3 and GND.
+     * The separate BSI-10 is a power switch, not a stick push input.
+     */
+    joystick_kscan: joystick_kscan {
+        compatible = "linus,resistive-joystick";
+        io-channels = <&adc 2>, <&adc 3>; /* XIAO D4=X, D5=Y */
+        poll-period-ms = <10>;
+        activation-threshold = <90>;
+        release-threshold = <55>;
+        calibration-samples = <64>;
+        center-min = <100>;
+        center-max = <3400>;
+        calibration-max-spread = <100>;
+        sample-min = <40>;
+        sample-max = <4000>;
+    };
+
+    circlepad_composite: kscan_composite {
+        compatible = "zmk,kscan-composite";
+        rows = <5>;
+        columns = <4>;
+
+        circlepad {
+            kscan = <&joystick_kscan>;
+            row-offset = <4>;
+            col-offset = <0>;
+        };
+    };
+};
