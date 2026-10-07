@@ -7,6 +7,14 @@ on:
       - 'boards/shields/lism/lism_joystick.overlay'
       - 'config/lism_joystick.conf'
       - '.github/workflows/joystick-logic.yml'
+  push:
+    branches: [ codex/third-peripheral-joystick-wasd ]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'boards/shields/lism/lism_joystick.overlay'
+      - 'config/lism_joystick.conf'
+      - '.github/workflows/joystick-logic.yml'
   workflow_dispatch:
 jobs:
   driver-test:

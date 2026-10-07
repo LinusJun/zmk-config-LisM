@@ -2,7 +2,7 @@ name: Build ZMK firmware
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, codex/third-peripheral-joystick-wasd ]
     paths:
       - '.github/workflows/build.yml'
       - 'boards/**'
