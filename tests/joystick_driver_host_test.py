@@ -45,6 +45,8 @@ static bool read_error;
 static int64_t uptime;
 static unsigned callback_mask, callback_count, warnings;
 static int button_value, scheduled_delay;
+static unsigned edge_columns[16], edge_count;
+static bool edge_down[16];
 static int read_axis(const struct device *adc, uint8_t channel, int16_t *value) {
     (void)adc;
     if (read_error) return -5;
@@ -78,10 +80,13 @@ static void callback(const struct device *device, uint32_t row, uint32_t col, bo
     (void)device;
     assert(row == 0 && col < JOY_COLUMN_COUNT);
     callback_count++;
+    assert(edge_count < 16); /* bounded production kscan queue between scans */
+    edge_columns[edge_count] = col; edge_down[edge_count++] = down;
     if (down) callback_mask |= BIT(col); else callback_mask &= ~BIT(col);
     assert(!((callback_mask & BIT(JOY_SPRINT)) && (callback_mask & JOY_MASK_DOWN)));
 }
 static void tick(int x, int y, bool fail) {
+    edge_count = 0;
     raw_x = x; raw_y = y; read_error = fail; uptime += 10;
     joystick_work(&data.work.work);
 }
@@ -193,6 +198,26 @@ int sprint_idle_tests(void) {
         /* Diagonal uses radial travel: neither axis alone exceeds 700. */
         processed_tick(-400, -400, false); assert(callback_mask == (JOY_MASK_UP | JOY_MASK_LEFT));
         processed_tick(-500, -500, false); assert(callback_mask == (JOY_MASK_UP | JOY_MASK_LEFT | shift));
+        /* Worst case: reverse WA+Shift to SD, optionally with a Space edge. */
+        if (kind == 1) button_value = 1;
+        processed_tick(1000,1000,false);
+        assert(callback_mask == (JOY_MASK_DOWN | JOY_MASK_RIGHT | (kind == 1 ? space : 0)));
+        unsigned start = kind == 1 ? 1 : 0;
+        assert(edge_count == start + 5);
+        if (kind == 1) assert(edge_columns[0] == JOY_PRESS && edge_down[0]);
+        assert(edge_columns[start] == JOY_SPRINT && !edge_down[start]);
+        assert(edge_columns[start+1] == JOY_UP && !edge_down[start+1]);
+        assert(edge_columns[start+2] == JOY_LEFT && !edge_down[start+2]);
+        assert(edge_columns[start+3] == JOY_DOWN && edge_down[start+3]);
+        assert(edge_columns[start+4] == JOY_RIGHT && edge_down[start+4]);
+        button_value = 0;
+        processed_tick(-500,-500,false);
+        assert(callback_mask == (JOY_MASK_UP | JOY_MASK_LEFT | shift));
+        /* On the reverse transition, old nonforward keys release before Shift. */
+        start = kind == 1 ? 1 : 0;
+        assert(edge_columns[start] == JOY_DOWN && !edge_down[start]);
+        assert(edge_columns[start+1] == JOY_RIGHT && !edge_down[start+1]);
+        assert(edge_columns[start+2] == JOY_SPRINT && edge_down[start+2]);
         processed_tick(500, -500, false); assert(callback_mask == (JOY_MASK_UP | JOY_MASK_RIGHT | shift));
         processed_tick(1000, 0, false); assert(callback_mask == JOY_MASK_RIGHT);
         processed_tick(0, 1000, false); assert(callback_mask == JOY_MASK_DOWN);

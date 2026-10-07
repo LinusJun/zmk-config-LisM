@@ -23,6 +23,7 @@ config LISM_RESISTIVE_JOYSTICK_INIT_PRIORITY
 config LISM_JOYSTICK_STATUS
     bool "Standard XIAO low-current charging and brief/charging-only RGB status"
     default n
+    select USB_DEVICE_STACK
     help
       Only for the standard Seeed XIAO nRF52840 BQ25101 board. Select the
       approximately 50mA hardware charging setting with P0.13 high impedance.
