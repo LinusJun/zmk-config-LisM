@@ -6,6 +6,7 @@ on:
       - 'src/kscan_resistive_joystick.c'
       - 'tests/joystick_sector_test.c'
       - 'tests/joystick_driver_host_test.py'
+      - 'tests/circlepad_recorded_trace.json'
       - 'boards/shields/lism/lism_circlepad.overlay'
       - 'dts/bindings/kscan/linus,resistive-joystick.yaml'
       - '.github/workflows/joystick-logic.yml'
@@ -24,7 +25,7 @@ jobs:
           text = re.sub(r'/\*.*?\*/', '', text, flags=re.S)
           props = {'SWAP_AXES': 'swap-axes', 'INVERT_X': 'invert-x', 'INVERT_Y': 'invert-y', 'STRICT': 'strict-sector-boundaries'}
           lines = [f'#define CIRCLE_{key} {int(bool(re.search(r"\b" + prop + r"\s*;", text)))}' for key, prop in props.items()]
-          for key, prop in [('ACTIVATION', 'activation-threshold'), ('RELEASE', 'release-threshold')]:
+          for key, prop in [('ACTIVATION', 'activation-threshold'), ('RELEASE', 'release-threshold'), ('HYSTERESIS', 'sector-hysteresis-degrees')]:
               value = int(re.search(prop + r'\s*=\s*<(\d+)>', text).group(1))
               lines.append(f'#define CIRCLE_{key} {value}')
           Path('/tmp/circlepad-test-config.h').write_text('\n'.join(lines) + '\n')

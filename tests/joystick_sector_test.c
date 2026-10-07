@@ -14,8 +14,8 @@ static uint8_t landscape(int raw_x, int raw_y, uint8_t previous) {
     if (CIRCLE_SWAP_AXES) { int tmp = dx; dx = dy; dy = tmp; }
     if (CIRCLE_INVERT_X) dx = -dx;
     if (CIRCLE_INVERT_Y) dy = -dy;
-    assert(CIRCLE_STRICT);
-    return joystick_sector8_strict(dx, dy, previous, CIRCLE_ACTIVATION, CIRCLE_RELEASE);
+    assert(!CIRCLE_STRICT && CIRCLE_HYSTERESIS == 2);
+    return joystick_sector8_hysteresis(dx, dy, previous, CIRCLE_ACTIVATION, CIRCLE_RELEASE, CIRCLE_HYSTERESIS);
 }
 
 int main(void) {
@@ -140,6 +140,52 @@ int main(void) {
     assert(joystick_sector8_strict(301, 0, 0, 300, 240) == JOY_MASK_RIGHT);
     assert(joystick_sector8_strict(240, 0, JOY_MASK_RIGHT, 300, 240) == 0);
     assert(joystick_sector8_strict(241, 0, JOY_MASK_RIGHT, 300, 240) == JOY_MASK_RIGHT);
-    puts("PASS: legacy sector hysteresis, overlay sideways mapping, strict 45-degree sectors, all eight boundaries and previous states, 300/240 radial release");
+
+    /* Independent angular-distance reference: 0..5 degree settings, every
+     * previous bit mask (including invalid/opposing masks), both quadrants,
+     * and both sides of nominal and history-dependent switching boundaries. */
+    for (int h = 0; h <= 5; ++h) {
+        for (int tenth = 0; tenth < 3600; ++tenth) {
+            double angle = tenth / 10.0;
+            int x = (int)lround(1000000 * cos(angle * 3.14159265358979323846 / 180.0));
+            int y = (int)lround(1000000 * sin(angle * 3.14159265358979323846 / 180.0));
+            double actual = atan2(y, x) * 180.0 / 3.14159265358979323846;
+            uint8_t fresh = directions[((int)floor((actual + 382.5) / 45.0)) % 8];
+            for (uint8_t prior = 0; prior < 16; ++prior) {
+                uint8_t expected = fresh;
+                for (int i = 0; i < 8; ++i) {
+                    double distance = fabs(remainder(actual - i * 45.0, 360.0));
+                    if (h > 0 && directions[i] == prior && distance <= 22.5 + h)
+                        expected = prior;
+                }
+                /* At exact represented ties, strict integer comparison keeps
+                 * cardinal rather than atan2's adjacent sector. Test nearby
+                 * boundaries below; exempt rounding-equal ties here. */
+                double offset = fabs(remainder(actual - 22.5, 45.0));
+                double hold_offset = 100.0;
+                for (int i = 0; i < 8; ++i)
+                    if (directions[i] == prior)
+                        hold_offset = fabs(fabs(remainder(actual - i * 45.0, 360.0)) - (22.5 + h));
+                uint8_t result = joystick_sector8_hysteresis(x, y, prior, 300, 240, h);
+                if (offset > 0.0001 && hold_offset > 0.0001) assert(result == expected);
+                assert((result & 3) != 3 && (result & 12) != 12);
+                assert(joystick_sector8_hysteresis(0, 0, prior, 300, 240, h) == 0);
+                if (h == 0) assert(result == joystick_sector8_strict(x, y, prior, 300, 240));
+            }
+        }
+    }
+    /* A -> WA must cross 24.5deg; WA -> A must cross 20.5deg. */
+    assert(joystick_sector8_hysteresis(-1000, -450, 4, 300, 240, 2) == 4);
+    assert(joystick_sector8_hysteresis(-1000, -450, 5, 300, 240, 2) == 5);
+    assert(joystick_sector8_hysteresis(-1000, -457, 4, 300, 240, 2) == 5);
+    assert(joystick_sector8_hysteresis(-1000, -373, 5, 300, 240, 2) == 4);
+    assert(joystick_sector8_hysteresis(1000, 0, 4, 300, 240, 2) == 8);
+    assert(joystick_sector8_hysteresis(0, 0, 5, 300, 240, 2) == 0);
+    assert(joystick_sector8_hysteresis(-1000, -450, 0, 300, 240, 2) == 5);
+    assert(joystick_sector8_hysteresis(300, 0, 0, 300, 240, 2) == 0);
+    assert(joystick_sector8_hysteresis(301, 0, 0, 300, 240, 2) == 8);
+    assert(joystick_sector8_hysteresis(240, 0, 8, 300, 240, 2) == 0);
+    assert(joystick_sector8_hysteresis(241, 0, 8, 300, 240, 2) == 8);
+    puts("PASS: configurable 0..5deg angular-distance oracle, invalid masks, 2deg history and center release, legacy sector hysteresis, overlay sideways mapping, strict 45-degree sectors, all eight boundaries and previous states, 300/240 radial release");
     return 0;
 }

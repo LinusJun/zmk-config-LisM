@@ -53,6 +53,8 @@ struct joystick_config {
     bool swap_axes;
     bool eight_sector;
     bool strict_sector_boundaries;
+    bool configurable_sector_boundaries;
+    uint8_t sector_hysteresis_degrees;
     bool preserve_calibrated_center;
 };
 
@@ -233,7 +235,10 @@ static void joystick_work(struct k_work *work) {
         for (int column = JOY_UP; column <= JOY_RIGHT; column++) {
             if (data->state[column]) previous |= BIT(column);
         }
-        uint8_t next = cfg->strict_sector_boundaries
+        uint8_t next = cfg->configurable_sector_boundaries
+            ? joystick_sector8_hysteresis(dx, dy, previous, cfg->activation, cfg->release,
+                                          cfg->sector_hysteresis_degrees)
+            : cfg->strict_sector_boundaries
             ? joystick_sector8_strict(dx, dy, previous, cfg->activation, cfg->release)
             : joystick_sector8(dx, dy, previous, cfg->activation, cfg->release);
         /* Release old directions first, then press the new ones. Never briefly
@@ -323,6 +328,10 @@ static const struct kscan_driver_api joystick_api = {
 
 #define JOYSTICK_NODE DT_NODELABEL(joystick_kscan)
 
+BUILD_ASSERT(!(DT_PROP_OR(JOYSTICK_NODE, strict_sector_boundaries, false) &&
+               DT_PROP_OR(JOYSTICK_NODE, sector_hysteresis_degrees, 0) != 0),
+             "strict-sector-boundaries conflicts with nonzero sector-hysteresis-degrees");
+
 static struct joystick_data joystick_data;
 
 static const struct joystick_config joystick_config = {
@@ -345,6 +354,8 @@ static const struct joystick_config joystick_config = {
     .swap_axes = DT_PROP_OR(JOYSTICK_NODE, swap_axes, false),
     .eight_sector = DT_PROP_OR(JOYSTICK_NODE, eight_sector, false),
     .strict_sector_boundaries = DT_PROP_OR(JOYSTICK_NODE, strict_sector_boundaries, false),
+    .configurable_sector_boundaries = DT_NODE_HAS_PROP(JOYSTICK_NODE, sector_hysteresis_degrees),
+    .sector_hysteresis_degrees = DT_PROP_OR(JOYSTICK_NODE, sector_hysteresis_degrees, 0),
     .preserve_calibrated_center = DT_PROP_OR(JOYSTICK_NODE, preserve_calibrated_center, false),
 };
 

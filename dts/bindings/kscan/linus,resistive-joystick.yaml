@@ -78,6 +78,11 @@ properties:
     type: boolean
     description: Disable angular hysteresis for equal 45-degree sectors; radial hysteresis remains
 
+  sector-hysteresis-degrees:
+    type: int
+    enum: [0, 1, 2, 3, 4, 5]
+    description: Explicit 0 uses strict sectors; 1..5 holds the prior sector this many degrees. Absent preserves the legacy path. Conflicts with strict-sector-boundaries when nonzero.
+
   preserve-calibrated-center:
     type: boolean
     description: After initial calibration, release directions on ADC errors without recalibrating; reset to calibrate again

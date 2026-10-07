@@ -22,7 +22,7 @@
         invert-y; /* Old W->D, A->W, S->A, D->S; processed=(-rawY,-rawX). */
         eight-sector;
         preserve-calibrated-center; /* Discard ADC glitches; never recenter a held stick. */
-        strict-sector-boundaries; /* Test: fixed +/-22.5 degree ADC boundaries. */
+        sector-hysteresis-degrees = <2>; /* Trial: nominal 45deg sectors, prior sector held 2deg. */
         poll-period-ms = <10>;
         activation-threshold = <300>; /* Keep the existing larger center dead zone. */
         release-threshold = <240>; /* Trial values; verify hands-off HID release. */
