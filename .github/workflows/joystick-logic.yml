@@ -1,0 +1,41 @@
+name: Joystick direction logic
+on:
+  pull_request:
+    paths:
+      - 'src/joystick_status.c'
+      - 'tests/joystick_status_host_test.py'
+      - 'src/joystick_sector.h'
+      - 'src/kscan_resistive_joystick.c'
+      - 'tests/joystick_sector_test.c'
+      - 'tests/joystick_driver_host_test.py'
+      - 'tests/circlepad_recorded_trace.json'
+      - 'boards/shields/lism/lism_circlepad.overlay'
+      - 'dts/bindings/kscan/linus,resistive-joystick.yaml'
+      - '.github/workflows/joystick-logic.yml'
+  workflow_dispatch:
+jobs:
+  sector-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and exercise the firmware sector function
+        run: |
+          python3 - <<'PYCONFIG'
+          import re
+          from pathlib import Path
+          text = Path('boards/shields/lism/lism_circlepad.overlay').read_text()
+          text = re.sub(r'/\*.*?\*/', '', text, flags=re.S)
+          props = {'SWAP_AXES': 'swap-axes', 'INVERT_X': 'invert-x', 'INVERT_Y': 'invert-y', 'STRICT': 'strict-sector-boundaries'}
+          lines = [f'#define CIRCLE_{key} {int(bool(re.search(r"\b" + prop + r"\s*;", text)))}' for key, prop in props.items()]
+          for key, prop in [('ACTIVATION', 'activation-threshold'), ('RELEASE', 'release-threshold'), ('HYSTERESIS', 'sector-hysteresis-degrees')]:
+              value = int(re.search(prop + r'\s*=\s*<(\d+)>', text).group(1))
+              lines.append(f'#define CIRCLE_{key} {value}')
+          Path('/tmp/circlepad-test-config.h').write_text('\n'.join(lines) + '\n')
+          PYCONFIG
+          cc -include /tmp/circlepad-test-config.h -std=c99 -Wall -Wextra -Werror -fsanitize=undefined,address tests/joystick_sector_test.c -lm -o /tmp/joystick-sector-test
+          /tmp/joystick-sector-test
+      - name: Exercise actual driver calibration and release callbacks
+        run: python3 tests/joystick_driver_host_test.py
+
+      - name: Exercise charging and RGB policy with mocked hardware
+        run: python3 tests/joystick_status_host_test.py

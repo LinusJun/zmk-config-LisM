@@ -1,4 +1,4 @@
-description: Five-wire resistive joystick exposed as five kscan columns
+description: Resistive joystick with X/Y analog axes and optional push input
 
 compatible: "linus,resistive-joystick"
 
@@ -12,24 +12,102 @@ properties:
 
   press-gpios:
     type: phandle-array
-    required: true
-    description: Active-low joystick push switch
+    description: Optional active-low push switch; absent on four-wire Circle Pad
 
   poll-period-ms:
     type: int
     default: 10
 
+  idle-poll-period-ms:
+    type: int
+    default: 0
+    description: Slower sampling after continuous valid neutral; 0 disables this optimization
+
+  idle-timeout-ms:
+    type: int
+    default: 0
+    description: Required continuous valid neutral time before slower sampling
+
+  sprint-full-radius:
+    type: int
+    default: 0
+    description: Estimated radial full travel in ADC counts, independently tuned per device; 0 disables sprint
+
+  sprint-enter-percent:
+    type: int
+    default: 50
+    description: Press virtual Left Shift above this percentage of the estimated full radius, only with W
+
+  sprint-exit-percent:
+    type: int
+    default: 45
+    description: Release virtual Left Shift at or below this percentage, or whenever W is released
+
   activation-threshold:
     type: int
     default: 550
-    description: ADC counts away from the calibrated center needed to press a direction
+    description: ADC counts away from center (radial distance in eight-sector mode) to press
 
   release-threshold:
     type: int
     default: 400
-    description: ADC counts away from center below which a direction is released
+    description: ADC counts away from center (radial distance in eight-sector mode) to release
 
   calibration-samples:
     type: int
     default: 32
     description: Center samples collected while the stick is untouched at startup
+
+  center-min:
+    type: int
+    default: 600
+    description: Minimum accepted neutral ADC count
+
+  center-max:
+    type: int
+    default: 3400
+    description: Maximum accepted neutral ADC count
+
+  calibration-max-spread:
+    type: int
+    default: 100
+    description: Maximum ADC spread during startup center sampling
+
+  sample-min:
+    type: int
+    default: 80
+    description: Lower ADC rail guard after calibration
+
+  sample-max:
+    type: int
+    default: 4000
+    description: Upper ADC rail guard after calibration
+
+  invert-x:
+    type: boolean
+    description: Reverse the X direction after sampling
+
+  invert-y:
+    type: boolean
+    description: Reverse the Y direction after sampling
+
+  swap-axes:
+    type: boolean
+    description: Exchange X and Y directions after sampling
+
+  eight-sector:
+    type: boolean
+    description: Use radial dead zone and eight angular sectors
+
+  strict-sector-boundaries:
+    type: boolean
+    description: Disable angular hysteresis for equal 45-degree sectors; radial hysteresis remains
+
+  sector-hysteresis-degrees:
+    type: int
+    enum: [0, 1, 2, 3, 4, 5]
+    description: Explicit 0 uses strict sectors; 1..5 holds the prior sector this many degrees. Absent preserves the legacy path. Conflicts with strict-sector-boundaries when nonzero.
+
+  preserve-calibrated-center:
+    type: boolean
+    description: After initial calibration, release directions on ADC errors without recalibrating; reset to calibrate again

@@ -1,3 +1,11 @@
+# Current CirclePad / JP19 sprint and power test build
+
+Start with [current test instructions](README_测试说明.txt) and
+[sprint/power limits](SPRINT_POWER_TEST.md). Flash the matching new dongle.
+Firmware builds are listed in build.yaml. The older keyboard-only list below
+is upstream historical documentation; generated keymap-drawer graphics may
+omit new joystick positions and are not a flashing or wiring reference.
+
 # LisM キーボード ファームウェア
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
