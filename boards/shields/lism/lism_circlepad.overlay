@@ -17,9 +17,9 @@
     joystick_kscan: joystick_kscan {
         compatible = "linus,resistive-joystick";
         io-channels = <&adc 2>, <&adc 3>; /* XIAO D4=X, D5=Y */
-        swap-axes; /* Sideways: USB right, switch towards the user. */
-        invert-x;
-        invert-y; /* Old W->D, A->W, S->A, D->S; processed=(-rawY,-rawX). */
+        swap-axes; /* Opposite long edge towards the user: pins left, USB right. */
+        /* Reverse both directions of the previous trial: W<->S, A<->D.
+         * No axis inversion; processed=(rawY,rawX). */
         eight-sector;
         preserve-calibrated-center; /* Discard ADC glitches; never recenter a held stick. */
         sector-hysteresis-degrees = <2>; /* Trial: nominal 45deg sectors, prior sector held 2deg. */

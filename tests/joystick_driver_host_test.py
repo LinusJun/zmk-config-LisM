@@ -10,6 +10,9 @@ import tempfile
 root = Path(__file__).resolve().parents[1]
 source = (root / 'src/kscan_resistive_joystick.c').read_text()
 overlay = (root / 'boards/shields/lism/lism_circlepad.overlay').read_text()
+clean_overlay = re.sub(r'/\*.*?\*/', '', overlay, flags=re.S)
+assert re.search(r'\bswap-axes\s*;', clean_overlay)
+assert not re.search(r'\binvert-[xy]\s*;', clean_overlay)
 assert re.search(r'\bpreserve-calibrated-center\s*;', overlay)
 assert '.preserve_calibrated_center = DT_PROP_OR(JOYSTICK_NODE, preserve_calibrated_center, false)' in source
 assert 'DT_NODE_HAS_PROP(JOYSTICK_NODE, sector_hysteresis_degrees)' in source
@@ -61,7 +64,7 @@ static struct joystick_config cfg = {
     .activation = 300, .release = 240, .calibration_samples = 64,
     .center_min = 100, .center_max = 3400, .calibration_max_spread = 100,
     .sample_min = 40, .sample_max = 4000,
-    .swap_axes = true, .invert_x = true, .invert_y = true,
+    .swap_axes = true, .invert_x = false, .invert_y = false,
     .eight_sector = true, .configurable_sector_boundaries = true,
     .sector_hysteresis_degrees = 2,
     .preserve_calibrated_center = true,
@@ -91,14 +94,14 @@ int fault_tests(void) {
      * and avoid accepting 80 stable held samples as a new neutral point. */
     for (int error_kind = 0; error_kind < 2; ++error_kind) {
         initial_calibration(true);
-        tick(2859, 943, false); assert(callback_mask == 9);
+        tick(2859, 943, false); assert(callback_mask == 6);
         unsigned before = callback_count;
         tick(0, 0, error_kind == 1);
         assert(callback_mask == 0 && callback_count >= before + 2);
         assert(data.calibrated && data.x_center == 1803 && data.y_center == 1955);
         for (int i = 0; i < 80; ++i) tick(2859, 943, false);
         assert(data.calibrated && data.x_center == 1803 && data.y_center == 1955);
-        assert(callback_mask == 9);
+        assert(callback_mask == 6);
         tick(1948, 1819, false); assert(callback_mask == 0);
         assert(data.x_center == 1803 && data.y_center == 1955);
     }
@@ -130,13 +133,14 @@ int fault_tests(void) {
 # Sparse replay is not proof of behavior between the logged samples.
 rows = json.loads((root / 'tests/circlepad_recorded_trace.json').read_text())['samples']
 directions = [8, 10, 2, 6, 4, 5, 1, 9]
-label_masks = dict(up=1, down=2, left=4, right=8, up_left=5,
-                   down_left=6, down_right=10, up_right=9, neutral_start=0, neutral_end=0)
+# Fixture labels describe the previous grip; expected masks rotate 180deg.
+label_masks = dict(up=2, down=1, left=8, right=4, up_left=10,
+                   down_left=9, down_right=5, up_right=6, neutral_start=0, neutral_end=0)
 previous = 0
 records = []
 counts = Counter()
 for row in rows:
-    dx, dy = -(row['y'] - row['center_y']), -(row['x'] - row['center_x'])
+    dx, dy = row['y'] - row['center_y'], row['x'] - row['center_x']
     radius = math.hypot(dx, dy)
     angle = math.degrees(math.atan2(dy, dx)) % 360
     if radius <= (240 if previous else 300):
@@ -152,7 +156,7 @@ for row in rows:
         counts[row['label'], expected] += 1
     records.append('{%d,%d,%d}' % (row['x'], row['y'], expected))
 assert len(rows) == 231 and sum(counts.values()) == 119
-assert counts['up_left', 5] == 9
+assert counts['up_left', 10] == 9
 replay = r"""
 static const struct { int x, y, expected; } replay[] = {
 """ + ',\n'.join(records) + r"""
@@ -172,11 +176,11 @@ int main(void) {
     }
     tick(1950, 1814, false); assert(callback_mask == 0);
     /* No angular history survives neutral. No gain normalization occurs. */
-    tick(2250, 2814, false); assert(callback_mask == 4);
-    tick(2400, 2814, false); assert(callback_mask == 4);
+    tick(2250, 2814, false); assert(callback_mask == 8);
+    tick(2400, 2814, false); assert(callback_mask == 8);
     tick(1950, 1814, false); assert(callback_mask == 0);
-    tick(2400, 2814, false); assert(callback_mask == 5);
-    puts("PASS: actual driver sparse chronological replay 231 samples / 119 labelled observations; 9 recorded active left-up samples WA; no new hardware validation");
+    tick(2400, 2814, false); assert(callback_mask == 10);
+    puts("PASS: actual driver sparse chronological replay 231 samples / 119 labelled observations; 9 recorded prior-grip left-up samples now SD; grip mapping rotated 180deg; no new hardware validation");
     return 0;
 }
 """

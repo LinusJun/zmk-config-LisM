@@ -20,10 +20,11 @@ static uint8_t landscape(int raw_x, int raw_y, uint8_t previous) {
 
 int main(void) {
     /* Physical raw vectors labelled by the previous working orientation.
-     * W,A,S,D,WA,AS,SD,DW must become D,W,A,S,WD,WA,AS,SD. */
+     * W,A,S,D,WA,AS,SD,DW must become A,S,D,W,SA,SD,WD,WA. */
     const int old_raw_x[] = {0, 1300, 0, -1300, 1300, 1300, -1300, -1300};
     const int old_raw_y[] = {-1300, 0, 1300, 0, -1300, 1300, 1300, -1300};
-    const uint8_t new_masks[] = {8, 1, 4, 2, 9, 5, 6, 10};
+    const uint8_t new_masks[] = {4, 2, 8, 1, 6, 10, 9, 5};
+    assert(CIRCLE_SWAP_AXES && !CIRCLE_INVERT_X && !CIRCLE_INVERT_Y);
     assert(CIRCLE_ACTIVATION == 300 && CIRCLE_RELEASE == 240);
     for (int i = 0; i < 8; ++i) {
         assert(landscape(old_raw_x[i], old_raw_y[i], 0) == new_masks[i]);
@@ -186,6 +187,6 @@ int main(void) {
     assert(joystick_sector8_hysteresis(301, 0, 0, 300, 240, 2) == 8);
     assert(joystick_sector8_hysteresis(240, 0, 8, 300, 240, 2) == 0);
     assert(joystick_sector8_hysteresis(241, 0, 8, 300, 240, 2) == 8);
-    puts("PASS: configurable 0..5deg angular-distance oracle, invalid masks, 2deg history and center release, legacy sector hysteresis, overlay sideways mapping, strict 45-degree sectors, all eight boundaries and previous states, 300/240 radial release");
+    puts("PASS: configurable 0..5deg angular-distance oracle, invalid masks, 2deg history and center release, legacy sector hysteresis, overlay opposite-long-edge mapping, strict 45-degree sectors, all eight boundaries and previous states, 300/240 radial release");
     return 0;
 }
