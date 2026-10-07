@@ -72,4 +72,8 @@ properties:
 
   eight-sector:
     type: boolean
-    description: Use radial dead zone and eight angular sectors with boundary hysteresis
+    description: Use radial dead zone and eight angular sectors
+
+  strict-sector-boundaries:
+    type: boolean
+    description: Disable angular hysteresis for equal 45-degree sectors; radial hysteresis remains

@@ -14,7 +14,8 @@ static uint8_t landscape(int raw_x, int raw_y, uint8_t previous) {
     if (CIRCLE_SWAP_AXES) { int tmp = dx; dx = dy; dy = tmp; }
     if (CIRCLE_INVERT_X) dx = -dx;
     if (CIRCLE_INVERT_Y) dy = -dy;
-    return joystick_sector8(dx, dy, previous, CIRCLE_ACTIVATION, CIRCLE_RELEASE);
+    assert(CIRCLE_STRICT);
+    return joystick_sector8_strict(dx, dy, previous, CIRCLE_ACTIVATION, CIRCLE_RELEASE);
 }
 
 int main(void) {
@@ -104,6 +105,41 @@ int main(void) {
         int y = (int)lround(1300 * sin(angle));
         assert(joystick_sector8(x, y, 0, 300, 240) == sector(x, y, 0));
     }
-    puts("PASS: eight sectors, radial/angle hysteresis, center release, reverse strokes, legacy X flip, actual overlay sideways mapping, CirclePad 300/240 return offsets");
+    /* Strict mode: compare to an independent atan2 reference at every degree
+     * and on both sides of all eight boundaries, for every prior state. */
+    for (int degree = 0; degree < 360; ++degree) {
+        double angle = degree * 3.14159265358979323846 / 180.0;
+        int x = (int)lround(1000000 * cos(angle));
+        int y = (int)lround(1000000 * sin(angle));
+        int reference = ((int)floor((atan2(y, x) * 180.0 / 3.14159265358979323846 + 382.5) / 45.0)) % 8;
+        for (int p = -1; p < 8; ++p) {
+            uint8_t prior = p < 0 ? 0 : directions[p];
+            assert(joystick_sector8_strict(x, y, prior, 300, 240) == directions[reference]);
+            assert(joystick_sector8_strict(0, 0, prior, 300, 240) == 0);
+        }
+    }
+    for (int boundary = 0; boundary < 8; ++boundary) {
+        for (int side = -1; side <= 1; side += 2) {
+            double angle = (boundary * 45.0 + 22.5 + side * 0.1) * 3.14159265358979323846 / 180.0;
+            int x = (int)lround(1000000 * cos(angle));
+            int y = (int)lround(1000000 * sin(angle));
+            uint8_t expected = directions[(boundary + (side > 0)) % 8];
+            for (int p = 0; p < 8; ++p)
+                assert(joystick_sector8_strict(x, y, directions[p], 300, 240) == expected);
+        }
+    }
+    for (int sx = -1; sx <= 1; sx += 2) {
+        for (int sy = -1; sy <= 1; sy += 2) {
+            for (int p = 0; p < 8; ++p)
+                assert(joystick_sector8_strict(sx * 160, sy * 160, directions[p], 300, 240) == 0);
+            assert(joystick_sector8_strict(sx * 1000000, sy * 414214, 0, 300, 240) == (sx < 0 ? JOY_MASK_LEFT : JOY_MASK_RIGHT));
+            assert(joystick_sector8_strict(sx * 414214, sy * 1000000, 0, 300, 240) == (sy < 0 ? JOY_MASK_UP : JOY_MASK_DOWN));
+        }
+    }
+    assert(joystick_sector8_strict(300, 0, 0, 300, 240) == 0);
+    assert(joystick_sector8_strict(301, 0, 0, 300, 240) == JOY_MASK_RIGHT);
+    assert(joystick_sector8_strict(240, 0, JOY_MASK_RIGHT, 300, 240) == 0);
+    assert(joystick_sector8_strict(241, 0, JOY_MASK_RIGHT, 300, 240) == JOY_MASK_RIGHT);
+    puts("PASS: legacy sector hysteresis, overlay sideways mapping, strict 45-degree sectors, all eight boundaries and previous states, 300/240 radial release");
     return 0;
 }

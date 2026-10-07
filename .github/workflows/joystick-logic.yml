@@ -21,7 +21,7 @@ jobs:
           from pathlib import Path
           text = Path('boards/shields/lism/lism_circlepad.overlay').read_text()
           text = re.sub(r'/\*.*?\*/', '', text, flags=re.S)
-          props = {'SWAP_AXES': 'swap-axes', 'INVERT_X': 'invert-x', 'INVERT_Y': 'invert-y'}
+          props = {'SWAP_AXES': 'swap-axes', 'INVERT_X': 'invert-x', 'INVERT_Y': 'invert-y', 'STRICT': 'strict-sector-boundaries'}
           lines = [f'#define CIRCLE_{key} {int(bool(re.search(r"\b" + prop + r"\s*;", text)))}' for key, prop in props.items()]
           for key, prop in [('ACTIVATION', 'activation-threshold'), ('RELEASE', 'release-threshold')]:
               value = int(re.search(prop + r'\s*=\s*<(\d+)>', text).group(1))

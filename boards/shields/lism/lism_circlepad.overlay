@@ -21,8 +21,9 @@
         invert-x;
         invert-y; /* Old W->D, A->W, S->A, D->S; processed=(-rawY,-rawX). */
         eight-sector;
+        strict-sector-boundaries; /* Test: fixed +/-22.5 degree ADC boundaries. */
         poll-period-ms = <10>;
-        activation-threshold = <300>; /* Larger radial dead zone: observed return offsets. */
+        activation-threshold = <300>; /* Keep the existing larger center dead zone. */
         release-threshold = <240>; /* Trial values; verify hands-off HID release. */
         calibration-samples = <64>;
         center-min = <100>;
