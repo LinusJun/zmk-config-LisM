@@ -48,6 +48,7 @@ layers:
   - A
   - D
   - SPACE
+  - LEFT SHIFT
   Game:
   - ESC
   - Q
@@ -91,6 +92,7 @@ layers:
   - {t: ▽, type: trans}
   - LEFT ALT
   - Sft+F2
+  - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
@@ -144,6 +146,7 @@ layers:
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
   Mark:
   - '!'
   - '@'
@@ -187,6 +190,7 @@ layers:
   - F8
   - F11
   - F12
+  - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
@@ -240,6 +244,7 @@ layers:
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
   GameJoystick:
   - TAB
   - Q
@@ -283,6 +288,7 @@ layers:
   - {t: ▽, type: trans}
   - LEFT GUI
   - C
+  - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
