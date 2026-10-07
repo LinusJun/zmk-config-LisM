@@ -2,13 +2,17 @@ name: Build ZMK firmware
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, codex/third-peripheral-joystick-wasd ]
     paths:
       - '.github/workflows/build.yml'
       - 'boards/**'
       - 'config/**'
       - 'snippets/**'
       - 'build.yaml'
+      - 'src/**'
+      - 'dts/**'
+      - 'Kconfig'
+      - 'CMakeLists.txt'
   pull_request:
     paths:
       - '.github/workflows/build.yml'
@@ -16,6 +20,10 @@ on:
       - 'config/**'
       - 'snippets/**'
       - 'build.yaml'
+      - 'src/**'
+      - 'dts/**'
+      - 'Kconfig'
+      - 'CMakeLists.txt'
 
 jobs:
   build:

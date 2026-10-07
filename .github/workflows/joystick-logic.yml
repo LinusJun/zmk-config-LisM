@@ -1,0 +1,25 @@
+name: JP19 joystick logic
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'boards/shields/lism/lism_joystick.overlay'
+      - 'config/lism_joystick.conf'
+      - '.github/workflows/joystick-logic.yml'
+  push:
+    branches: [ codex/third-peripheral-joystick-wasd ]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'boards/shields/lism/lism_joystick.overlay'
+      - 'config/lism_joystick.conf'
+      - '.github/workflows/joystick-logic.yml'
+  workflow_dispatch:
+jobs:
+  driver-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tests/jp19_driver_host_test.py
+      - run: python3 tests/joystick_status_host_test.py

@@ -1,10 +1,14 @@
-if SHIELD_LISM_L || SHIELD_LISM_R || SHIELD_LISM_DONGLE
+if SHIELD_LISM_L || SHIELD_LISM_R || SHIELD_LISM_DONGLE || SHIELD_LISM_JOYSTICK
 
 config ZMK_KEYBOARD_NAME
     default "LisM"
 
 config ZMK_SPLIT
     default y
+
+endif
+
+if SHIELD_LISM_L || SHIELD_LISM_R || SHIELD_LISM_DONGLE
 
 config ZMK_POINTING
     default y
@@ -27,6 +31,16 @@ config SPI
 
 endif
 
+if SHIELD_LISM_JOYSTICK
+
+config ADC
+    default y
+
+config LISM_RESISTIVE_JOYSTICK
+    default y
+
+endif
+
 if SHIELD_LISM_DONGLE
 
 config ZMK_SPLIT_ROLE_CENTRAL
@@ -36,13 +50,13 @@ config ZMK_USB
     default y
 
 config ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS
-    default 2
+    default 3
 
-# Two split peripherals plus the five normal host profiles.
+# Three split peripherals plus the five normal host profiles.
 config BT_MAX_CONN
-    default 7
+    default 8
 
 config BT_MAX_PAIRED
-    default 7
+    default 8
 
 endif
