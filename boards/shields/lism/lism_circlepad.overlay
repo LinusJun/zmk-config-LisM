@@ -17,8 +17,10 @@
     joystick_kscan: joystick_kscan {
         compatible = "linus,resistive-joystick";
         io-channels = <&adc 2>, <&adc 3>; /* XIAO D4=X, D5=Y */
+        invert-x; /* Hardware test: up/down correct; left/right mirrored. */
+        eight-sector;
         poll-period-ms = <10>;
-        activation-threshold = <90>;
+        activation-threshold = <90>; /* Radial ADC counts; pending measured travel. */
         release-threshold = <55>;
         calibration-samples = <64>;
         center-min = <100>;

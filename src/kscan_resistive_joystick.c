@@ -11,6 +11,8 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
+#include "joystick_sector.h"
+
 LOG_MODULE_REGISTER(lism_joystick, CONFIG_ZMK_LOG_LEVEL);
 
 /* 12-bit SAADC with 0.6 V reference and gain 1/6: approximately 3.6 V full scale.
@@ -49,6 +51,7 @@ struct joystick_config {
     bool invert_x;
     bool invert_y;
     bool swap_axes;
+    bool eight_sector;
 };
 
 struct joystick_data {
@@ -66,6 +69,11 @@ struct joystick_data {
     int16_t y_min;
     int16_t y_max;
     uint16_t samples;
+    bool travel_started;
+    int16_t travel_x_min;
+    int16_t travel_x_max;
+    int16_t travel_y_min;
+    int16_t travel_y_max;
 };
 
 static int read_axis(const struct device *adc, uint8_t channel, int16_t *value) {
@@ -98,6 +106,7 @@ static void report(const struct device *dev, enum joystick_column column, bool p
         return;
     }
     data->state[column] = pressed;
+    LOG_DBG("direction column=%u pressed=%d", (unsigned int)column, pressed);
     if (data->callback) {
         data->callback(dev, 0, column, pressed);
     }
@@ -126,6 +135,7 @@ static void joystick_work(struct k_work *work) {
     int button = cfg->press.port ? gpio_pin_get_dt(&cfg->press) : 0;
     bool pressed = cfg->press.port && button > 0;
     int64_t now = k_uptime_get();
+    bool log_sample = now - data->last_log_ms >= JOY_LOG_INTERVAL_MS;
 
     if (!data->enabled) {
         return;
@@ -148,7 +158,7 @@ static void joystick_work(struct k_work *work) {
         goto reschedule;
     }
 
-    if (now - data->last_log_ms >= JOY_LOG_INTERVAL_MS) {
+    if (log_sample) {
         LOG_DBG("ADC x=%d y=%d center=%d,%d cal=%d push=%d",
                 x, y, data->x_center, data->y_center,
                 data->calibrated, pressed);
@@ -179,6 +189,7 @@ static void joystick_work(struct k_work *work) {
                 data->x_max - data->x_min <= cfg->calibration_max_spread &&
                 data->y_max - data->y_min <= cfg->calibration_max_spread) {
                 data->calibrated = true;
+                data->travel_started = false;
                 LOG_INF("neutral accepted: x=%d y=%d", data->x_center, data->y_center);
             } else {
                 LOG_WRN("neutral rejected: x=%d [%d,%d] y=%d [%d,%d]",
@@ -212,6 +223,38 @@ static void joystick_work(struct k_work *work) {
     }
     if (cfg->invert_x) dx = -dx;
     if (cfg->invert_y) dy = -dy;
+    if (cfg->eight_sector) {
+        uint8_t previous = 0;
+        for (int column = JOY_UP; column <= JOY_RIGHT; column++) {
+            if (data->state[column]) previous |= BIT(column);
+        }
+        uint8_t next = joystick_sector8(dx, dy, previous, cfg->activation, cfg->release);
+        /* Release old directions first, then press the new ones. Never briefly
+         * send opposing keys when crossing the center or changing quadrants.
+         */
+        for (int column = JOY_UP; column <= JOY_RIGHT; column++) {
+            if (!(next & BIT(column))) report(dev, column, false);
+        }
+        for (int column = JOY_UP; column <= JOY_RIGHT; column++) {
+            if (next & BIT(column)) report(dev, column, true);
+        }
+        if (!data->travel_started) {
+            data->travel_x_min = data->travel_x_max = x;
+            data->travel_y_min = data->travel_y_max = y;
+            data->travel_started = true;
+        }
+        if (x < data->travel_x_min) data->travel_x_min = x;
+        if (x > data->travel_x_max) data->travel_x_max = x;
+        if (y < data->travel_y_min) data->travel_y_min = y;
+        if (y > data->travel_y_max) data->travel_y_max = y;
+        /* Observation only: these bounds never change the calibration. */
+        if (log_sample) {
+            LOG_DBG("sector dx=%d dy=%d mask=%u travel_x=%d..%d travel_y=%d..%d enter=%d exit=%d",
+                    dx, dy, next, data->travel_x_min, data->travel_x_max,
+                    data->travel_y_min, data->travel_y_max, cfg->activation, cfg->release);
+        }
+        goto reschedule;
+    }
     report(dev, JOY_UP, direction_state(dy, data->state[JOY_UP], false, cfg));
     report(dev, JOY_DOWN, direction_state(dy, data->state[JOY_DOWN], true, cfg));
     report(dev, JOY_LEFT, direction_state(dx, data->state[JOY_LEFT], false, cfg));
@@ -293,6 +336,7 @@ static const struct joystick_config joystick_config = {
     .invert_x = DT_PROP_OR(JOYSTICK_NODE, invert_x, false),
     .invert_y = DT_PROP_OR(JOYSTICK_NODE, invert_y, false),
     .swap_axes = DT_PROP_OR(JOYSTICK_NODE, swap_axes, false),
+    .eight_sector = DT_PROP_OR(JOYSTICK_NODE, eight_sector, false),
 };
 
 DEVICE_DT_DEFINE(JOYSTICK_NODE, joystick_init, NULL, &joystick_data, &joystick_config,

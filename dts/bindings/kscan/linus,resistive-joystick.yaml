@@ -21,12 +21,12 @@ properties:
   activation-threshold:
     type: int
     default: 550
-    description: ADC counts away from the calibrated center needed to press a direction
+    description: ADC counts away from center (radial distance in eight-sector mode) to press
 
   release-threshold:
     type: int
     default: 400
-    description: ADC counts away from center below which a direction is released
+    description: ADC counts away from center (radial distance in eight-sector mode) to release
 
   calibration-samples:
     type: int
@@ -69,3 +69,7 @@ properties:
   swap-axes:
     type: boolean
     description: Exchange X and Y directions after sampling
+
+  eight-sector:
+    type: boolean
+    description: Use radial dead zone and eight angular sectors with boundary hysteresis

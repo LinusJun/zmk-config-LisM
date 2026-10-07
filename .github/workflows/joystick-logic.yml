@@ -1,0 +1,18 @@
+name: Joystick direction logic
+on:
+  pull_request:
+    paths:
+      - 'src/joystick_sector.h'
+      - 'src/kscan_resistive_joystick.c'
+      - 'tests/joystick_sector_test.c'
+      - '.github/workflows/joystick-logic.yml'
+  workflow_dispatch:
+jobs:
+  sector-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and exercise the firmware sector function
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -fsanitize=undefined,address tests/joystick_sector_test.c -lm -o /tmp/joystick-sector-test
+          /tmp/joystick-sector-test
