@@ -15,15 +15,7 @@
         compatible = "linus,resistive-joystick";
         io-channels = <&adc 2>, <&adc 3>; /* D4/P0.04=X, D5/P0.05=Y */
         press-gpios = <&gpio1 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; /* XIAO D6 */
-        swap-axes;
-        invert-x; /* Old W->D, A->W, S->A, D->S: processed=(-rawY,rawX). */
-        preserve-calibrated-center;
         poll-period-ms = <10>;
-        idle-timeout-ms = <300000>;
-        idle-poll-period-ms = <50>;
-        sprint-full-radius = <1400>; /* Independent JP19 trial estimate; hardware test pending. */
-        sprint-enter-percent = <50>;
-        sprint-exit-percent = <45>;
         activation-threshold = <150>;
         release-threshold = <90>;
         calibration-samples = <64>;
@@ -32,7 +24,7 @@
     joystick_composite: kscan_composite {
         compatible = "zmk,kscan-composite";
         rows = <5>;
-        columns = <7>; /* Keep push col4, reserve thumb col5, sprint col6. */
+        columns = <5>;
 
         joystick {
             kscan = <&joystick_kscan>;

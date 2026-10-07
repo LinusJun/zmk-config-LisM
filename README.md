@@ -1,4 +1,4 @@
-# Current CirclePad / JP19 sprint and power test build
+# Current CirclePad sprint and power test build
 
 Start with [current test instructions](README_测试说明.txt) and
 [sprint/power limits](SPRINT_POWER_TEST.md). Flash the matching new dongle.

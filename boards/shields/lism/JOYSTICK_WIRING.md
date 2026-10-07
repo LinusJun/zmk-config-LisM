@@ -1,10 +1,3 @@
-> Current 2026-10-07 sprint/power build: flash the matching new dongle.
-> JP19 orientation is old W->D, A->W, S->A, D->S. Space is 46, sprint Shift 47.
-> Sprint radius 1400 is an uncalibrated trial estimate, independently editable.
-> See README_测试说明.txt and SPRINT_POWER_TEST.md for current operation.
-> The historical 5P breakout table below is reference wiring, not a universal
-> numbering rule for the Ksilver six-terminal metal tabs.
-
 # LisM standalone joystick peripheral wiring
 
 The peripheral uses the D4/D5/D6 wiring validated with the standalone USB
@@ -38,8 +31,8 @@ is held while deflected and released on return to neutral; host key repeat is
 normal while a direction is held. Diagonals hold two direction keys.
 
 The activation/release thresholds are 150/90 ADC counts, matching the passed
-USB test. ADC read errors or rail readings release directions and sprint while retaining
-the accepted center after calibration. Startup still requires a stable neutral. These guards do not detect every possible loose contact.
+USB test. ADC read errors or rail readings release directions and restart
+calibration. These guards do not detect every possible loose contact.
 
 ## Firmware files
 
@@ -48,8 +41,7 @@ the accepted center after calibration. Startup still requires a stable neutral. 
 - Left/right trackball images and settings-reset are also built in this package.
 
 If the left/right halves are already running the three-peripheral package
-from Actions #154, physical half-key positions remain unchanged; this update restores JP19
-Space at logical position 46 and adds held sprint at position 47.
+from Actions #154, this update changes no matrix positions or pairing layout.
 Flash the dongle and joystick first; retain existing bonds. Use settings-reset
 only if a separate pairing recovery is actually needed.
 

@@ -1,4 +1,4 @@
-# CirclePad / JP19 sprint and power trial, 2026-10-07
+# CirclePad sprint and power trial, 2026-10-07
 
 ## Flashing
 Flash the matching new dongle firmware together with the selected peripheral.
@@ -10,11 +10,10 @@ No settings reset is needed merely to change these bindings.
 W / WA / WD holds Left Shift beyond the configured 50% ADC radius. Shift releases
 below 45%, on neutral, non-forward direction, disabled scanning or invalid ADC.
 Direction keys remain held continuously. This is not a macro.
-JP19 push remains Space at position 46; sprint is position 47.
-JP19: old W -> D, A -> W, S -> A, D -> S; diagonal keys rotate together.
+Space position 46 is reserved by the shared protocol; sprint is position 47.
 CirclePad keeps accepted orientation, 300/240 radial threshold and 2-degree sector
-hysteresis. JP19 keeps its prior 150/90 per-axis thresholds.
-The 1400-count full radius in EACH overlay is an independently editable TRIAL
+hysteresis.
+The 1400-count full radius in the CirclePad overlay is an independently editable TRIAL
 estimate, not measured mechanical travel. Current 50% is 700 ADC counts, not proven
 exact physical half travel. Confirm straight W and forward diagonals using a
 key-state tester before gaming. Center must release all game keys. Power on with
