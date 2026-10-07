@@ -1,3 +1,7 @@
+# JP19 sprint/power test firmware
+
+Current instructions: [README_测试说明.txt](README_测试说明.txt). Branch codex/third-peripheral-joystick-wasd.
+
 # LisM キーボード ファームウェア
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
