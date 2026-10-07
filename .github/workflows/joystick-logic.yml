@@ -16,5 +16,17 @@ jobs:
       - uses: actions/checkout@v4
       - name: Compile and exercise the firmware sector function
         run: |
-          cc -std=c99 -Wall -Wextra -Werror -fsanitize=undefined,address tests/joystick_sector_test.c -lm -o /tmp/joystick-sector-test
+          python3 - <<'PYCONFIG'
+          import re
+          from pathlib import Path
+          text = Path('boards/shields/lism/lism_circlepad.overlay').read_text()
+          text = re.sub(r'/\*.*?\*/', '', text, flags=re.S)
+          props = {'SWAP_AXES': 'swap-axes', 'INVERT_X': 'invert-x', 'INVERT_Y': 'invert-y'}
+          lines = [f'#define CIRCLE_{key} {int(bool(re.search(r"\b" + prop + r"\s*;", text)))}' for key, prop in props.items()]
+          for key, prop in [('ACTIVATION', 'activation-threshold'), ('RELEASE', 'release-threshold')]:
+              value = int(re.search(prop + r'\s*=\s*<(\d+)>', text).group(1))
+              lines.append(f'#define CIRCLE_{key} {value}')
+          Path('/tmp/circlepad-test-config.h').write_text('\n'.join(lines) + '\n')
+          PYCONFIG
+          cc -include /tmp/circlepad-test-config.h -std=c99 -Wall -Wextra -Werror -fsanitize=undefined,address tests/joystick_sector_test.c -lm -o /tmp/joystick-sector-test
           /tmp/joystick-sector-test

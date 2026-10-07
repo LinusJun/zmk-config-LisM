@@ -8,7 +8,27 @@ static uint8_t sector(int x, int y, uint8_t previous) {
     return joystick_sector8(x, y, previous, 90, 55);
 }
 
+/* Use properties extracted from the actual CirclePad overlay by CI. */
+static uint8_t landscape(int raw_x, int raw_y, uint8_t previous) {
+    int dx = raw_x, dy = raw_y;
+    if (CIRCLE_SWAP_AXES) { int tmp = dx; dx = dy; dy = tmp; }
+    if (CIRCLE_INVERT_X) dx = -dx;
+    if (CIRCLE_INVERT_Y) dy = -dy;
+    return joystick_sector8(dx, dy, previous, CIRCLE_ACTIVATION, CIRCLE_RELEASE);
+}
+
 int main(void) {
+    /* Physical raw vectors labelled by the previous working orientation.
+     * W,A,S,D,WA,AS,SD,DW must become D,W,A,S,WD,WA,AS,SD. */
+    const int old_raw_x[] = {0, 1300, 0, -1300, 1300, 1300, -1300, -1300};
+    const int old_raw_y[] = {-1300, 0, 1300, 0, -1300, 1300, 1300, -1300};
+    const uint8_t new_masks[] = {8, 1, 4, 2, 9, 5, 6, 10};
+    assert(CIRCLE_ACTIVATION == 300 && CIRCLE_RELEASE == 240);
+    for (int i = 0; i < 8; ++i) {
+        assert(landscape(old_raw_x[i], old_raw_y[i], 0) == new_masks[i]);
+        assert(landscape(0, 0, new_masks[i]) == 0);
+        assert(landscape(150, -150, new_masks[i]) == 0);
+    }
     const uint8_t directions[] = {8, 10, 2, 6, 4, 5, 1, 9};
     const int vx[] = {400, 400, 0, -400, -400, -400, 0, 400};
     const int vy[] = {0, 400, 400, 400, 0, -400, -400, -400};
@@ -84,6 +104,6 @@ int main(void) {
         int y = (int)lround(1300 * sin(angle));
         assert(joystick_sector8(x, y, 0, 300, 240) == sector(x, y, 0));
     }
-    puts("PASS: eight sectors, radial/angle hysteresis, center release, reverse strokes, X-only flip, CirclePad 300/240 return offsets");
+    puts("PASS: eight sectors, radial/angle hysteresis, center release, reverse strokes, legacy X flip, actual overlay sideways mapping, CirclePad 300/240 return offsets");
     return 0;
 }
