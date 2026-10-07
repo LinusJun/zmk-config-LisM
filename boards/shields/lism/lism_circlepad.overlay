@@ -21,6 +21,7 @@
         invert-x;
         invert-y; /* Old W->D, A->W, S->A, D->S; processed=(-rawY,-rawX). */
         eight-sector;
+        preserve-calibrated-center; /* Discard ADC glitches; never recenter a held stick. */
         strict-sector-boundaries; /* Test: fixed +/-22.5 degree ADC boundaries. */
         poll-period-ms = <10>;
         activation-threshold = <300>; /* Keep the existing larger center dead zone. */

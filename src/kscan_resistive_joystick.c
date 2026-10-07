@@ -53,6 +53,7 @@ struct joystick_config {
     bool swap_axes;
     bool eight_sector;
     bool strict_sector_boundaries;
+    bool preserve_calibrated_center;
 };
 
 struct joystick_data {
@@ -150,7 +151,7 @@ static void joystick_work(struct k_work *work) {
     if (button < 0 || read_axis(cfg->adc, cfg->x_channel, &x) ||
         read_axis(cfg->adc, cfg->y_channel, &y)) {
         release_directions(dev);
-        data->calibrated = false;
+        if (!cfg->preserve_calibrated_center) data->calibrated = false;
         data->samples = 0;
         if (now - data->last_log_ms >= JOY_LOG_INTERVAL_MS) {
             LOG_WRN("ADC/GPIO read failed; push=%d gpio_result=%d", pressed, button);
@@ -209,9 +210,12 @@ static void joystick_work(struct k_work *work) {
     if (x < cfg->sample_min || x > cfg->sample_max ||
         y < cfg->sample_min || y > cfg->sample_max) {
         release_directions(dev);
-        data->calibrated = false;
+        if (!cfg->preserve_calibrated_center) data->calibrated = false;
         data->samples = 0;
-        LOG_WRN("ADC rail value; directions released, recalibrating");
+        if (log_sample) {
+            LOG_WRN("ADC rail value; directions released, %s",
+                    data->calibrated ? "calibrated center retained" : "recalibrating");
+        }
         goto reschedule;
     }
 
@@ -341,6 +345,7 @@ static const struct joystick_config joystick_config = {
     .swap_axes = DT_PROP_OR(JOYSTICK_NODE, swap_axes, false),
     .eight_sector = DT_PROP_OR(JOYSTICK_NODE, eight_sector, false),
     .strict_sector_boundaries = DT_PROP_OR(JOYSTICK_NODE, strict_sector_boundaries, false),
+    .preserve_calibrated_center = DT_PROP_OR(JOYSTICK_NODE, preserve_calibrated_center, false),
 };
 
 DEVICE_DT_DEFINE(JOYSTICK_NODE, joystick_init, NULL, &joystick_data, &joystick_config,

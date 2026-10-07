@@ -77,3 +77,7 @@ properties:
   strict-sector-boundaries:
     type: boolean
     description: Disable angular hysteresis for equal 45-degree sectors; radial hysteresis remains
+
+  preserve-calibrated-center:
+    type: boolean
+    description: After initial calibration, release directions on ADC errors without recalibrating; reset to calibrate again

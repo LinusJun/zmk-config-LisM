@@ -5,6 +5,7 @@ on:
       - 'src/joystick_sector.h'
       - 'src/kscan_resistive_joystick.c'
       - 'tests/joystick_sector_test.c'
+      - 'tests/joystick_driver_host_test.py'
       - 'boards/shields/lism/lism_circlepad.overlay'
       - 'dts/bindings/kscan/linus,resistive-joystick.yaml'
       - '.github/workflows/joystick-logic.yml'
@@ -30,3 +31,5 @@ jobs:
           PYCONFIG
           cc -include /tmp/circlepad-test-config.h -std=c99 -Wall -Wextra -Werror -fsanitize=undefined,address tests/joystick_sector_test.c -lm -o /tmp/joystick-sector-test
           /tmp/joystick-sector-test
+      - name: Exercise actual driver calibration and release callbacks
+        run: python3 tests/joystick_driver_host_test.py
