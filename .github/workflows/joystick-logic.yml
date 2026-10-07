@@ -5,6 +5,8 @@ on:
       - 'src/joystick_sector.h'
       - 'src/kscan_resistive_joystick.c'
       - 'tests/joystick_sector_test.c'
+      - 'boards/shields/lism/lism_circlepad.overlay'
+      - 'dts/bindings/kscan/linus,resistive-joystick.yaml'
       - '.github/workflows/joystick-logic.yml'
   workflow_dispatch:
 jobs:

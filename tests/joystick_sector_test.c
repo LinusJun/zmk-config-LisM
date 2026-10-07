@@ -58,6 +58,32 @@ int main(void) {
     assert(sector(-(400), 0, 0) == JOY_MASK_LEFT);
     assert(sector(-0, -400, 0) == JOY_MASK_UP);
     assert(sector(-0, 400, 0) == JOY_MASK_DOWN);
-    puts("PASS: eight sectors, radial/angle hysteresis, center release, reverse strokes, X-only flip");
+    /* CirclePad return-offset trial: 300 enter / 240 release.  Every old
+     * cardinal/diagonal state must clear in all four neutral quadrants.
+     * These observed residuals are test cases, not a proven hardware bound.
+     */
+    for (int p = 0; p < 8; p++) {
+        for (int sx = -1; sx <= 1; sx += 2) {
+            for (int sy = -1; sy <= 1; sy += 2) {
+                assert(joystick_sector8(sx * 150, sy * 150, directions[p], 300, 240) == 0);
+                assert(joystick_sector8(sx * 160, sy * 160, directions[p], 300, 240) == 0);
+                assert(joystick_sector8(sx * 160, sy * 160, 0, 300, 240) == 0);
+            }
+        }
+        assert(joystick_sector8(vx[p], vy[p], 0, 300, 240) == directions[p]);
+        assert(joystick_sector8(vx[(p + 4) % 8], vy[(p + 4) % 8], directions[p], 300, 240) == directions[(p + 4) % 8]);
+    }
+    assert(joystick_sector8(300, 0, 0, 300, 240) == 0);
+    assert(joystick_sector8(301, 0, 0, 300, 240) == JOY_MASK_RIGHT);
+    assert(joystick_sector8(240, 0, JOY_MASK_RIGHT, 300, 240) == 0);
+    assert(joystick_sector8(241, 0, JOY_MASK_RIGHT, 300, 240) == JOY_MASK_RIGHT);
+    assert(joystick_sector8(280, 0, 0, 300, 240) == 0);
+    for (int degree = 0; degree < 360; degree++) {
+        double angle = degree * 3.14159265358979323846 / 180.0;
+        int x = (int)lround(1300 * cos(angle));
+        int y = (int)lround(1300 * sin(angle));
+        assert(joystick_sector8(x, y, 0, 300, 240) == sector(x, y, 0));
+    }
+    puts("PASS: eight sectors, radial/angle hysteresis, center release, reverse strokes, X-only flip, CirclePad 300/240 return offsets");
     return 0;
 }

@@ -20,8 +20,8 @@
         invert-x; /* Hardware test: up/down correct; left/right mirrored. */
         eight-sector;
         poll-period-ms = <10>;
-        activation-threshold = <90>; /* Radial ADC counts; pending measured travel. */
-        release-threshold = <55>;
+        activation-threshold = <300>; /* Larger radial dead zone: observed return offsets. */
+        release-threshold = <240>; /* Trial values; verify hands-off HID release. */
         calibration-samples = <64>;
         center-min = <100>;
         center-max = <3400>;
