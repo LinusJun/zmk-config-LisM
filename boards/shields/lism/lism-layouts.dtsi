@@ -53,6 +53,7 @@
             , <&key_physical_attrs  50  50  450  450       0     0     0> /* joystick left */
             , <&key_physical_attrs  50  50  550  450       0     0     0> /* joystick right */
             , <&key_physical_attrs  50  50  500  450       0     0     0> /* joystick press */
+            , <&key_physical_attrs  50  50  600  450       0     0     0> /* virtual sprint */
             ;
     };
 
@@ -106,6 +107,7 @@
             , <&key_physical_attrs  50  50  450  450       0     0     0> /* joystick left */
             , <&key_physical_attrs  50  50  550  450       0     0     0> /* joystick right */
             , <&key_physical_attrs  50  50  500  450       0     0     0> /* joystick press */
+            , <&key_physical_attrs  50  50  600  450       0     0     0> /* virtual sprint */
             ;
     };
 
@@ -119,7 +121,7 @@
                       , <20 21 22 23 24 25 26 27 28 29>
                       , <30 31 32 33 34 35 36 37 38 39>
                       , <40 41>
-                      , <42 43 44 45 46>;
+                      , <42 43 44 45 46 47>;
         };
 
         physical_40key_layout {
@@ -129,7 +131,7 @@
                       , <20 21 22 23 24 25 26 27 28 29>
                       , <30 31 32 40 33 34 35 36 41 37>
                       , <38 39>
-                      , <42 43 44 45 46>;
+                      , <42 43 44 45 46 47>;
         };
     };
 
