@@ -4,8 +4,8 @@ This Circle Pad build replaces the JP19 stick peripheral in the already
 validated three-peripheral LisM dongle setup. Flash
 `lism_circlepad_peripheral_wasd.uf2` to the XIAO inside the Circle Pad
 case. Flash the matching `lism_dongle_prospector_operator.uf2` to the
-dongle as well, because its logical layout now has four Circle Pad
-positions instead of the JP19 fifth push position. Existing left and
+dongle as well, because this version adds virtual Left Shift at position 47 and restores
+JP19 Space at position 46. CirclePad itself still has no push input. Existing left and
 right peripheral firmware can remain installed. Do not run the JP19 and Circle Pad
 peripherals simultaneously against this three-slot dongle build.
 If the Circle Pad uses a different XIAO from the paired JP19 unit,
@@ -60,15 +60,15 @@ workspace under `wiring/CirclePad_4P_XIAO_photo_wiring.png`.
 Keep the pad untouched at power-up. The firmware samples a stable
 neutral for about 0.64 seconds, then sends held WASD directions through
 the dongle: up=W, down=S, left=A, right=D. No press-to-unlock step.
-A 4-wire Circle Pad has no push-contact output. The layout contains only
-W, S, A and D for this stick; there is no fifth `SPACE` position.
-BSI-10 only switches power.
-The Circle Pad thresholds (90 press, 55 release ADC counts) and
-100..3400 neutral acceptance are first-fit values. The Phone-Controller
-firmware uses 12-bit values 143..880 as initial stick endpoint defaults,
-which motivated the lower neutral bound here; those are not measurements
-of your own pad. ADC errors, rail readings, or unstable startup readings
-release directions and trigger a fresh center calibration.
+A 4-wire Circle Pad has no physical push-contact output. The shared layout
+now reserves position 46 for JP19 Space and 47 for held sprint; CirclePad never
+reports the Space position. BSI-10 only switches power.
+Current CirclePad radial thresholds are 300 enter / 240 release ADC counts,
+with 45-degree sectors and 2-degree boundary hysteresis. Startup calibration
+uses 64 stable neutral samples; post-calibration ADC errors/rails release keys
+while retaining the accepted center. These guards do not detect every loose contact.
+Forward W/WA/WD can hold Left Shift beyond the independent trial sprint radius.
+Read the current README_测试说明.txt and SPRINT_POWER_TEST.md before flashing.
 
 If directions are reversed after the first USB/BLE test, the
 `joystick_kscan` node in `lism_circlepad.overlay` supports the boolean
