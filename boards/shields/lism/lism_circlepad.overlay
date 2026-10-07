@@ -24,6 +24,11 @@
         preserve-calibrated-center; /* Discard ADC glitches; never recenter a held stick. */
         sector-hysteresis-degrees = <2>; /* Trial: nominal 45deg sectors, prior sector held 2deg. */
         poll-period-ms = <10>;
+        idle-timeout-ms = <300000>;
+        idle-poll-period-ms = <50>;
+        sprint-full-radius = <1400>; /* Trial estimate, not mechanical travel calibration. */
+        sprint-enter-percent = <50>;
+        sprint-exit-percent = <45>;
         activation-threshold = <300>; /* Keep the existing larger center dead zone. */
         release-threshold = <240>; /* Trial values; verify hands-off HID release. */
         calibration-samples = <64>;
@@ -37,7 +42,7 @@
     circlepad_composite: kscan_composite {
         compatible = "zmk,kscan-composite";
         rows = <5>;
-        columns = <4>;
+        columns = <7>; /* col4=optional push, col5 reserved, col6=sprint */
 
         circlepad {
             kscan = <&joystick_kscan>;

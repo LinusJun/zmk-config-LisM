@@ -20,6 +20,7 @@ assert re.search(r'sector-hysteresis-degrees\s*=\s*<2>', overlay)
 assert not re.search(r'\bstrict-sector-boundaries\s*;', overlay)
 types = source[source.index('enum joystick_column'):source.index('static int read_axis')]
 work = source[source.index('static void report'):source.index('static int joystick_configure')]
+work += source[source.index('static int joystick_disable'):source.index('static int joystick_init')]
 prelude = r'''
 #include <assert.h>
 #include <stdbool.h>
@@ -43,20 +44,22 @@ static int16_t raw_x, raw_y;
 static bool read_error;
 static int64_t uptime;
 static unsigned callback_mask, callback_count, warnings;
+static int button_value, scheduled_delay;
 static int read_axis(const struct device *adc, uint8_t channel, int16_t *value) {
     (void)adc;
     if (read_error) return -5;
     *value = channel == 2 ? raw_x : raw_y;
     return 0;
 }
-static int gpio_pin_get_dt(const struct gpio_dt_spec *gpio) { (void)gpio; return 0; }
+static int gpio_pin_get_dt(const struct gpio_dt_spec *gpio) { (void)gpio; return button_value; }
 static int64_t k_uptime_get(void) { return uptime; }
 static struct k_work_delayable *k_work_delayable_from_work(struct k_work *work) {
     return CONTAINER_OF(work, struct k_work_delayable, work);
 }
 static void k_work_schedule(struct k_work_delayable *work, int delay) {
-    (void)work; (void)delay;
+    (void)work; scheduled_delay = delay;
 }
+static void k_work_cancel_delayable(struct k_work_delayable *work) { (void)work; }
 '''
 test = r'''
 static struct joystick_config cfg = {
@@ -76,6 +79,7 @@ static void callback(const struct device *device, uint32_t row, uint32_t col, bo
     assert(row == 0 && col < JOY_COLUMN_COUNT);
     callback_count++;
     if (down) callback_mask |= BIT(col); else callback_mask &= ~BIT(col);
+    assert(!((callback_mask & BIT(JOY_SPRINT)) && (callback_mask & JOY_MASK_DOWN)));
 }
 static void tick(int x, int y, bool fail) {
     raw_x = x; raw_y = y; read_error = fail; uptime += 10;
@@ -157,6 +161,88 @@ for row in rows:
     records.append('{%d,%d,%d}' % (row['x'], row['y'], expected))
 assert len(rows) == 231 and sum(counts.values()) == 119
 assert counts['up_left', 10] == 9
+test += r'''
+static void processed_tick(int x, int y, bool fail) {
+    if (cfg.invert_x) x = -x;
+    if (cfg.invert_y) y = -y;
+    if (cfg.swap_axes) { int t = x; x = y; y = t; }
+    tick(data.x_center + x, data.y_center + y, fail);
+}
+int sprint_idle_tests(void) {
+    const unsigned shift = BIT(JOY_SPRINT), space = BIT(JOY_PRESS);
+    for (int kind = 0; kind < 2; ++kind) {
+        cfg.eight_sector = kind == 0;
+        cfg.swap_axes = true; cfg.invert_x = kind == 1;
+        cfg.activation = kind == 0 ? 300 : 150;
+        cfg.release = kind == 0 ? 240 : 90;
+        cfg.idle_timeout_ms = 300000; cfg.idle_poll_ms = 50;
+        cfg.sprint_full_radius = 1400;
+        cfg.sprint_enter_percent = 50; cfg.sprint_exit_percent = 45;
+        cfg.press.port = kind == 1 ? (const void *)1 : NULL;
+        button_value = 0;
+        initial_calibration(true);
+        processed_tick(0, -500, false); assert(callback_mask == JOY_MASK_UP);
+        processed_tick(0, -700, false); assert(callback_mask == JOY_MASK_UP);
+        processed_tick(0, -701, false); assert(callback_mask == (JOY_MASK_UP | shift));
+        unsigned held_callbacks = callback_count;
+        for (int i=0; i<80; ++i) processed_tick(0, -1000, false);
+        assert(callback_count == held_callbacks); /* held, no typing macro */
+        processed_tick(0, -680, false); assert(callback_mask & shift);
+        processed_tick(0, -631, false); assert(callback_mask & shift);
+        processed_tick(0, -630, false); assert(callback_mask == JOY_MASK_UP);
+        /* Diagonal uses radial travel: neither axis alone exceeds 700. */
+        processed_tick(-400, -400, false); assert(callback_mask == (JOY_MASK_UP | JOY_MASK_LEFT));
+        processed_tick(-500, -500, false); assert(callback_mask == (JOY_MASK_UP | JOY_MASK_LEFT | shift));
+        processed_tick(500, -500, false); assert(callback_mask == (JOY_MASK_UP | JOY_MASK_RIGHT | shift));
+        processed_tick(1000, 0, false); assert(callback_mask == JOY_MASK_RIGHT);
+        processed_tick(0, 1000, false); assert(callback_mask == JOY_MASK_DOWN);
+        processed_tick(-1000, 1000, false); assert(callback_mask == (JOY_MASK_DOWN | JOY_MASK_LEFT));
+        processed_tick(-1000, 0, false); assert(callback_mask == JOY_MASK_LEFT);
+        processed_tick(0, -1000, false); assert(callback_mask & shift);
+        processed_tick(0, 0, true); assert(callback_mask == 0 && data.calibrated);
+        processed_tick(0, -1000, false); assert(callback_mask & shift);
+        tick(0,0,false); assert(callback_mask == 0 && data.calibrated);
+        processed_tick(0, -1000, false); processed_tick(0, 0, false);
+        assert(callback_mask == 0);
+        if (kind == 1) {
+            button_value = 1;
+            processed_tick(0,-1000,false); assert(callback_mask == (JOY_MASK_UP | shift | space));
+            processed_tick(0,0,true); assert(callback_mask == space); /* independent push */
+            processed_tick(0,0,false); button_value=0;
+            processed_tick(0,0,false); assert(callback_mask == 0);
+        }
+        /* Six-minute sustained game movement never goes into slow sampling. */
+        processed_tick(0,-1000,false);
+        uptime += 360000; processed_tick(0,-1000,false); assert(scheduled_delay==10);
+        processed_tick(0,0,false); uptime += 300001;
+        processed_tick(0,0,false); assert(scheduled_delay==50);
+        processed_tick(0,-1000,false); assert(scheduled_delay==10 && (callback_mask & shift));
+        /* Invalid ADC is not continuous neutral; require another five minutes. */
+        processed_tick(0,0,false); uptime += 300001;
+        processed_tick(0,0,false); assert(scheduled_delay==50);
+        tick(0,0,true); assert(scheduled_delay==10 && callback_mask==0);
+        processed_tick(0,0,false); assert(scheduled_delay==10);
+        processed_tick(0,-1000,false);
+        joystick_disable(&dev); assert(callback_mask==0 && !data.enabled);
+    }
+    /* Exact requested JP19 mapping from OLD raw-axis directions. */
+    cfg.eight_sector=false; cfg.swap_axes=true; cfg.invert_x=true;
+    cfg.sprint_full_radius=0; cfg.press.port=NULL; button_value=0;
+    initial_calibration(true);
+    tick(1803, 955, false); assert(callback_mask==JOY_MASK_RIGHT); /* old W -> D */
+    processed_tick(0,0,false);
+    tick(803, 1955, false); assert(callback_mask==JOY_MASK_UP);    /* old A -> W */
+    processed_tick(0,0,false);
+    tick(1803, 2955, false); assert(callback_mask==JOY_MASK_LEFT); /* old S -> A */
+    processed_tick(0,0,false);
+    tick(2803, 1955, false); assert(callback_mask==JOY_MASK_DOWN); /* old D -> S */
+    cfg.eight_sector=true; cfg.invert_x=false; cfg.activation=300; cfg.release=240;
+    cfg.idle_timeout_ms=0; cfg.idle_poll_ms=0;
+    puts("PASS: Circle/JP19 sprint threshold/hysteresis, simultaneous WA/WD, no repeat macro, independent Space, nonforward/error/rail/disable release, six-minute held input, neutral slow scan/wake/error reset, exact JP19 rotation");
+    return 0;
+}
+'''
+
 replay = r"""
 static const struct { int x, y, expected; } replay[] = {
 """ + ',\n'.join(records) + r"""
@@ -184,7 +270,7 @@ int main(void) {
     return 0;
 }
 """
-test += replay
+test += replay.replace('    fault_tests();', '    fault_tests();\n    sprint_idle_tests();')
 
 with tempfile.TemporaryDirectory(prefix='circlepad-driver-test-') as directory:
     folder = Path(directory)

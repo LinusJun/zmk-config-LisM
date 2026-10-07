@@ -3,12 +3,28 @@
 #define LISM_JOYSTICK_SECTOR_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 /* Matches kscan columns: W, S, A, D. No push input. */
 #define JOY_MASK_UP (1u << 0)
 #define JOY_MASK_DOWN (1u << 1)
 #define JOY_MASK_LEFT (1u << 2)
 #define JOY_MASK_RIGHT (1u << 3)
+
+/* Sprint is a held modifier, separate from the four held direction keys.
+ * The configured radius is an ADC travel estimate, not learned from a held
+ * stick or a manual recenter. Only forward directions may sprint.
+ */
+static inline bool joystick_sprint(int32_t x, int32_t y, uint8_t directions,
+                                   bool previous, uint16_t full_radius,
+                                   uint8_t enter_percent, uint8_t exit_percent) {
+    if (!full_radius || !(directions & JOY_MASK_UP) ||
+        (directions & JOY_MASK_DOWN)) return false;
+    int64_t radius100_squared = ((int64_t)x * x + (int64_t)y * y) * 10000;
+    int64_t threshold = (int64_t)full_radius *
+        (previous ? exit_percent : enter_percent);
+    return radius100_squared > threshold * threshold;
+}
 
 /* Equal 45-degree sectors in ADC coordinates; no angular hysteresis.
  * tan(22.5deg) ~= 414214/1000000. Boundary ties belong to the cardinal.

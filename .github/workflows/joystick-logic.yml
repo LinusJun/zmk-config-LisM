@@ -2,6 +2,8 @@ name: Joystick direction logic
 on:
   pull_request:
     paths:
+      - 'src/joystick_status.c'
+      - 'tests/joystick_status_host_test.py'
       - 'src/joystick_sector.h'
       - 'src/kscan_resistive_joystick.c'
       - 'tests/joystick_sector_test.c'
@@ -34,3 +36,6 @@ jobs:
           /tmp/joystick-sector-test
       - name: Exercise actual driver calibration and release callbacks
         run: python3 tests/joystick_driver_host_test.py
+
+      - name: Exercise charging and RGB policy with mocked hardware
+        run: python3 tests/joystick_status_host_test.py

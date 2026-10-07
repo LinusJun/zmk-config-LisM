@@ -31,6 +31,8 @@ enum joystick_column {
     JOY_LEFT,
     JOY_RIGHT,
     JOY_PRESS,
+    JOY_RESERVED_THUMB, /* composite col 5 is an existing keyboard thumb key */
+    JOY_SPRINT,
     JOY_COLUMN_COUNT,
 };
 
@@ -40,6 +42,11 @@ struct joystick_config {
     uint8_t y_channel;
     struct gpio_dt_spec press; /* port == NULL for the four-wire Circle Pad */
     uint16_t poll_ms;
+    uint16_t idle_poll_ms;
+    uint32_t idle_timeout_ms;
+    uint16_t sprint_full_radius;
+    uint8_t sprint_enter_percent;
+    uint8_t sprint_exit_percent;
     int16_t activation;
     int16_t release;
     uint16_t calibration_samples;
@@ -66,6 +73,7 @@ struct joystick_data {
     bool state[JOY_COLUMN_COUNT];
     bool calibrated;
     int64_t last_log_ms;
+    int64_t last_input_ms;
     int32_t x_center;
     int32_t y_center;
     int16_t x_min;
@@ -117,6 +125,7 @@ static void report(const struct device *dev, enum joystick_column column, bool p
 }
 
 static void release_directions(const struct device *dev) {
+    report(dev, JOY_SPRINT, false);
     report(dev, JOY_UP, false);
     report(dev, JOY_DOWN, false);
     report(dev, JOY_LEFT, false);
@@ -140,6 +149,7 @@ static void joystick_work(struct k_work *work) {
     bool pressed = cfg->press.port && button > 0;
     int64_t now = k_uptime_get();
     bool log_sample = now - data->last_log_ms >= JOY_LOG_INTERVAL_MS;
+    bool valid_sample = false;
 
     if (!data->enabled) {
         return;
@@ -223,6 +233,7 @@ static void joystick_work(struct k_work *work) {
 
     int32_t dx = x - data->x_center;
     int32_t dy = y - data->y_center;
+    valid_sample = true;
     if (cfg->swap_axes) {
         int32_t tmp = dx;
         dx = dy;
@@ -241,12 +252,20 @@ static void joystick_work(struct k_work *work) {
             : cfg->strict_sector_boundaries
             ? joystick_sector8_strict(dx, dy, previous, cfg->activation, cfg->release)
             : joystick_sector8(dx, dy, previous, cfg->activation, cfg->release);
+        bool sprint = joystick_sprint(dx, dy, next, data->state[JOY_SPRINT],
+                                     cfg->sprint_full_radius, cfg->sprint_enter_percent,
+                                     cfg->sprint_exit_percent);
+        /* Release the modifier before entering a non-forward sector. Press
+         * it before new forward keys, without releasing keys held throughout.
+         */
+        if (!sprint) report(dev, JOY_SPRINT, false);
         /* Release old directions first, then press the new ones. Never briefly
          * send opposing keys when crossing the center or changing quadrants.
          */
         for (int column = JOY_UP; column <= JOY_RIGHT; column++) {
             if (!(next & BIT(column))) report(dev, column, false);
         }
+        if (sprint) report(dev, JOY_SPRINT, true);
         for (int column = JOY_UP; column <= JOY_RIGHT; column++) {
             if (next & BIT(column)) report(dev, column, true);
         }
@@ -261,19 +280,39 @@ static void joystick_work(struct k_work *work) {
         if (y > data->travel_y_max) data->travel_y_max = y;
         /* Observation only: these bounds never change the calibration. */
         if (log_sample) {
-            LOG_DBG("sector dx=%d dy=%d mask=%u travel_x=%d..%d travel_y=%d..%d enter=%d exit=%d",
+            LOG_DBG("sector dx=%d dy=%d mask=%u travel_x=%d..%d travel_y=%d..%d enter=%d exit=%d sprint=%d full_radius=%u",
                     dx, dy, next, data->travel_x_min, data->travel_x_max,
-                    data->travel_y_min, data->travel_y_max, cfg->activation, cfg->release);
+                    data->travel_y_min, data->travel_y_max, cfg->activation, cfg->release,
+                    sprint, cfg->sprint_full_radius);
         }
         goto reschedule;
     }
-    report(dev, JOY_UP, direction_state(dy, data->state[JOY_UP], false, cfg));
-    report(dev, JOY_DOWN, direction_state(dy, data->state[JOY_DOWN], true, cfg));
-    report(dev, JOY_LEFT, direction_state(dx, data->state[JOY_LEFT], false, cfg));
-    report(dev, JOY_RIGHT, direction_state(dx, data->state[JOY_RIGHT], true, cfg));
+    /* Keep JP19's existing per-axis activation/release thresholds. */
+    uint8_t next = 0;
+    if (direction_state(dy, data->state[JOY_UP], false, cfg)) next |= JOY_MASK_UP;
+    if (direction_state(dy, data->state[JOY_DOWN], true, cfg)) next |= JOY_MASK_DOWN;
+    if (direction_state(dx, data->state[JOY_LEFT], false, cfg)) next |= JOY_MASK_LEFT;
+    if (direction_state(dx, data->state[JOY_RIGHT], true, cfg)) next |= JOY_MASK_RIGHT;
+    bool sprint = joystick_sprint(dx, dy, next, data->state[JOY_SPRINT],
+           cfg->sprint_full_radius, cfg->sprint_enter_percent, cfg->sprint_exit_percent);
+    if (!sprint) report(dev, JOY_SPRINT, false);
+    for (int col = JOY_UP; col <= JOY_RIGHT; ++col)
+        if (!(next & BIT(col))) report(dev, col, false);
+    if (sprint) report(dev, JOY_SPRINT, true);
+    for (int col = JOY_UP; col <= JOY_RIGHT; ++col)
+        if (next & BIT(col)) report(dev, col, true);
 
-reschedule:
-    k_work_schedule(&data->work, K_MSEC(cfg->poll_ms));
+reschedule: ;
+    bool held = data->state[JOY_UP] || data->state[JOY_DOWN] ||
+                data->state[JOY_LEFT] || data->state[JOY_RIGHT] ||
+                data->state[JOY_PRESS] || data->state[JOY_SPRINT];
+    /* Sustained game movement is activity even without new kscan edges. */
+    if (held || !data->calibrated || !valid_sample) data->last_input_ms = now;
+    uint16_t delay = cfg->poll_ms;
+    if (!held && data->calibrated && cfg->idle_timeout_ms &&
+        cfg->idle_poll_ms > cfg->poll_ms && now - data->last_input_ms >= cfg->idle_timeout_ms)
+        delay = cfg->idle_poll_ms;
+    k_work_schedule(&data->work, K_MSEC(delay));
 }
 
 static int joystick_configure(const struct device *dev, kscan_callback_t callback) {
@@ -331,6 +370,12 @@ static const struct kscan_driver_api joystick_api = {
 BUILD_ASSERT(!(DT_PROP_OR(JOYSTICK_NODE, strict_sector_boundaries, false) &&
                DT_PROP_OR(JOYSTICK_NODE, sector_hysteresis_degrees, 0) != 0),
              "strict-sector-boundaries conflicts with nonzero sector-hysteresis-degrees");
+BUILD_ASSERT(DT_PROP_OR(JOYSTICK_NODE, sprint_enter_percent, 50) >
+             DT_PROP_OR(JOYSTICK_NODE, sprint_exit_percent, 45),
+             "Sprint enter must exceed exit to provide hysteresis");
+BUILD_ASSERT(DT_PROP_OR(JOYSTICK_NODE, sprint_enter_percent, 50) <= 100 &&
+             DT_PROP_OR(JOYSTICK_NODE, sprint_exit_percent, 45) > 0,
+             "Sprint percentages must be in 1..100");
 
 static struct joystick_data joystick_data;
 
@@ -340,6 +385,11 @@ static const struct joystick_config joystick_config = {
     .y_channel = 3,
     .press = GPIO_DT_SPEC_GET_OR(JOYSTICK_NODE, press_gpios, {0}),
     .poll_ms = DT_PROP(JOYSTICK_NODE, poll_period_ms),
+    .idle_poll_ms = DT_PROP_OR(JOYSTICK_NODE, idle_poll_period_ms, 0),
+    .idle_timeout_ms = DT_PROP_OR(JOYSTICK_NODE, idle_timeout_ms, 0),
+    .sprint_full_radius = DT_PROP_OR(JOYSTICK_NODE, sprint_full_radius, 0),
+    .sprint_enter_percent = DT_PROP_OR(JOYSTICK_NODE, sprint_enter_percent, 50),
+    .sprint_exit_percent = DT_PROP_OR(JOYSTICK_NODE, sprint_exit_percent, 45),
     .activation = DT_PROP(JOYSTICK_NODE, activation_threshold),
     .release = DT_PROP(JOYSTICK_NODE, release_threshold),
     .calibration_samples = DT_PROP(JOYSTICK_NODE, calibration_samples),

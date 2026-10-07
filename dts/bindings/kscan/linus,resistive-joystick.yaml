@@ -18,6 +18,31 @@ properties:
     type: int
     default: 10
 
+  idle-poll-period-ms:
+    type: int
+    default: 0
+    description: Slower sampling after continuous valid neutral; 0 disables this optimization
+
+  idle-timeout-ms:
+    type: int
+    default: 0
+    description: Required continuous valid neutral time before slower sampling
+
+  sprint-full-radius:
+    type: int
+    default: 0
+    description: Estimated radial full travel in ADC counts, independently tuned per device; 0 disables sprint
+
+  sprint-enter-percent:
+    type: int
+    default: 50
+    description: Press virtual Left Shift above this percentage of the estimated full radius, only with W
+
+  sprint-exit-percent:
+    type: int
+    default: 45
+    description: Release virtual Left Shift at or below this percentage, or whenever W is released
+
   activation-threshold:
     type: int
     default: 550
