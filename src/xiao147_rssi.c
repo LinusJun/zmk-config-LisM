@@ -117,6 +117,18 @@ static void collect_split_connection(struct bt_conn *conn, void *context)
     found->items[found->count++] = (struct split_connection){.conn = held, .slot = slot};
 }
 
+static bool host_is_selected_connection(struct bt_conn *host, int profile)
+{
+    struct zmk_endpoint_instance selected = zmk_endpoint_get_selected();
+    if (selected.transport != ZMK_TRANSPORT_BLE ||
+        selected.ble.profile_index != profile ||
+        zmk_ble_active_profile_index() != profile) { return false; }
+    struct bt_conn *current = zmk_ble_active_profile_conn();
+    bool same = current == host;
+    if (current) { bt_conn_unref(current); }
+    return same;
+}
+
 static void poll_rssi(struct k_work *work);
 K_WORK_DELAYABLE_DEFINE(rssi_work, poll_rssi);
 
@@ -150,9 +162,7 @@ static void poll_rssi(struct k_work *work)
             if (connection_is_ready(host, BT_CONN_ROLE_PERIPHERAL) &&
                 read_connected_rssi(host, &rssi) == 0 &&
                 connection_is_ready(host, BT_CONN_ROLE_PERIPHERAL) &&
-                zmk_endpoint_get_selected().transport == ZMK_TRANSPORT_BLE &&
-                zmk_endpoint_get_selected().ble.profile_index == profile &&
-                zmk_ble_active_profile_index() == profile) {
+                host_is_selected_connection(host, profile)) {
                 next.value[0] = rssi;
                 next.valid[0] = true;
                 next.host_profile = profile;
