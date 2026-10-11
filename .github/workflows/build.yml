@@ -2,7 +2,7 @@ name: Build ZMK firmware
 on:
   workflow_dispatch:
   push:
-    branches: [ main, codex/xiao-plus-147-touch-dongle ]
+    branches: [ main, codex/xiao-plus-147-touch-dongle, codex/xiao147-display-menu-imu ]
     paths:
       - '.github/workflows/build.yml'
       - 'boards/**'

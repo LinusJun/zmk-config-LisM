@@ -51,7 +51,7 @@
 };
 
 / {
-    xiao_touch_buttons: xiao_touch_buttons {
+    xiao_touch_left_button: xiao_touch_left_button {
         compatible = "gpio-keys";
         debounce-interval-ms = <15>;
 
@@ -60,6 +60,11 @@
             zephyr,code = <INPUT_BTN_0>;
         };
 
+    };
+
+    xiao_touch_menu_button: xiao_touch_menu_button {
+        compatible = "gpio-keys";
+        debounce-interval-ms = <15>;
         button_right {
             gpios = <&gpio0 10 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; /* D15/USR2 */
             zephyr,code = <INPUT_BTN_1>;
@@ -71,8 +76,8 @@
         device = <&touch_sensor>;
     };
 
-    xiao_touch_buttons_listener: xiao_touch_buttons_listener {
+    xiao_touch_left_button_listener: xiao_touch_left_button_listener {
         compatible = "zmk,input-listener";
-        device = <&xiao_touch_buttons>;
+        device = <&xiao_touch_left_button>;
     };
 };

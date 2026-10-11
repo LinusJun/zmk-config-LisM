@@ -30,7 +30,9 @@ manifest:
       revision: main
     - name: prospector-zmk-module
       remote: carrefinho
-      revision: feat/new-status-screens
+      # Pin the OPERATOR implementation so a later upstream push cannot
+      # silently change the dongle UI or break this firmware build.
+      revision: ed98221f3b52b7066dbb10ba3af8a29150b93a5a
     - name: zmk-input-processor-report-rate-limit
       remote: badjeff
       revision: b056cb135525933743e2627150fb390f9d4b2461
