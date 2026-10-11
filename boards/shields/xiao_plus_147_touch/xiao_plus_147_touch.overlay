@@ -48,6 +48,11 @@
         reg = <0x63>;
         status = "okay";
     };
+    xiao_imu: imu@6a {
+        compatible = "lism,lsm6ds3-air-mouse";
+        reg = <0x6a>;
+        status = "okay";
+    };
 };
 
 / {
@@ -76,8 +81,9 @@
         device = <&touch_sensor>;
     };
 
-    xiao_touch_left_button_listener: xiao_touch_left_button_listener {
+    xiao_imu_listener: xiao_imu_listener {
         compatible = "zmk,input-listener";
-        device = <&xiao_touch_left_button>;
+        device = <&xiao_imu>;
     };
+
 };

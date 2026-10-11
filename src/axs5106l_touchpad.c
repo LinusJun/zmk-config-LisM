@@ -35,6 +35,7 @@ struct axs_touch_data {
     enum xiao147_page last_page;
     uint8_t fingers;
     uint8_t max_fingers;
+    bool last_portrait;
     struct point last;
     struct point start;
     uint32_t touch_start_ms;
@@ -57,7 +58,10 @@ static struct point decode_point(const uint8_t report[AXS_TOUCH_REPORT_LEN], uin
     const uint8_t off = 2 + index * 6;
     uint16_t raw_x = ((uint16_t)(report[off] & 0x0f) << 8) | report[off + 1];
     uint16_t raw_y = ((uint16_t)(report[off + 2] & 0x0f) << 8) | report[off + 3];
-    /* Boot orientation: 320x172 landscape, USB at the left. */
+    /* The sensor is mounted as 172x320; logical coordinates follow LVGL. */
+    if (xiao147_ui_portrait()) {
+        return (struct point){.x = 171 - raw_x, .y = 319 - raw_y};
+    }
     return (struct point){.x = raw_y, .y = 171 - raw_x};
 }
 
@@ -122,9 +126,11 @@ static void axs_poll(struct k_work *work)
     }
 
     enum xiao147_page page = xiao147_ui_page();
-    if (page != data->last_page) {
+    bool portrait = xiao147_ui_portrait();
+    if (page != data->last_page || portrait != data->last_portrait) {
         end_contact(data, false);
         data->last_page = page;
+        data->last_portrait = portrait;
         data->swallow_until_release = fingers != 0;
     }
 

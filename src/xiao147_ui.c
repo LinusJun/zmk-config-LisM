@@ -19,6 +19,8 @@
 #include <zmk/usb.h>
 
 #include "xiao147_ui.h"
+#include "xiao147_rotation.h"
+#include "xiao147_battery_rings.h"
 
 #define SCREEN_W 320
 #define SCREEN_H 172
@@ -46,12 +48,13 @@ K_MUTEX_DEFINE(peripheral_lock);
 static struct peripheral_state peripheral;
 static atomic_t page_atomic = ATOMIC_INIT(XIAO147_PAGE_STATUS);
 static atomic_t sleeping = ATOMIC_INIT(0);
+static atomic_t imu_mode = ATOMIC_INIT(0);
+static atomic_t restore_landscape = ATOMIC_INIT(0);
 static uint32_t last_activity_ms;
 static uint8_t brightness = 50;
 static uint8_t applied_brightness = 255;
 static bool usb_powered;
 static enum rotation_mode rotation = ROTATION_LANDSCAPE;
-static bool imu_mouse_enabled;
 static uint8_t previous_touch_fingers;
 static struct touch_sample last_touch;
 
@@ -91,10 +94,21 @@ static void clear_rows(void)
 static void draw_settings(void)
 {
     clear_rows();
+    const bool portrait = xiao147_rotation_is_portrait();
+    lv_obj_set_pos(accent_bar, portrait ? 20 : 20, portrait ? 68 : 50);
+    if (portrait) {
+        const int row_x[8] = {10, 125, 10, 125, 10, 10, 10, 125};
+        const int row_y[8] = {36, 36, 100, 100, 140, 177, 219, 219};
+        for (int i = 0; i < 8; i++) {
+            lv_obj_set_pos(row_labels[i], row_x[i], row_y[i]);
+            lv_obj_set_width(row_labels[i], i == 1 || i == 3 || i == 7 ? 45 : 155);
+        }
+    } else {
     const int row_x[8] = {12, 266, 12, 270, 12, 173, 12, 270};
     const int row_y[8] = {27, 27, 63, 63, 95, 95, 133, 133};
     for (int i = 0; i < 8; i++) {
         lv_obj_set_pos(row_labels[i], row_x[i], row_y[i]);
+    }
     }
     lv_label_set_text(title_label, "DISPLAY SETTINGS");
     char txt[48];
@@ -109,9 +123,9 @@ static void draw_settings(void)
     lv_label_set_text(row_labels[5], rotation == ROTATION_PORTRAIT ? "PORTRAIT  [ON]" :
                       "PORTRAIT");
     lv_label_set_text(row_labels[6], "6-axis mouse");
-    lv_label_set_text(row_labels[7], imu_mouse_enabled ? "ON" : "OFF");
+    lv_label_set_text(row_labels[7], xiao147_ui_imu_enabled() ? "ON" : "OFF");
     lv_obj_clear_flag(accent_bar, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_width(accent_bar, (int)brightness * 276 / max_brightness);
+    lv_obj_set_width(accent_bar, (int)brightness * (portrait ? 132 : 276) / max_brightness);
 }
 
 static void draw_devices(void)
@@ -135,17 +149,56 @@ static void draw_devices(void)
         } else {
             snprintf(text, sizeof(text), "%s   %u%%", names[row], copy.battery[row - 1]);
         }
-        lv_obj_set_pos(row_labels[row * 2], 12, 30 + 34 * row);
-        lv_obj_set_pos(row_labels[row * 2 + 1], 250, 30 + 34 * row);
+        const bool portrait = xiao147_rotation_is_portrait();
+        lv_obj_set_pos(row_labels[row * 2], portrait ? 10 : 12,
+                       portrait ? 37 + 67 * row : 30 + 34 * row);
+        lv_obj_set_pos(row_labels[row * 2 + 1], portrait ? 10 : 250,
+                       portrait ? 60 + 67 * row : 30 + 34 * row);
+        lv_obj_set_width(row_labels[row * 2], portrait ? 152 : 230);
+        lv_obj_set_width(row_labels[row * 2 + 1], portrait ? 152 : 70);
         lv_label_set_text(row_labels[row * 2], text);
         /* ZMK's public split-central status does not expose live RSSI. */
         lv_label_set_text(row_labels[row * 2 + 1], row == 0 ? "USB/BLE" : "-- dBm");
     }
 }
 
+static void layout_status(bool portrait)
+{
+    lv_obj_t *screen = lv_scr_act();
+    /* The pinned OPERATOR layout creates these five children in this order. */
+    if (lv_obj_get_child_cnt(screen) < 5) { return; }
+    const int landscape_x[5] = {25, 10, 10, 11, 195};
+    const int landscape_y[5] = {8, 34, 104, 170, 105};
+    const int portrait_x[5] = {0, 0, 0, 11, 28};
+    const int portrait_y[5] = {7, 45, 120, 170, 150};
+    const int portrait_scale[5] = {185, 162, 160, 256, 256};
+    const int landscape_scale[5] = {256, 175, 205, 256, 256};
+    for (int i = 0; i < 5; i++) {
+        lv_obj_t *obj = lv_obj_get_child(screen, i);
+        lv_obj_set_pos(obj, portrait ? portrait_x[i] : landscape_x[i],
+                       portrait ? portrait_y[i] : landscape_y[i]);
+        lv_obj_set_style_transform_pivot_x(obj, 0, LV_PART_MAIN);
+        lv_obj_set_style_transform_pivot_y(obj, 0, LV_PART_MAIN);
+        lv_obj_set_style_transform_scale_x(obj,
+                     portrait ? portrait_scale[i] : landscape_scale[i], LV_PART_MAIN);
+        lv_obj_set_style_transform_scale_y(obj,
+                     portrait ? portrait_scale[i] : landscape_scale[i], LV_PART_MAIN);
+    }
+    xiao147_battery_rings_set_portrait(portrait);
+    lv_obj_set_pos(dongle_battery_label, portrait ? 50 : 242, portrait ? 218 : 91);
+}
+
 static void redraw(struct k_work *work)
 {
     if (panel == NULL) { return; }
+    /* The left button is the authoritative IMU-mode toggle. */
+    if (xiao147_ui_imu_enabled()) { rotation = ROTATION_PORTRAIT; }
+    else if (atomic_set(&restore_landscape, 0)) { rotation = ROTATION_LANDSCAPE; }
+    const bool portrait = rotation == ROTATION_PORTRAIT;
+    xiao147_rotation_set(portrait);
+    lv_obj_set_size(panel, portrait ? SCREEN_H : SCREEN_W,
+                    portrait ? SCREEN_W : SCREEN_H);
+    layout_status(portrait);
     enum xiao147_page page = atomic_get(&page_atomic);
     if (page == XIAO147_PAGE_STATUS) {
         lv_obj_add_flag(panel, LV_OBJ_FLAG_HIDDEN);
@@ -193,24 +246,30 @@ static void touch_handler(struct k_work *work)
             previous_touch_fingers = sample.fingers;
             continue;
         }
-        if (sample.fingers == 1 && sample.y >= 24 && sample.y <= 58) {
+        bool portrait = xiao147_rotation_is_portrait();
+        if (sample.fingers == 1 && sample.y >= (portrait ? 35 : 24) &&
+            sample.y <= (portrait ? 82 : 58)) {
             int x = sample.x;
             if (x < 20) { x = 20; }
-            if (x > 296) { x = 296; }
-            int value = (x - 20) * (usb_powered ? 100 : 50) / 276;
+            if (x > (portrait ? 152 : 296)) { x = portrait ? 152 : 296; }
+            int value = (x - 20) * (usb_powered ? 100 : 50) / (portrait ? 132 : 276);
             brightness = value;
             apply_brightness();
             redraw(NULL);
         } else if (sample.fingers == 0 && previous_touch_fingers == 1) {
             uint16_t y = last_touch.y;
             uint16_t x = last_touch.x;
-            if (y >= 58 && y < 86) {
-                rotation = rotation == ROTATION_AUTO ? ROTATION_LANDSCAPE : ROTATION_AUTO;
-            } else if (y >= 88 && y < 125) {
-                rotation = x < SCREEN_W / 2 ? ROTATION_LANDSCAPE : ROTATION_PORTRAIT;
-            } else if (y >= 128) {
-                imu_mouse_enabled = !imu_mouse_enabled;
-                if (imu_mouse_enabled) { rotation = ROTATION_PORTRAIT; }
+            if (y >= (portrait ? 94 : 58) && y < (portrait ? 132 : 86)) {
+                if (!xiao147_ui_imu_enabled()) {
+                    rotation = rotation == ROTATION_AUTO ? ROTATION_LANDSCAPE : ROTATION_AUTO;
+                }
+            } else if (y >= (portrait ? 135 : 88) && y < (portrait ? 212 : 125)) {
+                if (!xiao147_ui_imu_enabled()) {
+                    rotation = portrait ? (y < 172 ? ROTATION_LANDSCAPE : ROTATION_PORTRAIT) :
+                              (x < SCREEN_W / 2 ? ROTATION_LANDSCAPE : ROTATION_PORTRAIT);
+                }
+            } else if (y >= (portrait ? 215 : 128)) {
+                xiao147_ui_toggle_imu();
             }
             redraw(NULL);
         }
@@ -223,6 +282,7 @@ static void create_ui(struct k_work *work)
 {
     lv_obj_t *screen = lv_scr_act();
     if (screen == NULL) { return; }
+    xiao147_rotation_install();
 
     dongle_battery_label = make_label(screen, 242, 91, 74, "D --%", COLOR_GREEN);
     panel = lv_obj_create(screen);
@@ -278,6 +338,30 @@ enum xiao147_page xiao147_ui_page(void)
     return (enum xiao147_page)atomic_get(&page_atomic);
 }
 
+bool xiao147_ui_portrait(void)
+{
+    return xiao147_rotation_is_portrait();
+}
+
+bool xiao147_ui_imu_enabled(void)
+{
+    return atomic_get(&imu_mode) != 0;
+}
+
+void xiao147_ui_toggle_imu(void)
+{
+    atomic_val_t old;
+    do {
+        old = atomic_get(&imu_mode);
+    } while (!atomic_cas(&imu_mode, old, !old));
+    if (old != 0) { atomic_set(&restore_landscape, 1); }
+    last_activity_ms = k_uptime_get_32();
+    atomic_set(&sleeping, 0);
+    if (zmk_display_is_initialized()) {
+        k_work_submit_to_queue(zmk_display_work_q(), &redraw_work);
+    }
+}
+
 void xiao147_ui_next_page(void)
 {
     last_activity_ms = k_uptime_get_32();
@@ -321,6 +405,14 @@ static void menu_button_input(struct input_event *evt, void *user_data)
     }
 }
 INPUT_CALLBACK_DEFINE(DEVICE_DT_GET(DT_NODELABEL(xiao_touch_menu_button)), menu_button_input, NULL);
+
+static void imu_button_input(struct input_event *evt, void *user_data)
+{
+    if (evt->type == INPUT_EV_KEY && evt->code == INPUT_BTN_0 && evt->value == 1) {
+        xiao147_ui_toggle_imu();
+    }
+}
+INPUT_CALLBACK_DEFINE(DEVICE_DT_GET(DT_NODELABEL(xiao_touch_left_button)), imu_button_input, NULL);
 
 static int peripheral_event_listener(const zmk_event_t *eh)
 {

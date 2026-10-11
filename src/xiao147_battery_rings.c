@@ -16,6 +16,9 @@
 #include <zmk/events/battery_state_changed.h>
 #include <zmk/events/split_central_status_changed.h>
 
+#include "xiao147_battery_rings.h"
+#include "xiao147_rotation.h"
+
 LV_FONT_DECLARE(FG_Medium_20);
 
 #define RING_COUNT 3
@@ -23,6 +26,7 @@ LV_FONT_DECLARE(FG_Medium_20);
 #define RING_STEP 58
 
 static lv_obj_t *ring_obj[RING_COUNT];
+static lv_obj_t *ring_row;
 static lv_obj_t *ring_badge[RING_COUNT];
 static lv_obj_t *ring_value[RING_COUNT];
 static uint8_t battery_level[RING_COUNT];
@@ -69,7 +73,9 @@ static bool create_ring_row(void) {
     lv_obj_add_flag(lv_obj_get_child(screen, 3), LV_OBJ_FLAG_HIDDEN);
 
     lv_obj_t *row = lv_obj_create(screen);
-    lv_obj_set_pos(row, 10, 110);
+    ring_row = row;
+    lv_obj_set_pos(row, xiao147_rotation_is_portrait() ? -1 : 10,
+                   xiao147_rotation_is_portrait() ? 238 : 110);
     lv_obj_set_size(row, 174, 58);
     lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(row, 0, LV_PART_MAIN);
@@ -111,6 +117,12 @@ static bool create_ring_row(void) {
     }
 
     return true;
+}
+
+void xiao147_battery_rings_set_portrait(bool portrait) {
+    if (ring_row != NULL) {
+        lv_obj_set_pos(ring_row, portrait ? -1 : 10, portrait ? 238 : 110);
+    }
 }
 
 /*

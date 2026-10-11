@@ -1,0 +1,3 @@
+description: LSM6DS3 IMU on the Seeed XIAO 1.47-inch integrated display board
+compatible: "lism,lsm6ds3-air-mouse"
+include: i2c-device.yaml

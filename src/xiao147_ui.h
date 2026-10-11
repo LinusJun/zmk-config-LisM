@@ -12,5 +12,8 @@ enum xiao147_page {
 /* Safe to call from input and touch polling work queues. */
 enum xiao147_page xiao147_ui_page(void);
 void xiao147_ui_next_page(void);
+void xiao147_ui_toggle_imu(void);
+bool xiao147_ui_imu_enabled(void);
+bool xiao147_ui_portrait(void);
 void xiao147_ui_touch(uint8_t fingers, uint16_t x, uint16_t y);
 bool xiao147_ui_wake_on_touch(void);
