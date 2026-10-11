@@ -10,11 +10,9 @@ endif()
 # rotation swaps its dimensions and breaks both widgets and touch coordinates.
 # Only suppress that one Prospector source for this new dongle shield.
 if(CONFIG_LISM_XIAO147_TOUCH)
-  if(NOT DEFINED ZEPHYR_PROSPECTOR_ZMK_MODULE_DIR)
-    message(FATAL_ERROR "Prospector module path unavailable; cannot safely disable its display rotation")
-  endif()
+  get_filename_component(_west_workspace_root "${ZEPHYR_BASE}" DIRECTORY)
   set(_prospector_shield_dir
-      "${ZEPHYR_PROSPECTOR_ZMK_MODULE_DIR}/boards/shields/prospector_adapter")
+      "${_west_workspace_root}/prospector-zmk-module/boards/shields/prospector_adapter")
   set(_prospector_rotate_src
       "${_prospector_shield_dir}/src/display_rotate_init.c")
   if(NOT EXISTS "${_prospector_rotate_src}")
