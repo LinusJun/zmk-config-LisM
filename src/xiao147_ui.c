@@ -21,6 +21,7 @@
 #include "xiao147_ui.h"
 #include "xiao147_rotation.h"
 #include "xiao147_battery_rings.h"
+#include "xiao147_rssi.h"
 
 LV_FONT_DECLARE(FG_Medium_20);
 
@@ -200,6 +201,9 @@ static void draw_devices(void)
     k_mutex_lock(&peripheral_lock, K_FOREVER);
     copy = peripheral;
     k_mutex_unlock(&peripheral_lock);
+    int8_t signal_values[4];
+    bool signal_valid[4];
+    xiao147_rssi_snapshot(signal_values, signal_valid);
     static const char *const names[] = {"DONGLE", "LISM LEFT", "LISM RIGHT", "JOYSTICK"};
     static const char *const short_names[] = {"DONGLE", "LEFT", "RIGHT", "JOY"};
     bool portrait = xiao147_rotation_is_portrait();
@@ -215,8 +219,13 @@ static void draw_devices(void)
             known = true;
         }
         lv_label_set_text(device_names[row], portrait ? short_names[row] : names[row]);
-        /* Split-central status lacks RSSI, unlike the independent scanner reference. */
-        lv_label_set_text(device_signals[row], "--dBm");
+        char signal_text[12];
+        if (signal_valid[row] && (row == 0 || active)) {
+            snprintf(signal_text, sizeof(signal_text), "%ddBm", signal_values[row]);
+        } else {
+            snprintf(signal_text, sizeof(signal_text), "--dBm");
+        }
+        lv_label_set_text(device_signals[row], signal_text);
         lv_color_t battery_color = lv_color_hex(!known ? 0x485362 :
                                                level <= 20 ? 0xe46464 :
                                                level <= 50 ? 0xf5be57 : 0x63cf70);
@@ -306,6 +315,7 @@ static void redraw(struct k_work *work)
     lv_obj_set_width(title_label, portrait ? SCREEN_H : SCREEN_W);
     lv_obj_set_style_text_align(title_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     layout_status(portrait);
+    xiao147_rssi_set_active(page == XIAO147_PAGE_DEVICES && !atomic_get(&sleeping));
     if (page == XIAO147_PAGE_STATUS) {
         lv_obj_add_flag(panel, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(dongle_battery_bar, LV_OBJ_FLAG_HIDDEN);
@@ -638,6 +648,9 @@ static int peripheral_event_listener(const zmk_event_t *eh)
         if (!connection->connected) { peripheral.seen[connection->slot] = false; }
     }
     k_mutex_unlock(&peripheral_lock);
+    if (connection && !connection->connected) {
+        xiao147_rssi_invalidate_slot(connection->slot);
+    }
     if (zmk_display_is_initialized()) { k_work_submit_to_queue(zmk_display_work_q(), &redraw_work); }
     return ZMK_EV_EVENT_BUBBLE;
 }
