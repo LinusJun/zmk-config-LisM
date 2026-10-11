@@ -1,0 +1,78 @@
+/*
+ * Seeed XIAO 1.47" touch display (nRF52840 Plus) on the LisM ZMK dongle.
+ * Extends Prospector's shield, preserving the existing two-keyboard central.
+ * The JD9853A panel uses the ST7789-compatible init path as documented by Seeed.
+ */
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+
+&spi3 {
+    cs-gpios = <&xiao_d 2 GPIO_ACTIVE_LOW>; /* D2: LCD_CS */
+};
+
+&{/mipi_dbi} {
+    dc-gpios = <&xiao_d 3 GPIO_ACTIVE_HIGH>; /* D3: LCD_DC */
+    reset-gpios = <&gpio1 3 GPIO_ACTIVE_LOW>; /* D17: LCD/CTP reset */
+};
+
+&st7789 {
+    width = <320>;
+    height = <172>;
+    x-offset = <0>;
+    y-offset = <34>;
+    mdac = <0x28>; /* MV | BGR, landscape */
+    inversion-off;
+};
+
+&pwm1_default {
+    group1 {
+        psels = <NRF_PSEL(PWM_OUT0, 1, 5)>; /* D18: LCD_BL */
+        nordic,invert;
+    };
+};
+
+&pwm1_sleep {
+    group1 {
+        psels = <NRF_PSEL(PWM_OUT0, 1, 5)>;
+        low-power-enable;
+    };
+};
+
+&apds9960 {
+    status = "disabled"; /* D2 is LCD_CS on this display. */
+};
+
+&i2c1 {
+    status = "okay";
+    touch_sensor: touchpad@63 {
+        compatible = "lism,axs5106l-touchpad";
+        reg = <0x63>;
+        status = "okay";
+    };
+};
+
+/ {
+    xiao_touch_buttons: xiao_touch_buttons {
+        compatible = "gpio-keys";
+        debounce-interval-ms = <15>;
+
+        button_left {
+            gpios = <&gpio1 7 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; /* D19/USR1 */
+            zephyr,code = <INPUT_BTN_0>;
+        };
+
+        button_right {
+            gpios = <&gpio0 10 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; /* D15/USR2 */
+            zephyr,code = <INPUT_BTN_1>;
+        };
+    };
+
+    xiao_touch_listener: xiao_touch_listener {
+        compatible = "zmk,input-listener";
+        device = <&touch_sensor>;
+    };
+
+    xiao_touch_buttons_listener: xiao_touch_buttons_listener {
+        compatible = "zmk,input-listener";
+        device = <&xiao_touch_buttons>;
+    };
+};
