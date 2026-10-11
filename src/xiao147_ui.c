@@ -71,9 +71,9 @@ static lv_obj_t *brightness_value;
 static lv_obj_t *devices_group;
 static lv_obj_t *device_cards[4];
 static lv_obj_t *device_names[4];
-static lv_obj_t *device_batteries[4];
 static lv_obj_t *device_signals[4];
-static lv_obj_t *device_signal_bars[4];
+static lv_obj_t *device_battery_frames[4];
+static lv_obj_t *device_battery_fills[4];
 static lv_obj_t *dongle_battery_bar;
 static lv_obj_t *dongle_battery_label;
 static struct k_work init_work;
@@ -174,15 +174,21 @@ static void layout_devices(bool portrait)
                     portrait ? SCREEN_W : SCREEN_H);
     for (int row = 0; row < 4; row++) {
         lv_obj_set_pos(device_cards[row], portrait ? 9 : 10,
-                       portrait ? 36 + row * 68 : 25 + row * 35);
-        lv_obj_set_size(device_cards[row], portrait ? 154 : 300, portrait ? 60 : 31);
-        lv_obj_set_pos(device_signal_bars[row], 7, portrait ? 14 : 12);
-        lv_obj_set_pos(device_signals[row], 40, portrait ? 9 : 7);
-        lv_obj_set_width(device_signals[row], portrait ? 65 : 70);
-        lv_obj_set_pos(device_names[row], portrait ? 7 : 110, portrait ? 33 : 7);
-        lv_obj_set_width(device_names[row], portrait ? 105 : 120);
-        lv_obj_set_pos(device_batteries[row], portrait ? 112 : 244, portrait ? 33 : 7);
-        lv_obj_set_width(device_batteries[row], portrait ? 39 : 50);
+                       portrait ? 44 + row * 58 : 25 + row * 35);
+        lv_obj_set_size(device_cards[row], portrait ? 154 : 300, portrait ? 36 : 31);
+        lv_obj_set_pos(device_battery_frames[row], portrait ? 6 : 8,
+                       portrait ? 12 : 10);
+        lv_obj_set_pos(device_signals[row], portrait ? 38 : 49,
+                       portrait ? 9 : 7);
+        lv_obj_set_width(device_signals[row], portrait ? 52 : 65);
+        lv_obj_set_pos(device_names[row], portrait ? 94 : 125,
+                       portrait ? 9 : 7);
+        lv_obj_set_width(device_names[row], portrait ? 54 : 165);
+        lv_obj_set_style_text_font(device_signals[row], &lv_font_montserrat_12,
+                                   LV_PART_MAIN);
+        lv_obj_set_style_text_font(device_names[row],
+                                   portrait ? &lv_font_montserrat_12 :
+                                              &lv_font_montserrat_14, LV_PART_MAIN);
     }
 }
 
@@ -195,24 +201,33 @@ static void draw_devices(void)
     copy = peripheral;
     k_mutex_unlock(&peripheral_lock);
     static const char *const names[] = {"DONGLE", "LISM LEFT", "LISM RIGHT", "JOYSTICK"};
+    static const char *const short_names[] = {"DONGLE", "LEFT", "RIGHT", "JOY"};
+    bool portrait = xiao147_rotation_is_portrait();
     for (int row = 0; row < 4; row++) {
-        char battery_text[8];
         bool active = row == 0 || copy.connected[row - 1];
+        uint8_t level = 0;
+        bool known = false;
         if (row == 0) {
-            snprintf(battery_text, sizeof(battery_text), "%u%%", zmk_battery_state_of_charge());
-        } else if (!active) {
-            snprintf(battery_text, sizeof(battery_text), "OFF");
-        } else if (!copy.seen[row - 1]) {
-            snprintf(battery_text, sizeof(battery_text), "--%%");
-        } else {
-            snprintf(battery_text, sizeof(battery_text), "%u%%", copy.battery[row - 1]);
+            level = zmk_battery_state_of_charge();
+            known = true;
+        } else if (active && copy.seen[row - 1]) {
+            level = copy.battery[row - 1];
+            known = true;
         }
-        lv_label_set_text(device_names[row], names[row]);
-        lv_label_set_text(device_batteries[row], battery_text);
+        lv_label_set_text(device_names[row], portrait ? short_names[row] : names[row]);
         /* Split-central status lacks RSSI, unlike the independent scanner reference. */
-        lv_label_set_text(device_signals[row], row == 0 ? "USB/BLE" : "--dBm");
-        lv_obj_set_style_bg_color(device_signal_bars[row],
-                                  lv_color_hex(0x485362), LV_PART_MAIN);
+        lv_label_set_text(device_signals[row], "--dBm");
+        lv_color_t battery_color = lv_color_hex(!known ? 0x485362 :
+                                               level <= 20 ? 0xe46464 :
+                                               level <= 50 ? 0xf5be57 : 0x63cf70);
+        lv_obj_set_style_bg_color(device_battery_fills[row], battery_color, LV_PART_MAIN);
+        lv_obj_set_width(device_battery_fills[row], known ? 2 + level * 18 / 100 : 0);
+        lv_obj_set_style_border_color(device_battery_frames[row],
+                                      known ? battery_color : lv_color_hex(0x485362),
+                                      LV_PART_MAIN);
+        lv_obj_set_style_text_color(device_names[row],
+                                    active ? lv_color_hex(COLOR_TEXT) :
+                                             lv_color_hex(COLOR_MUTED), LV_PART_MAIN);
     }
 }
 
@@ -466,15 +481,22 @@ static void create_ui(struct k_work *work)
         lv_obj_set_style_radius(device_cards[i], 6, LV_PART_MAIN);
         lv_obj_set_style_pad_all(device_cards[i], 0, LV_PART_MAIN);
         lv_obj_clear_flag(device_cards[i], LV_OBJ_FLAG_SCROLLABLE);
-        device_signal_bars[i] = lv_obj_create(device_cards[i]);
-        lv_obj_set_size(device_signal_bars[i], 26, 7);
-        lv_obj_set_style_border_width(device_signal_bars[i], 0, LV_PART_MAIN);
-        lv_obj_set_style_radius(device_signal_bars[i], 2, LV_PART_MAIN);
-        lv_obj_set_style_bg_opa(device_signal_bars[i], LV_OPA_COVER, LV_PART_MAIN);
-        lv_obj_set_style_pad_all(device_signal_bars[i], 0, LV_PART_MAIN);
-        device_signals[i] = make_label(device_cards[i], 40, 7, 70, "--dBm", COLOR_MUTED);
-        device_names[i] = make_label(device_cards[i], 110, 7, 120, "", COLOR_TEXT);
-        device_batteries[i] = make_label(device_cards[i], 244, 7, 50, "", COLOR_ACCENT);
+        device_battery_frames[i] = lv_obj_create(device_cards[i]);
+        lv_obj_set_size(device_battery_frames[i], 27, 12);
+        lv_obj_set_style_bg_opa(device_battery_frames[i], LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_border_width(device_battery_frames[i], 1, LV_PART_MAIN);
+        lv_obj_set_style_radius(device_battery_frames[i], 2, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(device_battery_frames[i], 0, LV_PART_MAIN);
+        lv_obj_clear_flag(device_battery_frames[i], LV_OBJ_FLAG_SCROLLABLE);
+        device_battery_fills[i] = lv_obj_create(device_battery_frames[i]);
+        lv_obj_set_pos(device_battery_fills[i], 2, 2);
+        lv_obj_set_size(device_battery_fills[i], 0, 6);
+        lv_obj_set_style_border_width(device_battery_fills[i], 0, LV_PART_MAIN);
+        lv_obj_set_style_radius(device_battery_fills[i], 1, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(device_battery_fills[i], LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(device_battery_fills[i], 0, LV_PART_MAIN);
+        device_signals[i] = make_label(device_cards[i], 49, 7, 65, "--dBm", COLOR_MUTED);
+        device_names[i] = make_label(device_cards[i], 125, 7, 165, "", COLOR_TEXT);
     }
     last_activity_ms = k_uptime_get_32();
     usb_powered = zmk_usb_is_powered();
