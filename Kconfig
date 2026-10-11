@@ -6,3 +6,11 @@ config LISM_PROSPECTOR_LOCK_INDICATORS
     help
       Extends the OPERATOR modifier row with CAP and NUM host LED indicators,
       using one compact font, baseline, and spacing scheme for all six labels.
+
+config LISM_XIAO147_TOUCH
+    bool "Seeed 1.47-inch AXS5106L touchpad on LisM dongle"
+    depends on SHIELD_XIAO_PLUS_147_TOUCH
+    depends on INPUT && I2C
+    help
+      Converts AXS5106L touch motion into relative mouse movement.
+      The two board buttons provide separate left and right clicks.
