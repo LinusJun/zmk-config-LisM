@@ -101,50 +101,57 @@ static bool create_ring_row(void) {
     return true;
 }
 
+/*
+ * Each listener transports all three slots as one state snapshot. This
+ * prevents the display work queue from losing a quick second slot event and
+ * prevents a NULL initial read from overwriting an earlier connection.
+ */
 struct battery_ring_state {
-    uint8_t source;
-    uint8_t level;
+    uint8_t level[RING_COUNT];
 };
 
+static struct battery_ring_state latest_battery;
+
 static void battery_update_cb(struct battery_ring_state state) {
-    if (state.source >= RING_COUNT) {
-        return;
+    for (uint8_t slot = 0; slot < RING_COUNT; slot++) {
+        battery_level[slot] = state.level[slot];
+        render_ring(slot);
     }
-    battery_level[state.source] = state.level;
-    render_ring(state.source);
 }
 
 static struct battery_ring_state battery_get_state(const zmk_event_t *eh) {
-    if (eh == NULL) {
-        return (struct battery_ring_state){.source = 0, .level = 0};
+    if (eh != NULL) {
+        const struct zmk_peripheral_battery_state_changed *event =
+            as_zmk_peripheral_battery_state_changed(eh);
+        if (event != NULL && event->source < RING_COUNT) {
+            latest_battery.level[event->source] = event->state_of_charge;
+        }
     }
-    const struct zmk_peripheral_battery_state_changed *event =
-        as_zmk_peripheral_battery_state_changed(eh);
-    return (struct battery_ring_state){.source = event->source,
-                                       .level = event->state_of_charge};
+    return latest_battery;
 }
 
 struct connection_ring_state {
-    uint8_t slot;
-    bool connected;
+    bool connected[RING_COUNT];
 };
 
+static struct connection_ring_state latest_connection;
+
 static void connection_update_cb(struct connection_ring_state state) {
-    if (state.slot >= RING_COUNT) {
-        return;
+    for (uint8_t slot = 0; slot < RING_COUNT; slot++) {
+        connected[slot] = state.connected[slot];
+        render_ring(slot);
     }
-    connected[state.slot] = state.connected;
-    render_ring(state.slot);
 }
 
 static struct connection_ring_state connection_get_state(const zmk_event_t *eh) {
-    if (eh == NULL) {
-        return (struct connection_ring_state){.slot = 0, .connected = false};
+    if (eh != NULL) {
+        const struct zmk_split_central_status_changed *event =
+            as_zmk_split_central_status_changed(eh);
+        if (event != NULL && event->slot < RING_COUNT) {
+            latest_connection.connected[event->slot] = event->connected;
+        }
     }
-    const struct zmk_split_central_status_changed *event =
-        as_zmk_split_central_status_changed(eh);
-    return (struct connection_ring_state){.slot = event->slot,
-                                          .connected = event->connected};
+    return latest_connection;
 }
 
 ZMK_DISPLAY_WIDGET_LISTENER(widget_lism_three_ring_battery, struct battery_ring_state,
