@@ -16,9 +16,13 @@ LOG_MODULE_REGISTER(lism_air_mouse, LOG_LEVEL_INF);
 
 #define IMU_WHO_AM_I 0x0f
 #define IMU_CTRL2_G 0x11
+#define IMU_CTRL1_XL 0x10
 #define IMU_CTRL3_C 0x12
 #define IMU_OUTX_L_G 0x22
+#define IMU_OUTX_L_XL 0x28
 #define IMU_SAMPLE_MS 20
+#define ORIENTATION_STABLE_MS 600
+#define ORIENTATION_MIN_COUNTS 7500
 /* ±245 dps output is 114 LSB/dps. Keep the air mouse intentionally slow. */
 #define IMU_DEADBAND 250
 #define IMU_COUNTS_PER_CURSOR_STEP 650
@@ -28,6 +32,10 @@ struct imu_data {
     const struct device *dev;
     struct k_work_delayable poll_work;
     bool ready;
+    bool gyro_on;
+    bool auto_rotate_active;
+    bool orientation_candidate;
+    uint32_t orientation_since_ms;
 };
 
 static int imu_write(const struct i2c_dt_spec *bus, uint8_t reg, uint8_t value)
@@ -41,7 +49,40 @@ static void imu_poll(struct k_work *work)
     struct imu_data *data = CONTAINER_OF(k_work_delayable_from_work(work),
                                          struct imu_data, poll_work);
     const struct imu_config *cfg = data->dev->config;
-    if (data->ready && xiao147_ui_imu_enabled()) {
+    bool enabled = xiao147_ui_imu_enabled();
+    if (data->ready && enabled != data->gyro_on) {
+        if (imu_write(&cfg->bus, IMU_CTRL2_G, enabled ? 0x40 : 0x00) == 0) {
+            data->gyro_on = enabled;
+        }
+    }
+    if (data->ready && xiao147_ui_auto_rotate_enabled()) {
+        uint8_t reg = IMU_OUTX_L_XL;
+        uint8_t axes[6];
+        if (i2c_write_read_dt(&cfg->bus, &reg, 1, axes, sizeof(axes)) == 0) {
+            int16_t ax = (int16_t)((uint16_t)axes[1] << 8 | axes[0]);
+            int16_t ay = (int16_t)((uint16_t)axes[3] << 8 | axes[2]);
+            int ax_abs = ax < 0 ? -ax : ax;
+            int ay_abs = ay < 0 ? -ay : ay;
+            if (ax_abs > ORIENTATION_MIN_COUNTS || ay_abs > ORIENTATION_MIN_COUNTS) {
+                bool candidate = ay_abs > ax_abs;
+                if (!data->auto_rotate_active || candidate != data->orientation_candidate) {
+                    data->auto_rotate_active = true;
+                    data->orientation_candidate = candidate;
+                    data->orientation_since_ms = k_uptime_get_32();
+                } else if (k_uptime_get_32() - data->orientation_since_ms >=
+                           ORIENTATION_STABLE_MS) {
+                    xiao147_ui_set_auto_orientation(candidate);
+                }
+            } else {
+                data->auto_rotate_active = false;
+            }
+        } else {
+            data->auto_rotate_active = false;
+        }
+    } else {
+        data->auto_rotate_active = false;
+    }
+    if (data->ready && data->gyro_on && enabled) {
         uint8_t reg = IMU_OUTX_L_G;
         uint8_t axes[6];
         if (i2c_write_read_dt(&cfg->bus, &reg, 1, axes, sizeof(axes)) == 0) {
@@ -53,8 +94,13 @@ static void imu_poll(struct k_work *work)
                      gx / IMU_COUNTS_PER_CURSOR_STEP : 0;
             if (dx > 5) { dx = 5; } else if (dx < -5) { dx = -5; }
             if (dy > 5) { dy = 5; } else if (dy < -5) { dy = -5; }
-            if (dx) { input_report_rel(data->dev, INPUT_REL_X, dx, dy == 0, K_NO_WAIT); }
-            if (dy) { input_report_rel(data->dev, INPUT_REL_Y, dy, true, K_NO_WAIT); }
+            if (dx || dy) {
+                bool woke = xiao147_ui_wake_on_motion();
+                if (!woke && xiao147_ui_page() == XIAO147_PAGE_STATUS) {
+                    if (dx) { input_report_rel(data->dev, INPUT_REL_X, dx, dy == 0, K_NO_WAIT); }
+                    if (dy) { input_report_rel(data->dev, INPUT_REL_Y, dy, true, K_NO_WAIT); }
+                }
+            }
         }
     }
     k_work_reschedule(&data->poll_work, K_MSEC(IMU_SAMPLE_MS));
@@ -72,7 +118,8 @@ static int imu_init(const struct device *dev)
         return -ENODEV;
     }
     if (imu_write(&cfg->bus, IMU_CTRL3_C, 0x44) != 0 ||
-        imu_write(&cfg->bus, IMU_CTRL2_G, 0x40) != 0) {
+        imu_write(&cfg->bus, IMU_CTRL1_XL, 0x40) != 0 ||
+        imu_write(&cfg->bus, IMU_CTRL2_G, 0x00) != 0) {
         return -EIO;
     }
     data->dev = dev;

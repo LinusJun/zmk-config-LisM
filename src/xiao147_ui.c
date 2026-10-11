@@ -50,6 +50,8 @@ static atomic_t page_atomic = ATOMIC_INIT(XIAO147_PAGE_STATUS);
 static atomic_t sleeping = ATOMIC_INIT(0);
 static atomic_t imu_mode = ATOMIC_INIT(0);
 static atomic_t restore_landscape = ATOMIC_INIT(0);
+static atomic_t auto_rotate_mode = ATOMIC_INIT(0);
+static atomic_t auto_portrait = ATOMIC_INIT(0);
 static uint32_t last_activity_ms;
 static uint8_t brightness = 50;
 static uint8_t applied_brightness = 255;
@@ -70,6 +72,7 @@ static struct k_work_delayable init_retry_work;
 static struct k_work_delayable periodic_work;
 
 static void redraw(struct k_work *work);
+static void apply_brightness(void);
 
 static lv_obj_t *make_label(lv_obj_t *parent, int x, int y, int w, const char *text,
                             uint32_t color)
@@ -95,7 +98,7 @@ static void draw_settings(void)
 {
     clear_rows();
     const bool portrait = xiao147_rotation_is_portrait();
-    lv_obj_set_pos(accent_bar, portrait ? 20 : 20, portrait ? 68 : 50);
+    lv_obj_set_pos(accent_bar, 20, portrait ? 68 : 50);
     if (portrait) {
         const int row_x[8] = {10, 125, 10, 125, 10, 10, 10, 125};
         const int row_y[8] = {36, 36, 100, 100, 140, 177, 219, 219};
@@ -104,11 +107,12 @@ static void draw_settings(void)
             lv_obj_set_width(row_labels[i], i == 1 || i == 3 || i == 7 ? 45 : 155);
         }
     } else {
-    const int row_x[8] = {12, 266, 12, 270, 12, 173, 12, 270};
-    const int row_y[8] = {27, 27, 63, 63, 95, 95, 133, 133};
-    for (int i = 0; i < 8; i++) {
-        lv_obj_set_pos(row_labels[i], row_x[i], row_y[i]);
-    }
+        const int row_x[8] = {12, 266, 12, 270, 12, 173, 12, 270};
+        const int row_y[8] = {27, 27, 63, 63, 95, 95, 133, 133};
+        for (int i = 0; i < 8; i++) {
+            lv_obj_set_pos(row_labels[i], row_x[i], row_y[i]);
+            lv_obj_set_width(row_labels[i], i % 2 ? 50 : 200);
+        }
     }
     lv_label_set_text(title_label, "DISPLAY SETTINGS");
     char txt[48];
@@ -167,14 +171,15 @@ static void layout_status(bool portrait)
     lv_obj_t *screen = lv_scr_act();
     /* The pinned OPERATOR layout creates these five children in this order. */
     if (lv_obj_get_child_cnt(screen) < 5) { return; }
-    const int landscape_x[5] = {25, 10, 10, 11, 195};
-    const int landscape_y[5] = {8, 34, 104, 170, 105};
+    const int landscape_x[5] = {10, 30, 30, 10, 194};
+    const int landscape_y[5] = {3, 36, 101, 110, 110};
     const int portrait_x[5] = {0, 0, 0, 11, 28};
     const int portrait_y[5] = {7, 45, 120, 170, 150};
     const int portrait_scale[5] = {185, 162, 160, 256, 256};
-    const int landscape_scale[5] = {256, 175, 205, 256, 256};
+    const int landscape_scale[5] = {256, 256, 256, 256, 256};
     for (int i = 0; i < 5; i++) {
         lv_obj_t *obj = lv_obj_get_child(screen, i);
+        if (i == 0) { lv_obj_set_width(obj, portrait ? 230 : 300); }
         lv_obj_set_pos(obj, portrait ? portrait_x[i] : landscape_x[i],
                        portrait ? portrait_y[i] : landscape_y[i]);
         lv_obj_set_style_transform_pivot_x(obj, 0, LV_PART_MAIN);
@@ -194,12 +199,22 @@ static void redraw(struct k_work *work)
     /* The left button is the authoritative IMU-mode toggle. */
     if (xiao147_ui_imu_enabled()) { rotation = ROTATION_PORTRAIT; }
     else if (atomic_set(&restore_landscape, 0)) { rotation = ROTATION_LANDSCAPE; }
-    const bool portrait = rotation == ROTATION_PORTRAIT;
+    const bool portrait = rotation == ROTATION_PORTRAIT ||
+                          (rotation == ROTATION_AUTO && atomic_get(&auto_portrait));
+    enum xiao147_page page = atomic_get(&page_atomic);
+    static enum xiao147_page drawn_page = XIAO147_PAGE_STATUS;
+    static bool drawn_portrait;
+    if (page != drawn_page || portrait != drawn_portrait) {
+        k_msgq_purge(&touch_queue);
+        previous_touch_fingers = 0;
+        last_touch = (struct touch_sample){0};
+        drawn_page = page;
+        drawn_portrait = portrait;
+    }
     xiao147_rotation_set(portrait);
     lv_obj_set_size(panel, portrait ? SCREEN_H : SCREEN_W,
                     portrait ? SCREEN_W : SCREEN_H);
     layout_status(portrait);
-    enum xiao147_page page = atomic_get(&page_atomic);
     if (page == XIAO147_PAGE_STATUS) {
         lv_obj_add_flag(panel, LV_OBJ_FLAG_HIDDEN);
     } else {
@@ -210,6 +225,7 @@ static void redraw(struct k_work *work)
     char text[16];
     snprintf(text, sizeof(text), "D %u%%", zmk_battery_state_of_charge());
     lv_label_set_text(dongle_battery_label, text);
+    apply_brightness();
 }
 
 static void apply_brightness(void)
@@ -229,6 +245,7 @@ static void periodic(struct k_work *work)
         usb_powered = powered;
         brightness = powered ? 100 : 50;
         applied_brightness = 255;
+        if (powered) { atomic_set(&sleeping, 0); }
     }
     if (!powered && k_uptime_get_32() - last_activity_ms >= OFF_AFTER_MS) {
         atomic_set(&sleeping, 1);
@@ -253,7 +270,7 @@ static void touch_handler(struct k_work *work)
             if (x < 20) { x = 20; }
             if (x > (portrait ? 152 : 296)) { x = portrait ? 152 : 296; }
             int value = (x - 20) * (usb_powered ? 100 : 50) / (portrait ? 132 : 276);
-            brightness = value;
+            brightness = value < 1 ? 1 : value;
             apply_brightness();
             redraw(NULL);
         } else if (sample.fingers == 0 && previous_touch_fingers == 1) {
@@ -262,11 +279,13 @@ static void touch_handler(struct k_work *work)
             if (y >= (portrait ? 94 : 58) && y < (portrait ? 132 : 86)) {
                 if (!xiao147_ui_imu_enabled()) {
                     rotation = rotation == ROTATION_AUTO ? ROTATION_LANDSCAPE : ROTATION_AUTO;
+                    atomic_set(&auto_rotate_mode, rotation == ROTATION_AUTO);
                 }
             } else if (y >= (portrait ? 135 : 88) && y < (portrait ? 212 : 125)) {
                 if (!xiao147_ui_imu_enabled()) {
                     rotation = portrait ? (y < 172 ? ROTATION_LANDSCAPE : ROTATION_PORTRAIT) :
                               (x < SCREEN_W / 2 ? ROTATION_LANDSCAPE : ROTATION_PORTRAIT);
+                    atomic_set(&auto_rotate_mode, 0);
                 }
             } else if (y >= (portrait ? 215 : 128)) {
                 xiao147_ui_toggle_imu();
@@ -348,12 +367,26 @@ bool xiao147_ui_imu_enabled(void)
     return atomic_get(&imu_mode) != 0;
 }
 
+bool xiao147_ui_auto_rotate_enabled(void)
+{
+    return atomic_get(&auto_rotate_mode) != 0;
+}
+
+void xiao147_ui_set_auto_orientation(bool portrait)
+{
+    if (atomic_set(&auto_portrait, portrait) != portrait &&
+        zmk_display_is_initialized()) {
+        k_work_submit_to_queue(zmk_display_work_q(), &redraw_work);
+    }
+}
+
 void xiao147_ui_toggle_imu(void)
 {
     atomic_val_t old;
     do {
         old = atomic_get(&imu_mode);
     } while (!atomic_cas(&imu_mode, old, !old));
+    atomic_set(&auto_rotate_mode, 0);
     if (old != 0) { atomic_set(&restore_landscape, 1); }
     last_activity_ms = k_uptime_get_32();
     atomic_set(&sleeping, 0);
@@ -382,6 +415,18 @@ bool xiao147_ui_wake_on_touch(void)
     last_activity_ms = k_uptime_get_32();
     if (atomic_set(&sleeping, 0)) {
         if (zmk_display_is_initialized()) { k_work_submit_to_queue(zmk_display_work_q(), &redraw_work); }
+        return true;
+    }
+    return false;
+}
+
+bool xiao147_ui_wake_on_motion(void)
+{
+    last_activity_ms = k_uptime_get_32();
+    if (atomic_set(&sleeping, 0)) {
+        if (zmk_display_is_initialized()) {
+            k_work_submit_to_queue(zmk_display_work_q(), &redraw_work);
+        }
         return true;
     }
     return false;

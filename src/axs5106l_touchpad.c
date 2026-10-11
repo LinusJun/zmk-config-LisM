@@ -135,7 +135,9 @@ static void axs_poll(struct k_work *work)
     }
 
     if (fingers == 0) {
-        if (page != XIAO147_PAGE_STATUS) { xiao147_ui_touch(0, 0, 0); }
+        if (page != XIAO147_PAGE_STATUS && !data->swallow_until_release) {
+            xiao147_ui_touch(0, 0, 0);
+        }
         end_contact(data, page == XIAO147_PAGE_STATUS);
         goto next;
     }

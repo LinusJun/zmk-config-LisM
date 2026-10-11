@@ -12,6 +12,6 @@ config LISM_XIAO147_TOUCH
     depends on SHIELD_XIAO_PLUS_147_TOUCH
     depends on INPUT && I2C
     help
-      Converts AXS5106L single-touch motion into pointer movement and
-      two-touch gestures into right click and natural-direction scrolling.
-      USR1 is left click; USR2 cycles the display pages.
+      Converts AXS5106L touch motion into pointer movement and two-touch
+      gestures into right click and natural-direction scrolling. USR1 toggles
+      LSM6DS3 air-mouse mode and portrait/landscape display. USR2 cycles pages.
