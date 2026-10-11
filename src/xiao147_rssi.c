@@ -119,12 +119,15 @@ static void collect_split_connection(struct bt_conn *conn, void *context)
 
 static bool host_is_selected_connection(struct bt_conn *host, int profile)
 {
+    const bt_addr_le_t *peer = bt_conn_get_dst(host);
+    if (!peer || zmk_ble_profile_index(peer) != profile) { return false; }
     struct zmk_endpoint_instance selected = zmk_endpoint_get_selected();
     if (selected.transport != ZMK_TRANSPORT_BLE ||
         selected.ble.profile_index != profile ||
         zmk_ble_active_profile_index() != profile) { return false; }
     struct bt_conn *current = zmk_ble_active_profile_conn();
-    bool same = current == host;
+    bool same = current == host &&
+                zmk_ble_profile_index(bt_conn_get_dst(current)) == profile;
     if (current) { bt_conn_unref(current); }
     return same;
 }
