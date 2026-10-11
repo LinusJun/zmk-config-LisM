@@ -59,13 +59,17 @@ static lv_obj_t *get_operator_modifier_row(lv_obj_t *screen) {
     lv_obj_set_size(modifiers, 300, 24);
 
     lv_obj_t *wpm = lv_obj_get_child(screen, 1);
-    lv_obj_set_pos(wpm, 30, 31);
-    lv_obj_set_size(wpm, 260, 66);
-    /* WPM bars and peak indicator precede its final two text labels. */
+    /*
+     * Keep the live WPM animation but shorten its vertical bars. This leaves
+     * room for the six status labels and the bottom battery/output widgets.
+     * The peak indicator is part of the same child range as the bars.
+     */
+    lv_obj_set_pos(wpm, 30, 36);
+    lv_obj_set_size(wpm, 260, 52);
     uint32_t wpm_children = lv_obj_get_child_cnt(wpm);
     if (wpm_children >= 3) {
         for (uint32_t i = 0; i < wpm_children - 2; i++) {
-            lv_obj_set_height(lv_obj_get_child(wpm, i), 66);
+            lv_obj_set_height(lv_obj_get_child(wpm, i), 44);
         }
     }
 
