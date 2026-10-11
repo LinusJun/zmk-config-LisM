@@ -22,15 +22,16 @@
 #include "xiao147_rotation.h"
 #include "xiao147_battery_rings.h"
 
+LV_FONT_DECLARE(FG_Medium_20);
+
 #define SCREEN_W 320
 #define SCREEN_H 172
 #define COLOR_BG 0x10151e
-#define COLOR_CARD 0x202a38
+#define COLOR_CARD 0x1a2432
 #define COLOR_TEXT 0xe4ebf6
 #define COLOR_MUTED 0x8295ae
 #define COLOR_ACCENT 0x39bdec
 #define COLOR_GREEN 0x78c79c
-#define DIM_AFTER_MS 60000
 #define OFF_AFTER_MS 300000
 
 #define DISP_BL DT_NODE_CHILD_IDX(DT_NODELABEL(disp_bl))
@@ -62,8 +63,18 @@ static struct touch_sample last_touch;
 
 static lv_obj_t *panel;
 static lv_obj_t *title_label;
-static lv_obj_t *row_labels[8];
-static lv_obj_t *accent_bar;
+static lv_obj_t *settings_group;
+static lv_obj_t *settings_labels[5];
+static lv_obj_t *settings_switches[4];
+static lv_obj_t *settings_slider;
+static lv_obj_t *brightness_value;
+static lv_obj_t *devices_group;
+static lv_obj_t *device_cards[4];
+static lv_obj_t *device_names[4];
+static lv_obj_t *device_batteries[4];
+static lv_obj_t *device_signals[4];
+static lv_obj_t *device_signal_bars[4];
+static lv_obj_t *dongle_battery_bar;
 static lv_obj_t *dongle_battery_label;
 static struct k_work init_work;
 static struct k_work redraw_work;
@@ -86,83 +97,122 @@ static lv_obj_t *make_label(lv_obj_t *parent, int x, int y, int w, const char *t
     return obj;
 }
 
-static void clear_rows(void)
+static void set_switch(lv_obj_t *sw, bool enabled)
 {
-    for (int i = 0; i < 8; i++) {
-        lv_label_set_text(row_labels[i], "");
+    if (enabled) { lv_obj_add_state(sw, LV_STATE_CHECKED); }
+    else { lv_obj_remove_state(sw, LV_STATE_CHECKED); }
+}
+
+static void style_switch(lv_obj_t *sw)
+{
+    lv_obj_set_size(sw, 43, 23);
+    lv_obj_set_style_radius(sw, 12, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(sw, lv_color_hex(0x3a3a3c), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(sw, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_radius(sw, 12, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(sw, lv_color_hex(0x34c759), LV_PART_INDICATOR | LV_STATE_CHECKED);
+    lv_obj_set_style_bg_opa(sw, LV_OPA_COVER, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(sw, LV_RADIUS_CIRCLE, LV_PART_KNOB);
+    lv_obj_set_style_bg_color(sw, lv_color_hex(0xffffff), LV_PART_KNOB);
+    lv_obj_set_style_bg_opa(sw, LV_OPA_COVER, LV_PART_KNOB);
+    lv_obj_set_style_pad_all(sw, -2, LV_PART_KNOB);
+    lv_obj_set_style_border_width(sw, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(sw, LV_OBJ_FLAG_CLICKABLE);
+}
+
+static void layout_settings(bool portrait)
+{
+    lv_obj_set_size(settings_group, portrait ? SCREEN_H : SCREEN_W,
+                    portrait ? SCREEN_W : SCREEN_H);
+    lv_obj_set_pos(settings_labels[0], 12, portrait ? 38 : 25);
+    lv_obj_set_pos(brightness_value, portrait ? 126 : 266, portrait ? 38 : 25);
+    lv_obj_set_pos(settings_slider, 14, portrait ? 77 : 52);
+    lv_obj_set_size(settings_slider, portrait ? 142 : 287, 6);
+    if (portrait) {
+        const int row_y[4] = {110, 151, 192, 238};
+        for (int i = 0; i < 4; i++) {
+            lv_obj_set_pos(settings_labels[i + 1], 12, row_y[i] + 3);
+            lv_obj_set_pos(settings_switches[i], 116, row_y[i]);
+        }
+    } else {
+        const int label_x[4] = {12, 12, 166, 12};
+        const int label_y[4] = {72, 108, 108, 140};
+        const int switch_x[4] = {264, 107, 264, 264};
+        const int switch_y[4] = {68, 104, 104, 136};
+        for (int i = 0; i < 4; i++) {
+            lv_obj_set_pos(settings_labels[i + 1], label_x[i], label_y[i]);
+            lv_obj_set_pos(settings_switches[i], switch_x[i], switch_y[i]);
+        }
     }
-    lv_obj_add_flag(accent_bar, LV_OBJ_FLAG_HIDDEN);
 }
 
 static void draw_settings(void)
 {
-    clear_rows();
     const bool portrait = xiao147_rotation_is_portrait();
-    lv_obj_set_pos(accent_bar, 20, portrait ? 68 : 50);
-    if (portrait) {
-        const int row_x[8] = {10, 125, 10, 125, 10, 10, 10, 125};
-        const int row_y[8] = {36, 36, 100, 100, 140, 177, 219, 219};
-        for (int i = 0; i < 8; i++) {
-            lv_obj_set_pos(row_labels[i], row_x[i], row_y[i]);
-            lv_obj_set_width(row_labels[i], i == 1 || i == 3 || i == 7 ? 45 : 155);
-        }
-    } else {
-        const int row_x[8] = {12, 266, 12, 270, 12, 173, 12, 270};
-        const int row_y[8] = {27, 27, 63, 63, 95, 95, 133, 133};
-        for (int i = 0; i < 8; i++) {
-            lv_obj_set_pos(row_labels[i], row_x[i], row_y[i]);
-            lv_obj_set_width(row_labels[i], i % 2 ? 50 : 200);
-        }
+    layout_settings(portrait);
+    lv_label_set_text(title_label, "Display Settings");
+    char text[8];
+    uint8_t limit = usb_powered ? 100 : 50;
+    lv_slider_set_range(settings_slider, 1, limit);
+    lv_slider_set_value(settings_slider, brightness, LV_ANIM_OFF);
+    snprintf(text, sizeof(text), "%u%%", brightness);
+    lv_label_set_text(brightness_value, text);
+    set_switch(settings_switches[0], rotation == ROTATION_AUTO);
+    set_switch(settings_switches[1], rotation == ROTATION_LANDSCAPE && !xiao147_ui_imu_enabled());
+    set_switch(settings_switches[2], rotation == ROTATION_PORTRAIT);
+    set_switch(settings_switches[3], xiao147_ui_imu_enabled());
+    /* Six-axis mode owns portrait orientation, so its lock controls are read-only. */
+    for (int i = 0; i < 3; i++) {
+        lv_obj_set_style_opa(settings_switches[i], xiao147_ui_imu_enabled() ?
+                             LV_OPA_50 : LV_OPA_COVER, LV_PART_MAIN);
     }
-    lv_label_set_text(title_label, "DISPLAY SETTINGS");
-    char txt[48];
-    uint8_t max_brightness = usb_powered ? 100 : 50;
-    lv_label_set_text(row_labels[0], "Brightness");
-    snprintf(txt, sizeof(txt), "%u%%", brightness);
-    lv_label_set_text(row_labels[1], txt);
-    lv_label_set_text(row_labels[2], "Auto rotate");
-    lv_label_set_text(row_labels[3], rotation == ROTATION_AUTO ? "ON" : "OFF");
-    lv_label_set_text(row_labels[4], rotation == ROTATION_LANDSCAPE ? "LANDSCAPE  [ON]" :
-                      "LANDSCAPE");
-    lv_label_set_text(row_labels[5], rotation == ROTATION_PORTRAIT ? "PORTRAIT  [ON]" :
-                      "PORTRAIT");
-    lv_label_set_text(row_labels[6], "6-axis mouse");
-    lv_label_set_text(row_labels[7], xiao147_ui_imu_enabled() ? "ON" : "OFF");
-    lv_obj_clear_flag(accent_bar, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_width(accent_bar, (int)brightness * (portrait ? 132 : 276) / max_brightness);
+}
+
+static void layout_devices(bool portrait)
+{
+    lv_obj_set_size(devices_group, portrait ? SCREEN_H : SCREEN_W,
+                    portrait ? SCREEN_W : SCREEN_H);
+    for (int row = 0; row < 4; row++) {
+        lv_obj_set_pos(device_cards[row], portrait ? 9 : 10,
+                       portrait ? 36 + row * 68 : 25 + row * 35);
+        lv_obj_set_size(device_cards[row], portrait ? 154 : 300, portrait ? 60 : 31);
+        lv_obj_set_pos(device_signal_bars[row], 7, portrait ? 14 : 12);
+        lv_obj_set_pos(device_signals[row], 40, portrait ? 9 : 7);
+        lv_obj_set_width(device_signals[row], portrait ? 65 : 70);
+        lv_obj_set_pos(device_names[row], portrait ? 7 : 110, portrait ? 33 : 7);
+        lv_obj_set_width(device_names[row], portrait ? 105 : 120);
+        lv_obj_set_pos(device_batteries[row], portrait ? 112 : 244, portrait ? 33 : 7);
+        lv_obj_set_width(device_batteries[row], portrait ? 39 : 50);
+    }
 }
 
 static void draw_devices(void)
 {
-    clear_rows();
-    lv_label_set_text(title_label, "ACTIVE DEVICES");
+    layout_devices(xiao147_rotation_is_portrait());
+    lv_label_set_text(title_label, "Active Devices");
     struct peripheral_state copy;
     k_mutex_lock(&peripheral_lock, K_FOREVER);
     copy = peripheral;
     k_mutex_unlock(&peripheral_lock);
-    uint8_t dongle_battery = zmk_battery_state_of_charge();
-    const char *names[] = {"DONGLE", "LISM LEFT", "LISM RIGHT", "JOYSTICK"};
+    static const char *const names[] = {"DONGLE", "LISM LEFT", "LISM RIGHT", "JOYSTICK"};
     for (int row = 0; row < 4; row++) {
-        char text[40];
+        char battery_text[8];
+        bool active = row == 0 || copy.connected[row - 1];
         if (row == 0) {
-            snprintf(text, sizeof(text), "%s   %u%%", names[row], dongle_battery);
-        } else if (!copy.connected[row - 1]) {
-            snprintf(text, sizeof(text), "%s   OFF", names[row]);
+            snprintf(battery_text, sizeof(battery_text), "%u%%", zmk_battery_state_of_charge());
+        } else if (!active) {
+            snprintf(battery_text, sizeof(battery_text), "OFF");
         } else if (!copy.seen[row - 1]) {
-            snprintf(text, sizeof(text), "%s   --%%", names[row]);
+            snprintf(battery_text, sizeof(battery_text), "--%%");
         } else {
-            snprintf(text, sizeof(text), "%s   %u%%", names[row], copy.battery[row - 1]);
+            snprintf(battery_text, sizeof(battery_text), "%u%%", copy.battery[row - 1]);
         }
-        const bool portrait = xiao147_rotation_is_portrait();
-        lv_obj_set_pos(row_labels[row * 2], portrait ? 10 : 12,
-                       portrait ? 37 + 67 * row : 30 + 34 * row);
-        lv_obj_set_pos(row_labels[row * 2 + 1], portrait ? 10 : 250,
-                       portrait ? 60 + 67 * row : 30 + 34 * row);
-        lv_obj_set_width(row_labels[row * 2], portrait ? 152 : 230);
-        lv_obj_set_width(row_labels[row * 2 + 1], portrait ? 152 : 70);
-        lv_label_set_text(row_labels[row * 2], text);
-        /* ZMK's public split-central status does not expose live RSSI. */
-        lv_label_set_text(row_labels[row * 2 + 1], row == 0 ? "USB/BLE" : "-- dBm");
+        lv_label_set_text(device_names[row], names[row]);
+        lv_label_set_text(device_batteries[row], battery_text);
+        /* Split-central status lacks RSSI, unlike the independent scanner reference. */
+        lv_label_set_text(device_signals[row], row == 0 ? "USB/BLE" : "--dBm");
+        lv_obj_set_style_bg_color(device_signal_bars[row],
+                                  lv_color_hex(0x485362), LV_PART_MAIN);
     }
 }
 
@@ -171,26 +221,49 @@ static void layout_status(bool portrait)
     lv_obj_t *screen = lv_scr_act();
     /* The pinned OPERATOR layout creates these five children in this order. */
     if (lv_obj_get_child_cnt(screen) < 5) { return; }
-    const int landscape_x[5] = {10, 30, 30, 10, 194};
-    const int landscape_y[5] = {3, 36, 101, 110, 110};
-    const int portrait_x[5] = {0, 0, 0, 11, 28};
-    const int portrait_y[5] = {7, 45, 120, 170, 150};
-    const int portrait_scale[5] = {185, 162, 160, 256, 256};
-    const int landscape_scale[5] = {256, 256, 256, 256, 256};
-    for (int i = 0; i < 5; i++) {
-        lv_obj_t *obj = lv_obj_get_child(screen, i);
-        if (i == 0) { lv_obj_set_width(obj, portrait ? 230 : 300); }
-        lv_obj_set_pos(obj, portrait ? portrait_x[i] : landscape_x[i],
-                       portrait ? portrait_y[i] : landscape_y[i]);
-        lv_obj_set_style_transform_pivot_x(obj, 0, LV_PART_MAIN);
-        lv_obj_set_style_transform_pivot_y(obj, 0, LV_PART_MAIN);
-        lv_obj_set_style_transform_scale_x(obj,
-                     portrait ? portrait_scale[i] : landscape_scale[i], LV_PART_MAIN);
-        lv_obj_set_style_transform_scale_y(obj,
-                     portrait ? portrait_scale[i] : landscape_scale[i], LV_PART_MAIN);
+    lv_obj_t *modifiers = lv_obj_get_child(screen, 0);
+    lv_obj_set_pos(modifiers, portrait ? 6 : 10, portrait ? 7 : 2);
+    lv_obj_set_size(modifiers, portrait ? 160 : 300, portrait ? 18 : 24);
+    for (uint32_t i = 0; i < lv_obj_get_child_cnt(modifiers); i++) {
+        lv_obj_t *child = lv_obj_get_child(modifiers, i);
+        if (i % 2 == 0) {
+            lv_obj_set_style_text_font(child,
+                   portrait ? &lv_font_montserrat_14 : &FG_Medium_20, LV_PART_MAIN);
+        } else {
+            lv_obj_set_height(child, portrait ? 16 : 24);
+        }
     }
+
+    lv_obj_t *wpm = lv_obj_get_child(screen, 1);
+    lv_obj_set_pos(wpm, portrait ? 4 : 30, portrait ? 39 : 28);
+    lv_obj_set_size(wpm, 260, portrait ? 90 : 55);
+    lv_obj_set_style_transform_pivot_x(wpm, 0, LV_PART_MAIN);
+    lv_obj_set_style_transform_pivot_y(wpm, 0, LV_PART_MAIN);
+    lv_obj_set_style_transform_scale_x(wpm, portrait ? 159 : 256, LV_PART_MAIN);
+    lv_obj_set_style_transform_scale_y(wpm, portrait ? 159 : 256, LV_PART_MAIN);
+
+    lv_obj_t *layers = lv_obj_get_child(screen, 2);
+    lv_obj_set_pos(layers, portrait ? 7 : 30, portrait ? 110 : 93);
+    lv_obj_set_style_transform_pivot_x(layers, 0, LV_PART_MAIN);
+    lv_obj_set_style_transform_pivot_y(layers, 0, LV_PART_MAIN);
+    lv_obj_set_style_transform_scale_x(layers, portrait ? 155 : 256, LV_PART_MAIN);
+    lv_obj_set_style_transform_scale_y(layers, portrait ? 155 : 256, LV_PART_MAIN);
+
+    /* The three-peripheral stock widget uses vertical bars; our matching
+     * compact arcs live in their own status-only object. */
+    lv_obj_add_flag(lv_obj_get_child(screen, 3), LV_OBJ_FLAG_HIDDEN);
+    lv_obj_t *output = lv_obj_get_child(screen, 4);
+    lv_obj_set_pos(output, portrait ? 28 : 202, portrait ? 139 : 105);
+    lv_obj_set_style_transform_pivot_x(output, 0, LV_PART_MAIN);
+    lv_obj_set_style_transform_pivot_y(output, 0, LV_PART_MAIN);
+    lv_obj_set_style_transform_scale_x(output, 256, LV_PART_MAIN);
+    lv_obj_set_style_transform_scale_y(output, 256, LV_PART_MAIN);
+
     xiao147_battery_rings_set_portrait(portrait);
-    lv_obj_set_pos(dongle_battery_label, portrait ? 50 : 242, portrait ? 218 : 91);
+    lv_obj_set_pos(dongle_battery_bar, portrait ? 16 : 10, portrait ? 285 : 158);
+    lv_obj_set_size(dongle_battery_bar, portrait ? 106 : 140, 6);
+    lv_obj_set_pos(dongle_battery_label, portrait ? 125 : 154, portrait ? 278 : 150);
+    lv_obj_set_width(dongle_battery_label, portrait ? 42 : 45);
 }
 
 static void redraw(struct k_work *work)
@@ -214,16 +287,34 @@ static void redraw(struct k_work *work)
     xiao147_rotation_set(portrait);
     lv_obj_set_size(panel, portrait ? SCREEN_H : SCREEN_W,
                     portrait ? SCREEN_W : SCREEN_H);
+    lv_obj_set_pos(title_label, 0, portrait ? 8 : 3);
+    lv_obj_set_width(title_label, portrait ? SCREEN_H : SCREEN_W);
+    lv_obj_set_style_text_align(title_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     layout_status(portrait);
     if (page == XIAO147_PAGE_STATUS) {
         lv_obj_add_flag(panel, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(dongle_battery_bar, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(dongle_battery_label, LV_OBJ_FLAG_HIDDEN);
+        xiao147_battery_rings_set_visible(true);
     } else {
+        lv_obj_add_flag(dongle_battery_bar, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(dongle_battery_label, LV_OBJ_FLAG_HIDDEN);
+        xiao147_battery_rings_set_visible(false);
         lv_obj_clear_flag(panel, LV_OBJ_FLAG_HIDDEN);
-        if (page == XIAO147_PAGE_SETTINGS) { draw_settings(); }
-        else { draw_devices(); }
+        if (page == XIAO147_PAGE_SETTINGS) {
+            lv_obj_clear_flag(settings_group, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(devices_group, LV_OBJ_FLAG_HIDDEN);
+            draw_settings();
+        } else {
+            lv_obj_add_flag(settings_group, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(devices_group, LV_OBJ_FLAG_HIDDEN);
+            draw_devices();
+        }
     }
-    char text[16];
-    snprintf(text, sizeof(text), "D %u%%", zmk_battery_state_of_charge());
+    uint8_t dongle_level = zmk_battery_state_of_charge();
+    lv_bar_set_value(dongle_battery_bar, dongle_level, LV_ANIM_OFF);
+    char text[8];
+    snprintf(text, sizeof(text), "%u%%", dongle_level);
     lv_label_set_text(dongle_battery_label, text);
     apply_brightness();
 }
@@ -264,30 +355,30 @@ static void touch_handler(struct k_work *work)
             continue;
         }
         bool portrait = xiao147_rotation_is_portrait();
-        if (sample.fingers == 1 && sample.y >= (portrait ? 35 : 24) &&
-            sample.y <= (portrait ? 82 : 58)) {
+        if (sample.fingers == 1 && sample.y >= (portrait ? 64 : 42) &&
+            sample.y <= (portrait ? 94 : 66)) {
             int x = sample.x;
-            if (x < 20) { x = 20; }
-            if (x > (portrait ? 152 : 296)) { x = portrait ? 152 : 296; }
-            int value = (x - 20) * (usb_powered ? 100 : 50) / (portrait ? 132 : 276);
+            if (x < 14) { x = 14; }
+            if (x > (portrait ? 156 : 301)) { x = portrait ? 156 : 301; }
+            int value = (x - 14) * (usb_powered ? 100 : 50) / (portrait ? 142 : 287);
             brightness = value < 1 ? 1 : value;
             apply_brightness();
             redraw(NULL);
         } else if (sample.fingers == 0 && previous_touch_fingers == 1) {
             uint16_t y = last_touch.y;
             uint16_t x = last_touch.x;
-            if (y >= (portrait ? 94 : 58) && y < (portrait ? 132 : 86)) {
+            if (y >= (portrait ? 103 : 65) && y < (portrait ? 141 : 98)) {
                 if (!xiao147_ui_imu_enabled()) {
                     rotation = rotation == ROTATION_AUTO ? ROTATION_LANDSCAPE : ROTATION_AUTO;
                     atomic_set(&auto_rotate_mode, rotation == ROTATION_AUTO);
                 }
-            } else if (y >= (portrait ? 135 : 88) && y < (portrait ? 212 : 125)) {
+            } else if (y >= (portrait ? 145 : 99) && y < (portrait ? 226 : 133)) {
                 if (!xiao147_ui_imu_enabled()) {
-                    rotation = portrait ? (y < 172 ? ROTATION_LANDSCAPE : ROTATION_PORTRAIT) :
+                    rotation = portrait ? (y < 185 ? ROTATION_LANDSCAPE : ROTATION_PORTRAIT) :
                               (x < SCREEN_W / 2 ? ROTATION_LANDSCAPE : ROTATION_PORTRAIT);
                     atomic_set(&auto_rotate_mode, 0);
                 }
-            } else if (y >= (portrait ? 215 : 128)) {
+            } else if (y >= (portrait ? 232 : 134) && y < (portrait ? 274 : 170)) {
                 xiao147_ui_toggle_imu();
             }
             redraw(NULL);
@@ -303,7 +394,18 @@ static void create_ui(struct k_work *work)
     if (screen == NULL) { return; }
     xiao147_rotation_install();
 
-    dongle_battery_label = make_label(screen, 242, 91, 74, "D --%", COLOR_GREEN);
+    dongle_battery_bar = lv_bar_create(screen);
+    lv_bar_set_range(dongle_battery_bar, 0, 100);
+    lv_obj_set_pos(dongle_battery_bar, 10, 158);
+    lv_obj_set_size(dongle_battery_bar, 140, 6);
+    lv_obj_set_style_radius(dongle_battery_bar, 3, LV_PART_MAIN);
+    lv_obj_set_style_radius(dongle_battery_bar, 3, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(dongle_battery_bar, lv_color_hex(0x282c30), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(dongle_battery_bar, lv_color_hex(0x54806c), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_opa(dongle_battery_bar, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(dongle_battery_bar, LV_OPA_COVER, LV_PART_INDICATOR);
+    dongle_battery_label = make_label(screen, 154, 150, 45, "--%", COLOR_GREEN);
+
     panel = lv_obj_create(screen);
     lv_obj_set_pos(panel, 0, 0);
     lv_obj_set_size(panel, SCREEN_W, SCREEN_H);
@@ -314,27 +416,66 @@ static void create_ui(struct k_work *work)
     lv_obj_set_style_pad_all(panel, 0, LV_PART_MAIN);
     lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
 
-    title_label = make_label(panel, 10, 4, 300, "", COLOR_TEXT);
-    for (int i = 0; i < 8; i++) {
-        int x, y;
-        if (i == 0) { x = 12; y = 27; }
-        else if (i == 1) { x = 266; y = 27; }
-        else if (i == 2) { x = 12; y = 63; }
-        else if (i == 3) { x = 270; y = 63; }
-        else if (i == 4) { x = 12; y = 95; }
-        else if (i == 5) { x = 173; y = 95; }
-        else if (i == 6) { x = 12; y = 133; }
-        else { x = 270; y = 133; }
-        row_labels[i] = make_label(panel, x, y, i % 2 ? 50 : 200, "", i % 2 ? COLOR_ACCENT : COLOR_TEXT);
+    title_label = make_label(panel, 10, 5, 300, "", COLOR_TEXT);
+    settings_group = lv_obj_create(panel);
+    devices_group = lv_obj_create(panel);
+    lv_obj_t *groups[] = {settings_group, devices_group};
+    for (int i = 0; i < 2; i++) {
+        lv_obj_set_pos(groups[i], 0, 0);
+        lv_obj_set_size(groups[i], SCREEN_W, SCREEN_H);
+        lv_obj_set_style_bg_opa(groups[i], LV_OPA_TRANSP, LV_PART_MAIN);
+        lv_obj_set_style_border_width(groups[i], 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(groups[i], 0, LV_PART_MAIN);
+        lv_obj_clear_flag(groups[i], LV_OBJ_FLAG_SCROLLABLE);
     }
-    accent_bar = lv_obj_create(panel);
-    lv_obj_set_pos(accent_bar, 20, 50);
-    lv_obj_set_size(accent_bar, 276, 5);
-    lv_obj_set_style_bg_color(accent_bar, lv_color_hex(COLOR_ACCENT), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(accent_bar, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(accent_bar, 0, LV_PART_MAIN);
-    lv_obj_set_style_radius(accent_bar, 2, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(accent_bar, 0, LV_PART_MAIN);
+    const char *const setting_text[] = {
+        "Brightness", "Auto rotate", "Landscape", "Portrait", "6-axis mouse"
+    };
+    for (int i = 0; i < 5; i++) {
+        settings_labels[i] = make_label(settings_group, 12, 25 + i * 28, 115,
+                                        setting_text[i], COLOR_TEXT);
+    }
+    brightness_value = make_label(settings_group, 266, 25, 45, "50%", COLOR_ACCENT);
+    settings_slider = lv_slider_create(settings_group);
+    lv_slider_set_range(settings_slider, 1, 100);
+    lv_obj_set_pos(settings_slider, 14, 52);
+    lv_obj_set_size(settings_slider, 287, 6);
+    lv_obj_set_style_bg_color(settings_slider, lv_color_hex(0x3a3a3c), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(settings_slider, lv_color_hex(0x007aff), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_opa(settings_slider, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(settings_slider, LV_OPA_COVER, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(settings_slider, 3, LV_PART_MAIN);
+    lv_obj_set_style_radius(settings_slider, 3, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(settings_slider, LV_RADIUS_CIRCLE, LV_PART_KNOB);
+    lv_obj_set_style_bg_color(settings_slider, lv_color_hex(0xffffff), LV_PART_KNOB);
+    lv_obj_set_style_bg_opa(settings_slider, LV_OPA_COVER, LV_PART_KNOB);
+    lv_obj_set_style_pad_all(settings_slider, 8, LV_PART_KNOB);
+    lv_obj_clear_flag(settings_slider, LV_OBJ_FLAG_CLICKABLE);
+    for (int i = 0; i < 4; i++) {
+        settings_switches[i] = lv_switch_create(settings_group);
+        style_switch(settings_switches[i]);
+    }
+    for (int i = 0; i < 4; i++) {
+        device_cards[i] = lv_obj_create(devices_group);
+        lv_obj_set_style_bg_color(device_cards[i],
+                     lv_color_hex(i == 0 ? 0x284361 : COLOR_CARD), LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(device_cards[i], LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_border_width(device_cards[i], 1, LV_PART_MAIN);
+        lv_obj_set_style_border_color(device_cards[i],
+                     lv_color_hex(i == 0 ? 0x4a90e2 : 0x303c4b), LV_PART_MAIN);
+        lv_obj_set_style_radius(device_cards[i], 6, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(device_cards[i], 0, LV_PART_MAIN);
+        lv_obj_clear_flag(device_cards[i], LV_OBJ_FLAG_SCROLLABLE);
+        device_signal_bars[i] = lv_obj_create(device_cards[i]);
+        lv_obj_set_size(device_signal_bars[i], 26, 7);
+        lv_obj_set_style_border_width(device_signal_bars[i], 0, LV_PART_MAIN);
+        lv_obj_set_style_radius(device_signal_bars[i], 2, LV_PART_MAIN);
+        lv_obj_set_style_bg_opa(device_signal_bars[i], LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(device_signal_bars[i], 0, LV_PART_MAIN);
+        device_signals[i] = make_label(device_cards[i], 40, 7, 70, "--dBm", COLOR_MUTED);
+        device_names[i] = make_label(device_cards[i], 110, 7, 120, "", COLOR_TEXT);
+        device_batteries[i] = make_label(device_cards[i], 244, 7, 50, "", COLOR_ACCENT);
+    }
     last_activity_ms = k_uptime_get_32();
     usb_powered = zmk_usb_is_powered();
     brightness = usb_powered ? 100 : 50;

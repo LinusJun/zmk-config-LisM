@@ -18,12 +18,13 @@
 
 #include "xiao147_battery_rings.h"
 #include "xiao147_rotation.h"
+#include "xiao147_ui.h"
 
 LV_FONT_DECLARE(FG_Medium_20);
 
 #define RING_COUNT 3
-#define RING_SIZE 52
-#define RING_STEP 58
+#define RING_SIZE 44
+#define RING_STEP 48
 
 static lv_obj_t *ring_obj[RING_COUNT];
 static lv_obj_t *ring_row;
@@ -74,9 +75,9 @@ static bool create_ring_row(void) {
 
     lv_obj_t *row = lv_obj_create(screen);
     ring_row = row;
-    lv_obj_set_pos(row, xiao147_rotation_is_portrait() ? -1 : 10,
-                   xiao147_rotation_is_portrait() ? 238 : 110);
-    lv_obj_set_size(row, 174, 58);
+    lv_obj_set_pos(row, xiao147_rotation_is_portrait() ? 16 : 10,
+                   xiao147_rotation_is_portrait() ? 224 : 105);
+    lv_obj_set_size(row, 140, 46);
     lv_obj_set_style_bg_opa(row, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(row, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(row, 0, LV_PART_MAIN);
@@ -84,7 +85,7 @@ static bool create_ring_row(void) {
     for (uint8_t slot = 0; slot < RING_COUNT; slot++) {
         lv_obj_t *ring = lv_arc_create(row);
         ring_obj[slot] = ring;
-        lv_obj_set_pos(ring, slot * RING_STEP, 2);
+        lv_obj_set_pos(ring, slot * RING_STEP, 1);
         lv_obj_set_size(ring, RING_SIZE, RING_SIZE);
         lv_arc_set_range(ring, 0, 100);
         lv_arc_set_bg_angles(ring, 270, 180);
@@ -95,34 +96,42 @@ static bool create_ring_row(void) {
         lv_obj_t *number = lv_label_create(ring);
         char slot_text[2] = {(char)('1' + slot), '\0'};
         lv_label_set_text(number, slot_text);
-        lv_obj_set_style_text_font(number, &FG_Medium_20, LV_PART_MAIN);
-        lv_obj_set_style_text_color(number, lv_color_hex(0x7b7d93), LV_PART_MAIN);
-        lv_obj_align(number, LV_ALIGN_CENTER, 0, 2);
+        lv_obj_set_style_text_font(number, &lv_font_montserrat_14, LV_PART_MAIN);
+        lv_obj_set_style_text_color(number, lv_color_hex(0xffffff), LV_PART_MAIN);
 
         lv_obj_t *badge = lv_obj_create(ring);
         ring_badge[slot] = badge;
         lv_obj_set_pos(badge, 0, 0);
-        lv_obj_set_size(badge, 34, 19);
+        lv_obj_set_size(badge, 19, 17);
         lv_obj_set_style_bg_opa(badge, LV_OPA_COVER, LV_PART_MAIN);
         lv_obj_set_style_border_width(badge, 0, LV_PART_MAIN);
         lv_obj_set_style_radius(badge, 2, LV_PART_MAIN);
         lv_obj_set_style_pad_all(badge, 0, LV_PART_MAIN);
         lv_obj_clear_flag(badge, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_t *value = lv_label_create(badge);
+        lv_obj_set_parent(number, badge);
+        lv_obj_align(number, LV_ALIGN_CENTER, 0, 0);
+        lv_obj_t *value = lv_label_create(ring);
         ring_value[slot] = value;
         lv_label_set_text(value, "--");
         lv_obj_set_style_text_font(value, &lv_font_montserrat_14, LV_PART_MAIN);
-        lv_obj_align(value, LV_ALIGN_CENTER, 0, 0);
+        lv_obj_align(value, LV_ALIGN_CENTER, 0, 5);
         render_ring(slot);
     }
 
+    xiao147_battery_rings_set_visible(xiao147_ui_page() == XIAO147_PAGE_STATUS);
     return true;
 }
 
 void xiao147_battery_rings_set_portrait(bool portrait) {
     if (ring_row != NULL) {
-        lv_obj_set_pos(ring_row, portrait ? -1 : 10, portrait ? 238 : 110);
+        lv_obj_set_pos(ring_row, portrait ? 16 : 10, portrait ? 224 : 105);
     }
+}
+
+void xiao147_battery_rings_set_visible(bool visible) {
+    if (ring_row == NULL) { return; }
+    if (visible) { lv_obj_clear_flag(ring_row, LV_OBJ_FLAG_HIDDEN); }
+    else { lv_obj_add_flag(ring_row, LV_OBJ_FLAG_HIDDEN); }
 }
 
 /*
@@ -177,6 +186,9 @@ static struct connection_ring_state connection_get_state(const zmk_event_t *eh) 
             as_zmk_split_central_status_changed(eh);
         if (event != NULL && event->slot < RING_COUNT) {
             latest_connection.connected[event->slot] = event->connected;
+            if (!event->connected) {
+                latest_battery.seen[event->slot] = false;
+            }
         }
     }
     return latest_connection;
