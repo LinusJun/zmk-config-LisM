@@ -30,6 +30,7 @@ struct rssi_sample {
     int8_t value[RSSI_SLOTS];
     bool valid[RSSI_SLOTS];
     uint32_t sampled_at;
+    atomic_val_t generation;
     int host_profile;
 };
 
@@ -49,6 +50,24 @@ static struct k_work_q rssi_queue;
 static atomic_t active = ATOMIC_INIT(0);
 static atomic_t generation = ATOMIC_INIT(0);
 static struct rssi_sample latest;
+
+/* Bluetooth callbacks must never wait for HCI. Bumping the generation makes
+ * any in-flight result unusable, even if it is published during a disconnect.
+ */
+static void connection_changed(struct bt_conn *conn, uint8_t status)
+{
+    atomic_inc(&generation);
+}
+
+static void connection_disconnected(struct bt_conn *conn, uint8_t reason)
+{
+    atomic_inc(&generation);
+}
+
+BT_CONN_CB_DEFINE(xiao147_rssi_connections) = {
+    .connected = connection_changed,
+    .disconnected = connection_disconnected,
+};
 
 static bool connection_is_ready(struct bt_conn *conn, uint8_t role)
 {
@@ -122,7 +141,8 @@ static void poll_rssi(struct k_work *work)
     }
 
     struct zmk_endpoint_instance endpoint = zmk_endpoint_get_selected();
-    if (endpoint.transport == ZMK_TRANSPORT_BLE) {
+    if (endpoint.transport == ZMK_TRANSPORT_BLE &&
+        zmk_ble_active_profile_index() == endpoint.ble.profile_index) {
         struct bt_conn *host = zmk_ble_active_profile_conn();
         if (host) {
             int8_t rssi;
@@ -131,6 +151,7 @@ static void poll_rssi(struct k_work *work)
                 read_connected_rssi(host, &rssi) == 0 &&
                 connection_is_ready(host, BT_CONN_ROLE_PERIPHERAL) &&
                 zmk_endpoint_get_selected().transport == ZMK_TRANSPORT_BLE &&
+                zmk_endpoint_get_selected().ble.profile_index == profile &&
                 zmk_ble_active_profile_index() == profile) {
                 next.value[0] = rssi;
                 next.valid[0] = true;
@@ -140,11 +161,12 @@ static void poll_rssi(struct k_work *work)
         }
     }
     next.sampled_at = k_uptime_get_32();
+    next.generation = poll_generation;
+    k_mutex_lock(&rssi_lock, K_FOREVER);
     if (atomic_get(&active) && poll_generation == atomic_get(&generation)) {
-        k_mutex_lock(&rssi_lock, K_FOREVER);
         latest = next;
-        k_mutex_unlock(&rssi_lock);
     }
+    k_mutex_unlock(&rssi_lock);
     if (atomic_get(&active)) {
         k_work_reschedule_for_queue(&rssi_queue, &rssi_work, RSSI_SAMPLE_PERIOD);
     }
@@ -152,10 +174,13 @@ static void poll_rssi(struct k_work *work)
 
 void xiao147_rssi_set_active(bool enabled)
 {
-    atomic_val_t previous = atomic_set(&active, enabled);
-    if (previous == enabled) { return; }
-    atomic_inc(&generation);
     k_mutex_lock(&rssi_lock, K_FOREVER);
+    atomic_val_t previous = atomic_set(&active, enabled);
+    if (previous == enabled) {
+        k_mutex_unlock(&rssi_lock);
+        return;
+    }
+    atomic_inc(&generation);
     memset(&latest, 0, sizeof(latest));
     latest.host_profile = -1;
     k_mutex_unlock(&rssi_lock);
@@ -166,8 +191,8 @@ void xiao147_rssi_set_active(bool enabled)
 void xiao147_rssi_invalidate_slot(uint8_t slot)
 {
     if (slot >= RSSI_SLOTS - 1) { return; }
-    atomic_inc(&generation);
     k_mutex_lock(&rssi_lock, K_FOREVER);
+    atomic_inc(&generation);
     latest.valid[slot + 1] = false;
     k_mutex_unlock(&rssi_lock);
 }
@@ -181,7 +206,11 @@ void xiao147_rssi_snapshot(int8_t values[RSSI_SLOTS], bool valid[RSSI_SLOTS])
         memset(valid, 0, sizeof(latest.valid));
     }
     int sampled_profile = latest.host_profile;
+    atomic_val_t sampled_generation = latest.generation;
     k_mutex_unlock(&rssi_lock);
+    if (sampled_generation != atomic_get(&generation)) {
+        memset(valid, 0, sizeof(latest.valid));
+    }
     struct zmk_endpoint_instance endpoint = zmk_endpoint_get_selected();
     if (endpoint.transport != ZMK_TRANSPORT_BLE ||
         endpoint.ble.profile_index != sampled_profile) { valid[0] = false; }
