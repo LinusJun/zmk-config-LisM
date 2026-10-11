@@ -49,6 +49,31 @@ static lv_obj_t *get_operator_modifier_row(lv_obj_t *screen) {
     lv_obj_set_pos(modifiers, 10, 8);
     lv_obj_set_size(modifiers, lv_obj_get_width(screen) - 20, 24);
 
+#if IS_ENABLED(CONFIG_LISM_XIAO147_TOUCH)
+    /*
+     * The stock OPERATOR layout assumes a taller 240x280 display. Reflow its
+     * five root widgets for the Seeed panel's 320x172 landscape geometry.
+     * Keep the same widgets and event subscriptions as the working dongle.
+     */
+    lv_obj_set_pos(modifiers, 10, 3);
+    lv_obj_set_size(modifiers, 300, 24);
+
+    lv_obj_t *wpm = lv_obj_get_child(screen, 1);
+    lv_obj_set_pos(wpm, 30, 31);
+    lv_obj_set_size(wpm, 260, 66);
+    /* WPM bars and peak indicator precede its final two text labels. */
+    uint32_t wpm_children = lv_obj_get_child_cnt(wpm);
+    if (wpm_children >= 3) {
+        for (uint32_t i = 0; i < wpm_children - 2; i++) {
+            lv_obj_set_height(lv_obj_get_child(wpm, i), 66);
+        }
+    }
+
+    lv_obj_set_pos(lv_obj_get_child(screen, 2), 30, 101); /* layer dots */
+    lv_obj_set_pos(lv_obj_get_child(screen, 3), 10, 110); /* left/right battery */
+    lv_obj_set_pos(lv_obj_get_child(screen, 4), 194, 110); /* USB/BLE output */
+#endif
+
     static const char *const modifier_labels[] = {"GUI", "ALT", "CTL", "SFT"};
 
     for (int label_index = 0; label_index < 4; label_index++) {
