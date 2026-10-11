@@ -2,13 +2,18 @@ name: Build ZMK firmware
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ main, codex/xiao-plus-147-touch-dongle ]
     paths:
       - '.github/workflows/build.yml'
       - 'boards/**'
       - 'config/**'
       - 'snippets/**'
       - 'build.yaml'
+      - 'src/**'
+      - 'dts/**'
+      - 'CMakeLists.txt'
+      - 'Kconfig'
+      - 'zephyr/module.yml'
   pull_request:
     paths:
       - '.github/workflows/build.yml'
