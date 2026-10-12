@@ -160,3 +160,6 @@
         events = <0>;
     };
 };
+
+/* The left module is digital now; the right trackball listener stays unchanged. */
+&trackball_split_listener { status = "disabled"; };

@@ -1,4 +1,7 @@
 #define ZMK_POINTING_DEFAULT_SCRL_VAL 200
+/* Independent stick rate; do not alter existing mouse/encoder scroll speed. */
+#define LISM_4WAY_SCROLL_SPEED 25
+#include <zephyr/dt-bindings/input/input-event-codes.h>
 
 #include <dt-bindings/zmk/mouse.h>
 #include <behaviors.dtsi>
@@ -30,7 +33,22 @@
         };
     };
 
+    stick_scroll_listener {
+        compatible = "zmk,input-listener";
+        device = <&stick_scroll>;
+    };
+
     behaviors {
+        stick_scroll: stick_scroll {
+            compatible = "zmk,behavior-input-two-axis";
+            #binding-cells = <1>;
+            x-input-code = <INPUT_REL_HWHEEL>;
+            y-input-code = <INPUT_REL_WHEEL>;
+            delay-ms = <0>;
+            time-to-max-speed-ms = <200>;
+            acceleration-exponent = <1>;
+        };
+
         encoder_msc: sensor_rotate_msc {
             compatible = "zmk,behavior-sensor-rotate-var";
             #sensor-binding-cells = <2>;
@@ -203,6 +221,7 @@
 &mt LEFT_GUI A  &mt LALT S  &mt LCTRL D    &mt LEFT_SHIFT F  &kp G                                      &kp H        &mt RSHIFT J    &mt RCTRL K  &mt RALT L  &mt RGUI SEMICOLON
 &kp Z           &kp X       &kp C          &kp V             &kp B                                      &kp N        &kp M           &kp COMMA    &kp DOT     &kp SLASH
 &lt 4 DELETE    &kp F1      &kp BACKSPACE  &kp LS(LG(N4))    &lt 2 SPACE  &lt 3 ESC    &lt 3 BACKSPACE  &lt 2 ENTER  &kp LS(LG(N4))  &kp F1       &kp F2      &lt 4 ESC
+&stick_scroll MOVE_Y(LISM_4WAY_SCROLL_SPEED)  &stick_scroll MOVE_X(LISM_4WAY_SCROLL_SPEED)  &stick_scroll MOVE_Y(-LISM_4WAY_SCROLL_SPEED)  &stick_scroll MOVE_X(-LISM_4WAY_SCROLL_SPEED)  /* Left 4waystick: Up Right Down Left. */
             >;
 
             sensor-bindings = <&encoder_msc SCRL_DOWN SCRL_UP>;
@@ -215,6 +234,7 @@
 &kp NUMBER_1  &kp A  &kp S  &kp D   &kp NUMBER_2                         &kp M      &mkp MB1  &mkp MB2  &mkp MB3        &kp T
 &kp NUMBER_3  &kp G  &kp X  &kp V   &kp NUMBER_4                         &kp Y      &kp T     &kp C     &kp Y           &kp H
 &kp Z         &kp Y  &kp C  &trans  &kp SPACE     &kp F    &kp LEFT_GUI  &kp ENTER  &trans    &trans    &kp LEFT_ALT    &kp LS(F2)
+&kp UP  &kp RIGHT  &kp DOWN  &kp LEFT  /* Left 4waystick: Up Right Down Left. */
             >;
         };
 
@@ -225,6 +245,7 @@
 &kp LS(LC(TAB))   &kp LEFT      &kp DOWN       &kp RIGHT      &kp LC(TAB)                                           &kp KP_PLUS      &kp KP_N4  &kp KP_N5  &kp KP_N6   &kp KP_MINUS
 &kp LEFT_SHIFT    &kp PAGE_UP   &kp C_AC_HOME  &kp PAGE_DOWN  &kp LC(LS(C_AC_BACK))                                 &kp KP_MULTIPLY  &kp KP_N1  &kp KP_N2  &kp KP_N3   &kp KP_DIVIDE
 &kp LCTRL         &kp LEFT_WIN  &kp LEFT_ALT   &trans         &kp K_BACK             &kp C_AC_BACK    &kp KP_ENTER  &kp KP_N0        &trans     &kp KP_N0  &kp KP_DOT  &kp KP_DOT
+&kp LEFT_SHIFT  &kp LEFT_GUI  &kp LEFT_CONTROL  &kp LEFT_ALT  /* Left 4waystick: Up Right Down Left. */
             >;
 
             #sensor-bindings = <&encoder_kp C_VOL_UP C_VOL_DN>;
@@ -237,16 +258,18 @@
 &kp NUMBER_1     &kp NUMBER_2  &kp NUMBER_3          &kp NUMBER_4           &kp NUMBER_5                      &kp NUMBER_6     &kp NUMBER_7      &kp NUMBER_8       &kp NUMBER_9      &kp NUMBER_0
 &kp TILDE        &kp GRAVE     &kp LEFT_PARENTHESIS  &kp RIGHT_PARENTHESIS  &kp LEFT_BRACE                    &kp RIGHT_BRACE  &kp LEFT_BRACKET  &kp RIGHT_BRACKET  &kp PIPE          &kp BACKSLASH
 &kp F7           &kp F5        &kp F4                &trans                 &kp MINUS       &trans    &trans  &kp UNDERSCORE   &trans            &kp F8             &kp F11           &kp F12
+&trans &trans &trans &trans  /* Left 4waystick: Up Right Down Left. */
             >;
         };
 
         layer_4 {
             display-name = "Device";
             bindings = <
-&to 1        &none           &none         &none         &bt BT_CLR                           &bt BT_SEL 0  &bt BT_SEL 1  &bt BT_SEL 2  &bt BT_SEL 3  &bt BT_SEL 4
+&to 1        &to 6           &none         &none         &bt BT_CLR                           &bt BT_SEL 0  &bt BT_SEL 1  &bt BT_SEL 2  &bt BT_SEL 3  &bt BT_SEL 4
 &to 5        &out OUT_BLE    &out OUT_USB  &out OUT_TOG  &trans                               &none         &out OUT_TOG  &out OUT_USB  &out OUT_BLE  &none
 &sys_reset   &none           &none         &none         &none                                &none         &none         &none         &none         &sys_reset
 &bootloader  &bt BT_CLR_ALL  &none         &none         &none       &none    &studio_unlock  &none         &none         &none         &none         &bootloader
+&trans &trans &trans &trans  /* Left 4waystick: Up Right Down Left. */
             >;
         };
 
@@ -257,17 +280,19 @@
 &kp R         &kp A  &kp S    &kp D   &kp NUMBER_2                  &trans  &trans  &trans  &trans        &kp T
 &kp NUMBER_3  &kp Z  &kp X    &kp G   &kp V                         &trans  &trans  &trans  &kp Y         &kp H
 &kp NUMBER_4  &kp M  &kp ESC  &trans  &kp SPACE     &kp F    &to 0  &trans  &trans  &trans  &kp LEFT_GUI  &kp C
+&kp LEFT_SHIFT  &kp LEFT_GUI  &kp LEFT_CONTROL  &kp LEFT_ALT  /* Left 4waystick: Up Right Down Left. */
             >;
         };
 
         layer_6 {
-            status = "reserved";
-            display-name = "Brank Layer";
+            status = "okay";
+            display-name = "StickWASD";
             bindings = <
-&trans  &trans  &trans  &trans  &trans                    &trans  &trans  &trans  &trans  &trans
+&trans  &to 0  &trans  &trans  &trans                    &trans  &trans  &trans  &trans  &trans
 &trans  &trans  &trans  &trans  &trans                    &trans  &trans  &trans  &trans  &trans
 &trans  &trans  &trans  &trans  &trans                    &trans  &trans  &trans  &trans  &trans
 &trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
+&kp W  &kp D  &kp S  &kp A  /* Left 4waystick: Up Right Down Left. */
             >;
         };
 
@@ -279,6 +304,7 @@
 &trans  &trans  &trans  &trans  &trans                    &trans  &trans  &trans  &trans  &trans
 &trans  &trans  &trans  &trans  &trans                    &trans  &trans  &trans  &trans  &trans
 &trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
+&trans &trans &trans &trans  /* Left 4waystick: Up Right Down Left. */
             >;
         };
     };

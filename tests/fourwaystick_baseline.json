@@ -1,0 +1,916 @@
+{
+  "base_sha": "34415d56632015e8844411a8b515759ec6eff797",
+  "old_count": 42,
+  "row": 5,
+  "layers": {
+    "default_layer": [
+      "&kp Q",
+      "&kp W",
+      "&kp E",
+      "&kp R",
+      "&kp T",
+      "&kp Y",
+      "&kp U",
+      "&kp I",
+      "&kp O",
+      "&kp P",
+      "&mt LEFT_GUI A",
+      "&mt LALT S",
+      "&mt LCTRL D",
+      "&mt LEFT_SHIFT F",
+      "&kp G",
+      "&kp H",
+      "&mt RSHIFT J",
+      "&mt RCTRL K",
+      "&mt RALT L",
+      "&mt RGUI SEMICOLON",
+      "&kp Z",
+      "&kp X",
+      "&kp C",
+      "&kp V",
+      "&kp B",
+      "&kp N",
+      "&kp M",
+      "&kp COMMA",
+      "&kp DOT",
+      "&kp SLASH",
+      "&lt 4 DELETE",
+      "&kp F1",
+      "&kp BACKSPACE",
+      "&kp LS(LG(N4))",
+      "&lt 2 SPACE",
+      "&lt 3 ESC",
+      "&lt 3 BACKSPACE",
+      "&lt 2 ENTER",
+      "&kp LS(LG(N4))",
+      "&kp F1",
+      "&kp F2",
+      "&lt 4 ESC"
+    ],
+    "layer_1": [
+      "&kp ESC",
+      "&kp Q",
+      "&kp W",
+      "&kp E",
+      "&kp R",
+      "&to 0",
+      "&mkp MB4",
+      "&mkp MB5",
+      "&kp LEFT_SHIFT",
+      "&kp I",
+      "&kp NUMBER_1",
+      "&kp A",
+      "&kp S",
+      "&kp D",
+      "&kp NUMBER_2",
+      "&kp M",
+      "&mkp MB1",
+      "&mkp MB2",
+      "&mkp MB3",
+      "&kp T",
+      "&kp NUMBER_3",
+      "&kp G",
+      "&kp X",
+      "&kp V",
+      "&kp NUMBER_4",
+      "&kp Y",
+      "&kp T",
+      "&kp C",
+      "&kp Y",
+      "&kp H",
+      "&kp Z",
+      "&kp Y",
+      "&kp C",
+      "&trans",
+      "&kp SPACE",
+      "&kp F",
+      "&kp LEFT_GUI",
+      "&kp ENTER",
+      "&trans",
+      "&trans",
+      "&kp LEFT_ALT",
+      "&kp LS(F2)"
+    ],
+    "layer_2": [
+      "&kp LG(LS(LEFT))",
+      "&kp HOME",
+      "&kp UP",
+      "&kp END",
+      "&kp LS(LG(RIGHT))",
+      "&kp KP_EQUAL",
+      "&kp KP_N7",
+      "&kp KP_N8",
+      "&kp KP_N9",
+      "&kp KP_NUMLOCK",
+      "&kp LS(LC(TAB))",
+      "&kp LEFT",
+      "&kp DOWN",
+      "&kp RIGHT",
+      "&kp LC(TAB)",
+      "&kp KP_PLUS",
+      "&kp KP_N4",
+      "&kp KP_N5",
+      "&kp KP_N6",
+      "&kp KP_MINUS",
+      "&kp LEFT_SHIFT",
+      "&kp PAGE_UP",
+      "&kp C_AC_HOME",
+      "&kp PAGE_DOWN",
+      "&kp LC(LS(C_AC_BACK))",
+      "&kp KP_MULTIPLY",
+      "&kp KP_N1",
+      "&kp KP_N2",
+      "&kp KP_N3",
+      "&kp KP_DIVIDE",
+      "&kp LCTRL",
+      "&kp LEFT_WIN",
+      "&kp LEFT_ALT",
+      "&trans",
+      "&kp K_BACK",
+      "&kp C_AC_BACK",
+      "&kp KP_ENTER",
+      "&kp KP_N0",
+      "&trans",
+      "&kp KP_N0",
+      "&kp KP_DOT",
+      "&kp KP_DOT"
+    ],
+    "layer_3": [
+      "&kp EXCLAMATION",
+      "&kp AT_SIGN",
+      "&kp HASH",
+      "&kp DOLLAR",
+      "&kp PERCENT",
+      "&kp CARET",
+      "&kp AMPERSAND",
+      "&kp ASTERISK",
+      "&kp SINGLE_QUOTE",
+      "&kp DOUBLE_QUOTES",
+      "&kp NUMBER_1",
+      "&kp NUMBER_2",
+      "&kp NUMBER_3",
+      "&kp NUMBER_4",
+      "&kp NUMBER_5",
+      "&kp NUMBER_6",
+      "&kp NUMBER_7",
+      "&kp NUMBER_8",
+      "&kp NUMBER_9",
+      "&kp NUMBER_0",
+      "&kp TILDE",
+      "&kp GRAVE",
+      "&kp LEFT_PARENTHESIS",
+      "&kp RIGHT_PARENTHESIS",
+      "&kp LEFT_BRACE",
+      "&kp RIGHT_BRACE",
+      "&kp LEFT_BRACKET",
+      "&kp RIGHT_BRACKET",
+      "&kp PIPE",
+      "&kp BACKSLASH",
+      "&kp F7",
+      "&kp F5",
+      "&kp F4",
+      "&trans",
+      "&kp MINUS",
+      "&trans",
+      "&trans",
+      "&kp UNDERSCORE",
+      "&trans",
+      "&kp F8",
+      "&kp F11",
+      "&kp F12"
+    ],
+    "layer_4": [
+      "&to 1",
+      "&none",
+      "&none",
+      "&none",
+      "&bt BT_CLR",
+      "&bt BT_SEL 0",
+      "&bt BT_SEL 1",
+      "&bt BT_SEL 2",
+      "&bt BT_SEL 3",
+      "&bt BT_SEL 4",
+      "&to 5",
+      "&out OUT_BLE",
+      "&out OUT_USB",
+      "&out OUT_TOG",
+      "&trans",
+      "&none",
+      "&out OUT_TOG",
+      "&out OUT_USB",
+      "&out OUT_BLE",
+      "&none",
+      "&sys_reset",
+      "&none",
+      "&none",
+      "&none",
+      "&none",
+      "&none",
+      "&none",
+      "&none",
+      "&none",
+      "&sys_reset",
+      "&bootloader",
+      "&bt BT_CLR_ALL",
+      "&none",
+      "&none",
+      "&none",
+      "&none",
+      "&studio_unlock",
+      "&none",
+      "&none",
+      "&none",
+      "&none",
+      "&bootloader"
+    ],
+    "layer_5": [
+      "&kp TAB",
+      "&kp Q",
+      "&kp W",
+      "&kp E",
+      "&kp NUMBER_1",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&kp I",
+      "&kp R",
+      "&kp A",
+      "&kp S",
+      "&kp D",
+      "&kp NUMBER_2",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&kp T",
+      "&kp NUMBER_3",
+      "&kp Z",
+      "&kp X",
+      "&kp G",
+      "&kp V",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&kp Y",
+      "&kp H",
+      "&kp NUMBER_4",
+      "&kp M",
+      "&kp ESC",
+      "&trans",
+      "&kp SPACE",
+      "&kp F",
+      "&to 0",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&kp LEFT_GUI",
+      "&kp C"
+    ],
+    "layer_6": [
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans"
+    ],
+    "layer_7": [
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans",
+      "&trans"
+    ]
+  },
+  "matrix": [
+    [
+      0,
+      4
+    ],
+    [
+      0,
+      3
+    ],
+    [
+      0,
+      2
+    ],
+    [
+      0,
+      1
+    ],
+    [
+      0,
+      0
+    ],
+    [
+      0,
+      5
+    ],
+    [
+      0,
+      6
+    ],
+    [
+      0,
+      7
+    ],
+    [
+      0,
+      8
+    ],
+    [
+      0,
+      9
+    ],
+    [
+      1,
+      4
+    ],
+    [
+      1,
+      3
+    ],
+    [
+      1,
+      2
+    ],
+    [
+      1,
+      1
+    ],
+    [
+      1,
+      0
+    ],
+    [
+      1,
+      5
+    ],
+    [
+      1,
+      6
+    ],
+    [
+      1,
+      7
+    ],
+    [
+      1,
+      8
+    ],
+    [
+      1,
+      9
+    ],
+    [
+      2,
+      4
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      2,
+      2
+    ],
+    [
+      2,
+      1
+    ],
+    [
+      2,
+      0
+    ],
+    [
+      2,
+      5
+    ],
+    [
+      2,
+      6
+    ],
+    [
+      2,
+      7
+    ],
+    [
+      2,
+      8
+    ],
+    [
+      2,
+      9
+    ],
+    [
+      3,
+      4
+    ],
+    [
+      3,
+      3
+    ],
+    [
+      3,
+      2
+    ],
+    [
+      4,
+      5
+    ],
+    [
+      3,
+      0
+    ],
+    [
+      3,
+      1
+    ],
+    [
+      3,
+      6
+    ],
+    [
+      3,
+      5
+    ],
+    [
+      4,
+      10
+    ],
+    [
+      3,
+      7
+    ],
+    [
+      3,
+      8
+    ],
+    [
+      3,
+      9
+    ]
+  ],
+  "attributes": [
+    [
+      100,
+      100,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      100,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      200,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      300,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      400,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      800,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      900,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      1000,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      1100,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      1200,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      0,
+      100,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      100,
+      100,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      200,
+      100,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      300,
+      100,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      400,
+      100,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      800,
+      100,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      900,
+      100,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      1000,
+      100,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      1100,
+      100,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      1200,
+      100,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      0,
+      200,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      100,
+      200,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      200,
+      200,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      300,
+      200,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      400,
+      200,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      800,
+      200,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      900,
+      200,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      1000,
+      200,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      1100,
+      200,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      1200,
+      200,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      0,
+      300,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      100,
+      300,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      200,
+      300,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      300,
+      300,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      400,
+      300,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      500,
+      300,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      700,
+      300,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      800,
+      300,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      900,
+      300,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      1000,
+      300,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      1100,
+      300,
+      0,
+      0,
+      0
+    ],
+    [
+      100,
+      100,
+      1200,
+      300,
+      0,
+      0,
+      0
+    ]
+  ],
+  "protected_files": {
+    "boards/shields/lism/lism_right.overlay": "106c579cfd98b3f1559f47ff07bbc5190cdf176a117e520dd5f33d261e7e0c0d",
+    "boards/shields/lism/paw3222-right.dtsi": "0c6cc9ee95922a445292671ded10571cfd19de5cf6c1eb86214006a78106f82d",
+    "boards/shields/lism/split_input_right.dtsi": "80f62f8501acfdff81398fb944e109fafd30000f22370af940830005973dfe3d",
+    "config/lism_right.conf": "069f063c24d37c2ec17358826f9727c75f4d024c193a7da6ad7355ef3405c3af",
+    "config/west.yml": "0b5d0aabfc9c720b55598dabc70553d8c5f630de681a86f51b56e8be9f12ff6f"
+  }
+}

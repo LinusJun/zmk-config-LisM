@@ -1,24 +1,12 @@
 #include "lism.dtsi"
-#include "paw3222.dtsi"
-#include "split_input.dtsi"
 #include "lism-layouts.dtsi"
-#include <input/processors/report_rate_limit.dtsi>
-#include <input/processors/xyz.dtsi>
 
-&spi0 {
-    status = "okay";
-};
-
-&trackball_split_input { // local trackball *split* input device child node
-	device = <&trackball>;
-	input-processors =
-		<&zip_report_rate_limit 8>,
-		<&zip_xyz>;
-};
+/* No SPI sensor on the left: these four pins are the stock LisM 4waystick. */
+&spi0 { status = "disabled"; };
 
 / {
 	chosen {
-		zmk,kscan = &kscan0;
+		zmk,kscan = &left_4way_composite;
 	};
 
 	kscan0: kscan {
@@ -40,5 +28,25 @@
             , <&xiao_d 7  GPIO_ACTIVE_HIGH>                     // col3: D7
             , <&gpio0  9  GPIO_ACTIVE_HIGH>                     // col4: GPIO9(NFC1)
             ; 
+    };
+
+    left_4way: left_4way {
+        compatible = "zmk,kscan-gpio-direct";
+        wakeup-source;
+        /* Up, Right, Down, Left: matches 4mplelab main 8e1fd16 snippets/4waystick.overlay. */
+        input-gpios
+            = <&gpio0 10 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>
+            , <&xiao_d 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>
+            , <&xiao_d 5 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>
+            , <&xiao_d 4 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+    };
+
+    left_4way_composite: left_4way_composite {
+        compatible = "zmk,kscan-composite";
+        rows = <6>;
+        columns = <12>;
+        wakeup-source;
+        keyboard { kscan = <&kscan0>; };
+        stick { kscan = <&left_4way>; row-offset = <5>; };
     };
 };
