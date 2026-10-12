@@ -1,0 +1,25 @@
+name: Left 4waystick regression
+on:
+  workflow_dispatch:
+  push:
+    branches: [ codex/xiao147-all-peripherals, codex/original-dongle-left-4waystick ]
+    paths:
+      - 'boards/**'
+      - 'config/**'
+      - 'tests/**'
+      - 'build.yaml'
+      - '.github/workflows/fourwaystick-check.yml'
+  pull_request:
+    paths:
+      - 'boards/**'
+      - 'config/**'
+      - 'tests/**'
+      - 'build.yaml'
+      - '.github/workflows/fourwaystick-check.yml'
+jobs:
+  fourwaystick-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check left stick mappings and preserve right trackball
+        run: python3 tests/fourwaystick_regression_test.py

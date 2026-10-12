@@ -8,7 +8,7 @@ include:
 
   - board: xiao_ble//zmk
     shield: lism_left rgbled_adapter
-    artifact-name: lism_left_peripheral_trackball
+    artifact-name: lism_left_peripheral_4waystick
     cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=n
 
   - board: xiao_ble//zmk

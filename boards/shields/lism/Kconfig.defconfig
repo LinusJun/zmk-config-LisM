@@ -21,7 +21,7 @@ config INPUT
 
 endif
 
-if SHIELD_LISM_L || SHIELD_LISM_R
+if SHIELD_LISM_R
 
 config PAW3222
     default y

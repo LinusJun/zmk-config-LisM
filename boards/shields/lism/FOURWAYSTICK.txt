@@ -1,0 +1,44 @@
+LisM LEFT 4WAYSTICK + RIGHT TRACKBALL
+====================================
+Upstream GPIO reference:
+https://github.com/4mplelab/zmk-config-LisM/blob/8e1fd16cc9fcae7dd7a92494dc0d48aa482e3e45/snippets/4waystick.overlay
+
+Only the left module changes hardware role. The left PAW3222/SPI and split-input
+listener are disabled; the right trackball wiring, processors, scroll-lock
+layers, +8 dBm setting, and rate-limit/xyz modules are preserved.
+
+Stock module directions (internal scan order):
+Up=P0.10/NFC2, Right=D6, Down=D5, Left=D4.
+All are active-low switches with internal pull-ups, as in the manufacturer's
+firmware. There is no analog calibration and no assumed center-push switch.
+
+Zero-based layer mappings, in human Up / Down / Left / Right order:
+0 Base: vertical up / vertical down / horizontal left / horizontal right scroll
+1 Game: Up Arrow / Down Arrow / Left Arrow / Right Arrow
+2 Nav: Left Shift / Left Control / Left Alt / Left GUI (Win/Command)
+5 GameJoystick: Left Shift / Left Control / Left Alt / Left GUI
+6 StickWASD: W / S / A / D
+3,4,7: transparent (inherit the currently active lower layer).
+
+The Base stick uses its own standard ZMK two-axis scroll behavior: press and
+hold scrolls continuously, release stops. It ramps to 25 scroll units/s in
+200 ms. Existing msc/encoder/trackball speeds are not changed. Wheel signs match
+the author's stock 4waystick mapping; keep macOS Natural scrolling enabled.
+Physical direction and preferred speed still need an on-device test. This is
+not an analog trackball; the stick cannot sense how fast your hand moves.
+
+Device layer, left first row second key: enter layer 6.
+Layer 6, same physical key: return to Base.
+Original Game and GameJoystick entry keys are retained.
+
+Use matching new left, right, and dongle firmware from the same build: the
+shared position map and split-key state payload changed even though right
+trackball operation did not. Reset is a recovery tool, not a required first
+step. Existing BLE bonds can usually remain; rebuild pairing only if needed.
+Retest press/release, layer changes while holding, modifier releases and BLE
+disconnect while holding before relying on it in games.
+
+The all-peripherals build retains JP19, Circle Pad and BOTH screen dongles.
+The original-dongle branch stays based on codex/zmk-main-trackball-screen
+34415d56632015e8844411a8b515759ec6eff797 (successful build 36221589002).
+Do not mix the two dongle UF2 files; choose the one for your physical device.

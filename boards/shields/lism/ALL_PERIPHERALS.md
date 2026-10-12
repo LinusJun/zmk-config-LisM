@@ -11,7 +11,7 @@ Their common ADC driver, sector code and charging/LED policy are identical.
 
 One Actions run exports seven normal UF2 files:
 
-- Left trackball keyboard.
+- Left 4waystick keyboard (the right keyboard remains a trackball).
 - Right trackball keyboard.
 - JP19 independent peripheral, including its push switch and existing sprint behavior.
 - Four-wire Circle Pad independent peripheral, including its existing sprint behavior.
@@ -33,7 +33,11 @@ Use one joystick at a time. Ordinary WASD handling in the pinned ZMK version
 does not count identical keys by their source, so simultaneous manipulation of
 both sticks is outside this combined version's use case. The two sticks have
 separate virtual positions (JP19 42..47, Circle Pad 48..53); all original 42
-keyboard positions and bindings remain unchanged.
+keyboard positions remain unchanged. The Device layer's first-row second
+unused key enters layer 6 (StickWASD); that same key returns to Base on layer 6.
+Other existing bindings remain unchanged. The left digital 4waystick adds
+positions 54..57 in Up/Right/Down/Left order and does not consume either
+independent joystick's positions.
 
 The new screen keeps three peripheral rings/cards. Its third slot is labelled
 `JOYSTICK`/`JOY` and follows whichever joystick is connected. If both are online,
