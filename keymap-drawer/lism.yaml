@@ -43,6 +43,18 @@ layers:
   - F1
   - F2
   - {t: ESC, h: Device}
+  - W
+  - S
+  - A
+  - D
+  - SPACE
+  - LEFT SHIFT
+  - W
+  - S
+  - A
+  - D
+  - ''
+  - LEFT SHIFT
   Game:
   - ESC
   - Q
@@ -86,6 +98,18 @@ layers:
   - {t: ▽, type: trans}
   - LEFT ALT
   - Sft+F2
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
   Nav:
   - Gui+Sft+←
   - HOME
@@ -129,6 +153,18 @@ layers:
   - KP 0
   - KP DOT
   - KP DOT
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
   Mark:
   - '!'
   - '@'
@@ -172,6 +208,18 @@ layers:
   - F8
   - F11
   - F12
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
   Device:
   - {t: Game, h: toggle}
   - ''
@@ -215,6 +263,18 @@ layers:
   - ''
   - ''
   - Boot
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
   GameJoystick:
   - TAB
   - Q
@@ -258,6 +318,18 @@ layers:
   - {t: ▽, type: trans}
   - LEFT GUI
   - C
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
+  - {t: ▽, type: trans}
 combos:
 - p: [16, 17]
   k: '&mkp MB1'
