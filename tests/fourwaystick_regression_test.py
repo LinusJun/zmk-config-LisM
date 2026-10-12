@@ -82,6 +82,8 @@ assert "y-input-code = <INPUT_REL_WHEEL>" in keymap
 assert "#define ZMK_POINTING_DEFAULT_SCRL_VAL 200" in keymap
 assert "#define LISM_4WAY_SCROLL_SPEED 25" in keymap
 assert 'compatible = "zmk,behavior-input-two-axis"' in keymap
+assert "time-to-max-speed-ms = <0>" in keymap
+assert "acceleration-exponent = <0>" in keymap
 for path, digest in baseline["protected_files"].items():
     assert hashlib.sha256((ROOT / path).read_bytes()).hexdigest() == digest, path + " unexpectedly changed"
 build = (ROOT / "build.yaml").read_text()

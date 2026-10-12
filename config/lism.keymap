@@ -45,8 +45,8 @@
             x-input-code = <INPUT_REL_HWHEEL>;
             y-input-code = <INPUT_REL_WHEEL>;
             delay-ms = <0>;
-            time-to-max-speed-ms = <200>;
-            acceleration-exponent = <1>;
+            time-to-max-speed-ms = <0>;
+            acceleration-exponent = <0>; /* Uniform scroll, matching the stock msc behavior. */
         };
 
         encoder_msc: sensor_rotate_msc {
