@@ -64,17 +64,21 @@ static lv_obj_t *get_operator_modifier_row(lv_obj_t *screen) {
      * room for the six status labels and the bottom battery/output widgets.
      * The peak indicator is part of the same child range as the bars.
      */
-    lv_obj_set_pos(wpm, 30, 36);
-    lv_obj_set_size(wpm, 260, 52);
+    lv_obj_set_pos(wpm, 10, 28);
+    lv_obj_set_size(wpm, 260, 65);
+    lv_obj_set_style_transform_pivot_x(wpm, 0, LV_PART_MAIN);
+    lv_obj_set_style_transform_scale_x(wpm, 295, LV_PART_MAIN);
     uint32_t wpm_children = lv_obj_get_child_cnt(wpm);
     if (wpm_children >= 3) {
         for (uint32_t i = 0; i < wpm_children - 2; i++) {
-            lv_obj_set_height(lv_obj_get_child(wpm, i), 44);
+            lv_obj_set_height(lv_obj_get_child(wpm, i), 65);
         }
+        lv_obj_align(lv_obj_get_child(wpm, wpm_children - 1), LV_ALIGN_BOTTOM_RIGHT,
+                     0, 0);
     }
 
-    lv_obj_set_pos(lv_obj_get_child(screen, 2), 30, 101); /* layer dots */
-    lv_obj_set_pos(lv_obj_get_child(screen, 3), 10, 110); /* left/right battery */
+    lv_obj_set_pos(lv_obj_get_child(screen, 2), 10, 98); /* layer dots */
+    lv_obj_set_pos(lv_obj_get_child(screen, 3), 10, 110); /* battery placeholder */
     lv_obj_set_pos(lv_obj_get_child(screen, 4), 194, 110); /* USB/BLE output */
 #endif
 

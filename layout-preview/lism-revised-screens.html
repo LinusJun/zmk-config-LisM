@@ -1,0 +1,134 @@
+<style>
+#lism-revised { display:grid; gap:24px; justify-items:center; color:light-dark(#263041,#d7e4f4); }
+#lism-revised .lr-group { display:grid; gap:10px; justify-items:center; }
+#lism-revised .lr-heading { font:500 14px system-ui; }
+#lism-revised .lr-pair { display:flex; flex-wrap:wrap; justify-content:center; align-items:start; gap:15px; }
+#lism-revised .lr-item { display:grid; justify-items:center; gap:6px; }
+#lism-revised .lr-name { font:400 12px system-ui; }
+#lism-revised .lr-screen { box-sizing:content-box; position:relative; overflow:hidden; color:#e4ebf6; background:#0d111a; border:4px solid #343b46; border-radius:17px; box-shadow:0 8px 22px #0004; font:400 12px system-ui; }
+#lism-revised .lr-wide { width:320px; height:172px; }
+#lism-revised .lr-tall { width:172px; height:320px; }
+#lism-revised .lr-mods { position:absolute; left:7px; right:7px; top:2px; display:flex; align-items:center; justify-content:space-between; color:#3b527c; font-size:12px; }
+#lism-revised .lr-mods i { display:block; width:1px; height:16px; background:#606060; }
+#lism-revised .lr-tall .lr-mods { left:3px; right:3px; top:5px; font-size:9px; }
+#lism-revised .lr-tall .lr-mods i { height:12px; }
+#lism-revised .lr-wpm { position:absolute; z-index:2; left:4px; top:27px; padding:0 5px; background:#0d111a; font-size:30px; color:#c2526a; }
+#lism-revised .lr-bars { position:absolute; left:8px; right:8px; top:29px; height:65px; background:repeating-linear-gradient(to right,#242424 0 9.2px,transparent 9.2px 11.5px); }
+#lism-revised .lr-bars:before { content:""; position:absolute; inset:0 auto 0 0; width:38%; background:repeating-linear-gradient(to right,#c2526a 0 9.2px,transparent 9.2px 11.5px); }
+#lism-revised .lr-bars i { display:none; }
+#lism-revised .lr-layer { position:absolute; z-index:2; right:5px; top:62px; padding:0 4px; background:#0d111a; color:#fff; font-size:26px; }
+#lism-revised .lr-dots { position:absolute; left:9px; right:9px; top:98px; display:flex; gap:3px; }
+#lism-revised .lr-dots i { height:5px; flex:1; border-radius:2px; background:#575757; }
+#lism-revised .lr-dots i:first-child { background:#e0e0e0; }
+#lism-revised .lr-tall .lr-wpm { top:28px; left:2px; font-size:22px; }
+#lism-revised .lr-tall .lr-bars { top:33px; left:4px; right:4px; height:75px; background:repeating-linear-gradient(to right,#242424 0 4.9px,transparent 4.9px 6.2px); }
+#lism-revised .lr-tall .lr-bars:before { width:38%; background:repeating-linear-gradient(to right,#c2526a 0 4.9px,transparent 4.9px 6.2px); }
+#lism-revised .lr-tall .lr-layer { top:84px; height:24px; line-height:24px; font-size:19px; right:4px; }
+#lism-revised .lr-tall .lr-dots { top:121px; left:7px; right:7px; gap:2px; }
+#lism-revised .lr-tall .lr-dots i { height:4px; }
+#lism-revised .lr-rings { position:absolute; left:9px; top:105px; display:flex; gap:3px; }
+#lism-revised .lr-ring { box-sizing:border-box; position:relative; left:7px; top:4px; width:46px; height:46px; border-radius:50%; background:conic-gradient(from 0deg,var(--fill) 0 var(--sweep),#505050 var(--sweep) 270deg,transparent 270deg 360deg); }
+#lism-revised .lr-ring:after { content:""; position:absolute; inset:4px; border-radius:50%; background:#0d111a; }
+#lism-revised .lr-ring b { position:absolute; z-index:2; left:0; top:0; width:20px; height:20px; border-radius:2px; background:var(--fill); color:#080b10; font-size:10px; line-height:20px; font-weight:500; text-align:center; }
+#lism-revised .lr-battery { position:absolute; left:9px; top:160px; width:140px; height:6px; border-radius:4px; background:#282c30; }
+#lism-revised .lr-battery i { display:block; height:100%; width:18%; border-radius:4px; background:#e46464; }
+#lism-revised .lr-battery-pct { position:absolute; left:166px; top:151px; color:#e46464; font-size:12px; }
+#lism-revised .lr-output { position:absolute; right:5px; top:103px; display:flex; flex-wrap:wrap; justify-content:center; gap:3px; width:110px; }
+#lism-revised .lr-output span { display:block; width:52px; height:28px; box-sizing:border-box; border-radius:5px; text-align:center; line-height:27px; font-size:16px; }
+#lism-revised .lr-output .usb { background:#b9b9a7; color:#111; }
+#lism-revised .lr-output .ble { border:2px solid #353f40; color:#4f6265; }
+#lism-revised .lr-output small { display:block; width:19px; height:25px; border-radius:4px; background:#353640; color:#fff; line-height:25px; text-align:center; font-size:13px; }
+#lism-revised .lr-output small.active { background:#7b7d93; }
+#lism-revised .lr-wide .lr-output { left:202px; right:auto; top:109px; width:116px; column-gap:2px; row-gap:4px; }
+#lism-revised .lr-wide .lr-output span { width:56px; height:29px; line-height:29px; }
+#lism-revised .lr-wide .lr-output small { width:21px; height:29px; line-height:29px; }
+#lism-revised .lr-tall .lr-rings { left:11px; top:224px; gap:6px; }
+#lism-revised .lr-tall .lr-ring { left:0; }
+#lism-revised .lr-tall .lr-battery { left:10px; top:288px; width:99px; height:16px; border-radius:0; background:repeating-linear-gradient(to right,#282c30 0 3px,transparent 3px 4px); }
+#lism-revised .lr-tall .lr-battery i { width:20%; border-radius:0; background:repeating-linear-gradient(to right,#e46464 0 3px,transparent 3px 4px); }
+#lism-revised .lr-tall .lr-battery-pct { left:123px; top:288px; width:42px; text-align:right; }
+#lism-revised .lr-tall .lr-output { left:8px; right:auto; top:144px; width:156px; column-gap:2px; row-gap:7px; }
+#lism-revised .lr-tall .lr-output span { width:77px; height:29px; line-height:29px; }
+#lism-revised .lr-tall .lr-output small { width:29px; height:29px; line-height:29px; }
+#lism-revised .lr-title { position:absolute; left:0; right:0; top:5px; text-align:center; font-size:13px; }
+#lism-revised .lr-label { position:absolute; left:12px; font-size:13px; }
+#lism-revised .lr-val { position:absolute; right:12px; color:#39bdec; font-size:13px; }
+#lism-revised .lr-slider { position:absolute; left:14px; right:14px; top:52px; height:6px; background:#3a3a3c; border-radius:5px; }
+#lism-revised .lr-slider i { display:block; width:65%; height:100%; border-radius:5px; background:#007aff; }
+#lism-revised .lr-slider b { position:absolute; left:calc(65% - 11px); top:-8px; width:22px; height:22px; border-radius:50%; background:#fff; box-shadow:0 2px 5px #0008; }
+#lism-revised .lr-switch { position:absolute; width:43px; height:23px; border-radius:15px; background:#3a3a3c; }
+#lism-revised .lr-switch:after { content:""; display:block; position:absolute; top:2px; left:2px; width:19px; height:19px; background:#fff; border-radius:50%; }
+#lism-revised .lr-switch.on { background:#34c759; }
+#lism-revised .lr-switch.on:after { left:22px; }
+#lism-revised .lr-switch.dim { opacity:.45; }
+#lism-revised .lr-tall .lr-slider { top:78px; }
+#lism-revised .lr-dev-card { position:absolute; left:10px; right:10px; height:31px; box-sizing:border-box; border:1px solid #303c4b; border-radius:6px; background:#1a2432; }
+#lism-revised .lr-dev-card.local { background:#284361; border-color:#4a90e2; }
+#lism-revised .lr-dev-card i { position:absolute; left:8px; top:10px; width:27px; height:12px; box-sizing:border-box; border:1px solid var(--battery-color,#54806c); border-radius:2px; }
+#lism-revised .lr-dev-card i:after { content:""; position:absolute; top:2px; left:2px; width:var(--battery-fill,18px); height:6px; background:var(--battery-color,#54806c); border-radius:1px; }
+#lism-revised .lr-dev-card.off i { border-color:#485362; }
+#lism-revised .lr-dev-card.off i:after { width:0; }
+#lism-revised .lr-dev-card .signal { position:absolute; left:49px; top:7px; color:#606060; font-size:12px; }
+#lism-revised .lr-dev-card .signal { letter-spacing:-1px; }
+#lism-revised .lr-dev-card .signal.good { color:#00cc66; }
+#lism-revised .lr-dev-card .signal.fair { color:#ffcc00; }
+#lism-revised .lr-dev-card .signal.weak { color:#ff8800; }
+#lism-revised .lr-dev-card .signal.poor { color:#ff3333; }
+#lism-revised .lr-dev-card .name { position:absolute; left:125px; top:7px; color:#e4ebf6; }
+#lism-revised .lr-dev-card.off .name { color:#8295ae; }
+#lism-revised .lr-tall .lr-dev-card { left:9px; right:9px; height:36px; }
+#lism-revised .lr-tall .lr-dev-card i { left:6px; top:12px; }
+#lism-revised .lr-tall .lr-dev-card .signal { left:38px; top:9px; }
+#lism-revised .lr-tall .lr-dev-card .name { left:94px; top:9px; font-size:12px; }
+</style>
+<div id="lism-revised" class="viz-dotted-background" aria-label="LisM dongle revised screen layouts">
+  <section class="lr-group"><div class="lr-heading">主状态</div><div class="lr-pair">
+    <div class="lr-item"><div class="lr-screen lr-wide" role="img" aria-label="横屏主状态：六个指示、打字速度、层、三圆环、Dongle 电量条、USB BLE">
+      <div class="lr-mods"><span>GUI</span><i></i><span>ALT</span><i></i><span>CTL</span><i></i><span>SFT</span><i></i><span>CAP</span><i></i><span>NUM</span></div>
+      <div class="lr-wpm">42</div><div class="lr-bars"><i style="--h:18px;--c:#c2526a"></i><i style="--h:27px;--c:#c2526a"></i><i style="--h:41px;--c:#c2526a"></i><i style="--h:29px;--c:#c2526a"></i><i style="--h:45px;--c:#c2526a"></i><i style="--h:39px;--c:#c2526a"></i><i style="--h:45px;--c:#c2526a"></i><i style="--h:35px;--c:#c2526a"></i><i style="--h:45px;--c:#c2526a"></i><i style="--h:45px"></i><i style="--h:45px"></i><i style="--h:45px"></i><i style="--h:45px"></i><i style="--h:45px"></i><i style="--h:45px"></i><i style="--h:45px"></i><i style="--h:45px"></i><i style="--h:45px"></i><i style="--h:45px"></i><i style="--h:45px"></i><i style="--h:45px"></i></div>
+      <div class="lr-layer">BASE</div><div class="lr-dots"><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="lr-rings"><div class="lr-ring" style="--fill:#54806c;--sweep:248deg"><b>92</b></div><div class="lr-ring" style="--fill:#ffcc00;--sweep:167deg"><b>62</b></div><div class="lr-ring" style="--fill:#c08040;--sweep:86deg"><b>32</b></div></div>
+      <div class="lr-battery"><i></i></div><div class="lr-battery-pct">18%</div>
+      <div class="lr-output"><span class="usb">USB</span><span class="ble">BLE</span><small class="active">1</small><small>2</small><small>3</small><small>4</small><small>5</small></div>
+    </div><div class="lr-name">横屏 · 320 × 172</div></div>
+    <div class="lr-item"><div class="lr-screen lr-tall" role="img" aria-label="竖屏主状态，所有横屏项目重新排布保留">
+      <div class="lr-mods"><span>GUI</span><i></i><span>ALT</span><i></i><span>CTL</span><i></i><span>SFT</span><i></i><span>CAP</span><i></i><span>NUM</span></div>
+      <div class="lr-wpm">42</div><div class="lr-bars"><i style="--h:18px;--c:#c2526a"></i><i style="--h:27px;--c:#c2526a"></i><i style="--h:35px;--c:#c2526a"></i><i style="--h:29px;--c:#c2526a"></i><i style="--h:35px;--c:#c2526a"></i><i style="--h:31px;--c:#c2526a"></i><i style="--h:35px;--c:#c2526a"></i><i style="--h:35px"></i><i style="--h:35px"></i><i style="--h:35px"></i><i style="--h:35px"></i><i style="--h:35px"></i><i style="--h:35px"></i><i style="--h:35px"></i><i style="--h:35px"></i><i style="--h:35px"></i></div>
+      <div class="lr-layer">BASE</div><div class="lr-dots"><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="lr-output"><span class="usb">USB</span><span class="ble">BLE</span><small class="active">1</small><small>2</small><small>3</small><small>4</small><small>5</small></div>
+      <div class="lr-rings"><div class="lr-ring" style="--fill:#54806c;--sweep:248deg"><b>92</b></div><div class="lr-ring" style="--fill:#ffcc00;--sweep:167deg"><b>62</b></div><div class="lr-ring" style="--fill:#c08040;--sweep:86deg"><b>32</b></div></div><div class="lr-battery"><i></i></div><div class="lr-battery-pct">18%</div>
+    </div><div class="lr-name">竖屏 · 172 × 320</div></div>
+  </div></section>
+  <section class="lr-group"><div class="lr-heading">显示设置</div><div class="lr-pair">
+    <div class="lr-item"><div class="lr-screen lr-wide" role="img" aria-label="横屏设置：亮度滑条白色圆点，自动旋转、横屏、竖屏、六轴拨动开关">
+      <div class="lr-title">Display Settings</div><div class="lr-label" style="top:25px">Brightness</div><div class="lr-val" style="top:25px">65%</div><div class="lr-slider"><i></i><b></b></div>
+      <div class="lr-label" style="top:72px">Auto rotate</div><div class="lr-switch" style="left:264px;top:68px"></div>
+      <div class="lr-label" style="top:108px">Landscape</div><div class="lr-switch on" style="left:107px;top:104px"></div>
+      <div class="lr-label" style="left:166px;top:108px">Portrait</div><div class="lr-switch" style="left:264px;top:104px"></div>
+      <div class="lr-label" style="top:140px">6-axis mouse</div><div class="lr-switch" style="left:264px;top:136px"></div>
+    </div><div class="lr-name">横屏设置</div></div>
+    <div class="lr-item"><div class="lr-screen lr-tall" role="img" aria-label="竖屏设置，亮度和四个互斥开关完整显示">
+      <div class="lr-title">Display Settings</div><div class="lr-label" style="top:38px">Brightness</div><div class="lr-val" style="top:38px">65%</div><div class="lr-slider"><i></i><b></b></div>
+      <div class="lr-label" style="top:113px">Auto rotate</div><div class="lr-switch" style="left:116px;top:110px"></div>
+      <div class="lr-label" style="top:154px">Landscape</div><div class="lr-switch" style="left:116px;top:151px"></div>
+      <div class="lr-label" style="top:195px">Portrait</div><div class="lr-switch on" style="left:116px;top:192px"></div>
+      <div class="lr-label" style="top:241px">6-axis mouse</div><div class="lr-switch on" style="left:116px;top:238px"></div>
+    </div><div class="lr-name">竖屏设置 · 六轴开启</div></div>
+  </div></section>
+  <section class="lr-group"><div class="lr-heading">设备状态</div><div class="lr-pair">
+    <div class="lr-item"><div class="lr-screen lr-wide" role="img" aria-label="横屏设备列表，四档 RSSI 示例值，不是实机测量">
+      <div class="lr-title">Active Devices</div>
+      <div class="lr-dev-card local" style="top:25px;--battery-color:#54806c;--battery-fill:18px"><i></i><span class="signal good">-55dBm</span><span class="name">DONGLE</span></div>
+      <div class="lr-dev-card" style="top:60px;--battery-color:#ffcc00;--battery-fill:13px"><i></i><span class="signal fair">-65dBm</span><span class="name">LISM LEFT</span></div>
+      <div class="lr-dev-card" style="top:95px;--battery-color:#c08040;--battery-fill:7px"><i></i><span class="signal weak">-75dBm</span><span class="name">LISM RIGHT</span></div>
+      <div class="lr-dev-card" style="top:130px;--battery-color:#e46464;--battery-fill:5px"><i></i><span class="signal poor">-85dBm</span><span class="name">JOYSTICK</span></div>
+    </div><div class="lr-name">横屏设备 · RSSI 示例</div></div>
+    <div class="lr-item"><div class="lr-screen lr-tall" role="img" aria-label="竖屏设备列表，四档 RSSI 示例值，不是实机测量">
+      <div class="lr-title">Active Devices</div>
+      <div class="lr-dev-card local" style="top:44px;--battery-color:#54806c;--battery-fill:18px"><i></i><span class="signal good">-55dBm</span><span class="name">DONGLE</span></div>
+      <div class="lr-dev-card" style="top:102px;--battery-color:#ffcc00;--battery-fill:13px"><i></i><span class="signal fair">-65dBm</span><span class="name">LEFT</span></div>
+      <div class="lr-dev-card" style="top:160px;--battery-color:#c08040;--battery-fill:7px"><i></i><span class="signal weak">-75dBm</span><span class="name">RIGHT</span></div>
+      <div class="lr-dev-card" style="top:218px;--battery-color:#e46464;--battery-fill:5px"><i></i><span class="signal poor">-85dBm</span><span class="name">JOY</span></div>
+    </div><div class="lr-name">竖屏设备 · RSSI 示例</div></div>
+  </div></section>
+</div>

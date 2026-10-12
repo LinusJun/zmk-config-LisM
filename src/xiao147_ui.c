@@ -22,6 +22,7 @@
 #include "xiao147_rotation.h"
 #include "xiao147_battery_rings.h"
 #include "xiao147_rssi.h"
+#include "xiao147_battery_colors.h"
 
 LV_FONT_DECLARE(FG_Medium_20);
 
@@ -77,6 +78,9 @@ static lv_obj_t *device_battery_frames[4];
 static lv_obj_t *device_battery_fills[4];
 static lv_obj_t *dongle_battery_bar;
 static lv_obj_t *dongle_battery_label;
+#define DONGLE_BATTERY_SEGMENTS 25
+static lv_obj_t *dongle_battery_ticks;
+static lv_obj_t *dongle_battery_segment[DONGLE_BATTERY_SEGMENTS];
 static struct k_work init_work;
 static struct k_work redraw_work;
 static struct k_work touch_work;
@@ -187,10 +191,23 @@ static void layout_devices(bool portrait)
         lv_obj_set_width(device_names[row], portrait ? 54 : 165);
         lv_obj_set_style_text_font(device_signals[row], &lv_font_montserrat_12,
                                    LV_PART_MAIN);
+        lv_obj_set_style_text_letter_space(device_signals[row], -1, LV_PART_MAIN);
         lv_obj_set_style_text_font(device_names[row],
                                    portrait ? &lv_font_montserrat_12 :
                                               &lv_font_montserrat_14, LV_PART_MAIN);
     }
+}
+
+static uint32_t rssi_color(int8_t value)
+{
+    /* t-ogura zmk-config-prospector main pins module v2.2.3. Its
+     * custom_status_screen.c ks_get_rssi_color colors the signal bar.
+     * Apply that palette to dBm text here, with the requested four bands:
+     * merge the two green levels; valid weak readings stay red, unknown gray. */
+    if (value >= -60) { return 0x00cc66; }
+    if (value >= -70) { return 0xffcc00; }
+    if (value >= -80) { return 0xff8800; }
+    return 0xff3333;
 }
 
 static void draw_devices(void)
@@ -220,15 +237,18 @@ static void draw_devices(void)
         }
         lv_label_set_text(device_names[row], portrait ? short_names[row] : names[row]);
         char signal_text[12];
-        if (signal_valid[row] && (row == 0 || active)) {
+        bool has_signal = signal_valid[row] && active;
+        if (has_signal) {
             snprintf(signal_text, sizeof(signal_text), "%ddBm", signal_values[row]);
         } else {
             snprintf(signal_text, sizeof(signal_text), "--dBm");
         }
         lv_label_set_text(device_signals[row], signal_text);
-        lv_color_t battery_color = lv_color_hex(!known ? 0x485362 :
-                                               level <= 20 ? 0xe46464 :
-                                               level <= 50 ? 0xf5be57 : 0x63cf70);
+        lv_obj_set_style_text_color(device_signals[row],
+                                    lv_color_hex(has_signal ? rssi_color(signal_values[row]) :
+                                                 0x606060), LV_PART_MAIN);
+        lv_color_t battery_color = lv_color_hex(known ? xiao147_battery_color(level) :
+                                                        0x485362);
         lv_obj_set_style_bg_color(device_battery_fills[row], battery_color, LV_PART_MAIN);
         lv_obj_set_width(device_battery_fills[row], known ? 2 + level * 18 / 100 : 0);
         lv_obj_set_style_border_color(device_battery_frames[row],
@@ -259,15 +279,25 @@ static void layout_status(bool portrait)
     }
 
     lv_obj_t *wpm = lv_obj_get_child(screen, 1);
-    lv_obj_set_pos(wpm, portrait ? 4 : 30, portrait ? 39 : 28);
-    lv_obj_set_size(wpm, 260, portrait ? 90 : 55);
+    lv_obj_set_pos(wpm, portrait ? 4 : 10, portrait ? 33 : 28);
+    lv_obj_set_size(wpm, 260, portrait ? 120 : 65);
     lv_obj_set_style_transform_pivot_x(wpm, 0, LV_PART_MAIN);
     lv_obj_set_style_transform_pivot_y(wpm, 0, LV_PART_MAIN);
-    lv_obj_set_style_transform_scale_x(wpm, portrait ? 159 : 256, LV_PART_MAIN);
+    lv_obj_set_style_transform_scale_x(wpm, portrait ? 159 : 295, LV_PART_MAIN);
     lv_obj_set_style_transform_scale_y(wpm, portrait ? 159 : 256, LV_PART_MAIN);
+    uint32_t wpm_children = lv_obj_get_child_cnt(wpm);
+    if (wpm_children >= 3) {
+        for (uint32_t i = 0; i < wpm_children - 2; i++) {
+            lv_obj_set_height(lv_obj_get_child(wpm, i), portrait ? 120 : 65);
+        }
+        lv_obj_align(lv_obj_get_child(wpm, wpm_children - 2), LV_ALIGN_TOP_LEFT,
+                     portrait ? -3 : -7, portrait ? -5 : -9);
+        lv_obj_align(lv_obj_get_child(wpm, wpm_children - 1), LV_ALIGN_BOTTOM_RIGHT,
+                     0, 0);
+    }
 
     lv_obj_t *layers = lv_obj_get_child(screen, 2);
-    lv_obj_set_pos(layers, portrait ? 7 : 30, portrait ? 110 : 93);
+    lv_obj_set_pos(layers, portrait ? 7 : 10, portrait ? 121 : 98);
     lv_obj_set_style_transform_pivot_x(layers, 0, LV_PART_MAIN);
     lv_obj_set_style_transform_pivot_y(layers, 0, LV_PART_MAIN);
     lv_obj_set_style_transform_scale_x(layers, portrait ? 155 : 256, LV_PART_MAIN);
@@ -277,17 +307,40 @@ static void layout_status(bool portrait)
      * compact arcs live in their own status-only object. */
     lv_obj_add_flag(lv_obj_get_child(screen, 3), LV_OBJ_FLAG_HIDDEN);
     lv_obj_t *output = lv_obj_get_child(screen, 4);
-    lv_obj_set_pos(output, portrait ? 28 : 202, portrait ? 139 : 105);
+    lv_obj_set_pos(output, portrait ? 8 : 202, portrait ? 144 : 109);
+    lv_obj_set_size(output, portrait ? 156 : 116, portrait ? 65 : 62);
+    uint32_t output_children = lv_obj_get_child_cnt(output);
+    if (output_children >= 3) {
+        for (uint32_t i = 0; i < 2; i++) {
+            lv_obj_t *button = lv_obj_get_child(output, i);
+            lv_obj_set_pos(button, portrait ? (int)i * 79 : (int)i * 58, 0);
+            lv_obj_set_size(button, portrait ? 77 : 56, 29);
+        }
+        uint32_t profile_count = output_children - 2;
+        int width = (portrait ? 156 : 116) - ((int)profile_count - 1) * 2;
+        width /= profile_count;
+        int start_x = portrait ? ((156 - ((int)profile_count * width +
+                                         ((int)profile_count - 1) * 2)) / 2) : 0;
+        for (uint32_t i = 0; i < profile_count; i++) {
+            lv_obj_t *slot = lv_obj_get_child(output, i + 2);
+            lv_obj_set_pos(slot, start_x + (int)i * (width + 2), portrait ? 36 : 33);
+            lv_obj_set_size(slot, width, 29);
+        }
+    }
     lv_obj_set_style_transform_pivot_x(output, 0, LV_PART_MAIN);
     lv_obj_set_style_transform_pivot_y(output, 0, LV_PART_MAIN);
     lv_obj_set_style_transform_scale_x(output, 256, LV_PART_MAIN);
     lv_obj_set_style_transform_scale_y(output, 256, LV_PART_MAIN);
 
     xiao147_battery_rings_set_portrait(portrait);
-    lv_obj_set_pos(dongle_battery_bar, portrait ? 16 : 10, portrait ? 285 : 158);
-    lv_obj_set_size(dongle_battery_bar, portrait ? 106 : 140, 6);
-    lv_obj_set_pos(dongle_battery_label, portrait ? 125 : 154, portrait ? 278 : 150);
-    lv_obj_set_width(dongle_battery_label, portrait ? 42 : 45);
+    lv_obj_set_pos(dongle_battery_bar, 10, 160);
+    lv_obj_set_size(dongle_battery_bar, 140, 6);
+    lv_obj_set_pos(dongle_battery_label, portrait ? 123 : 166,
+                   portrait ? 288 : 150);
+    lv_obj_set_width(dongle_battery_label, portrait ? 42 : 35);
+    lv_obj_set_style_text_align(dongle_battery_label,
+                                portrait ? LV_TEXT_ALIGN_RIGHT : LV_TEXT_ALIGN_LEFT,
+                                LV_PART_MAIN);
 }
 
 static void redraw(struct k_work *work)
@@ -318,11 +371,18 @@ static void redraw(struct k_work *work)
     xiao147_rssi_set_active(page == XIAO147_PAGE_DEVICES && !atomic_get(&sleeping));
     if (page == XIAO147_PAGE_STATUS) {
         lv_obj_add_flag(panel, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_clear_flag(dongle_battery_bar, LV_OBJ_FLAG_HIDDEN);
+        if (portrait) {
+            lv_obj_add_flag(dongle_battery_bar, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_clear_flag(dongle_battery_ticks, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_clear_flag(dongle_battery_bar, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(dongle_battery_ticks, LV_OBJ_FLAG_HIDDEN);
+        }
         lv_obj_clear_flag(dongle_battery_label, LV_OBJ_FLAG_HIDDEN);
         xiao147_battery_rings_set_visible(true);
     } else {
         lv_obj_add_flag(dongle_battery_bar, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(dongle_battery_ticks, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(dongle_battery_label, LV_OBJ_FLAG_HIDDEN);
         xiao147_battery_rings_set_visible(false);
         lv_obj_clear_flag(panel, LV_OBJ_FLAG_HIDDEN);
@@ -338,6 +398,17 @@ static void redraw(struct k_work *work)
     }
     uint8_t dongle_level = zmk_battery_state_of_charge();
     lv_bar_set_value(dongle_battery_bar, dongle_level, LV_ANIM_OFF);
+    uint32_t dongle_color = xiao147_battery_color(dongle_level);
+    lv_obj_set_style_bg_color(dongle_battery_bar, lv_color_hex(dongle_color),
+                              LV_PART_INDICATOR);
+    uint8_t active_segments = (dongle_level * DONGLE_BATTERY_SEGMENTS + 99) / 100;
+    for (uint8_t i = 0; i < DONGLE_BATTERY_SEGMENTS; i++) {
+        lv_obj_set_style_bg_color(dongle_battery_segment[i],
+                                  lv_color_hex(i < active_segments ? dongle_color : 0x282c30),
+                                  LV_PART_MAIN);
+    }
+    lv_obj_set_style_text_color(dongle_battery_label, lv_color_hex(dongle_color),
+                                LV_PART_MAIN);
     char text[8];
     snprintf(text, sizeof(text), "%u%%", dongle_level);
     lv_label_set_text(dongle_battery_label, text);
@@ -429,7 +500,28 @@ static void create_ui(struct k_work *work)
     lv_obj_set_style_bg_color(dongle_battery_bar, lv_color_hex(0x54806c), LV_PART_INDICATOR);
     lv_obj_set_style_bg_opa(dongle_battery_bar, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(dongle_battery_bar, LV_OPA_COVER, LV_PART_INDICATOR);
-    dongle_battery_label = make_label(screen, 154, 150, 45, "--%", COLOR_GREEN);
+    dongle_battery_label = make_label(screen, 166, 150, 35, "--%", COLOR_GREEN);
+    lv_obj_set_style_text_font(dongle_battery_label, &lv_font_montserrat_12,
+                               LV_PART_MAIN);
+    lv_obj_set_style_text_letter_space(dongle_battery_label, -1, LV_PART_MAIN);
+    dongle_battery_ticks = lv_obj_create(screen);
+    lv_obj_set_pos(dongle_battery_ticks, 10, 288);
+    lv_obj_set_size(dongle_battery_ticks, 99, 16);
+    lv_obj_set_style_bg_opa(dongle_battery_ticks, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(dongle_battery_ticks, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(dongle_battery_ticks, 0, LV_PART_MAIN);
+    for (uint8_t i = 0; i < DONGLE_BATTERY_SEGMENTS; i++) {
+        lv_obj_t *segment = lv_obj_create(dongle_battery_ticks);
+        dongle_battery_segment[i] = segment;
+        lv_obj_set_pos(segment, i * 4, 0);
+        lv_obj_set_size(segment, 3, 16);
+        lv_obj_set_style_bg_opa(segment, LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_set_style_bg_color(segment, lv_color_hex(0x282c30), LV_PART_MAIN);
+        lv_obj_set_style_border_width(segment, 0, LV_PART_MAIN);
+        lv_obj_set_style_radius(segment, 0, LV_PART_MAIN);
+        lv_obj_set_style_pad_all(segment, 0, LV_PART_MAIN);
+    }
+    lv_obj_add_flag(dongle_battery_ticks, LV_OBJ_FLAG_HIDDEN);
 
     panel = lv_obj_create(screen);
     lv_obj_set_pos(panel, 0, 0);
