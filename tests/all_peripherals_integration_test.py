@@ -45,8 +45,20 @@ attributes_body = re.search(r"physical_42key_layout:.*?keys.*?=(.*?);", layout, 
 attributes = [list(map(int, match.split())) for match in
               re.findall(r"<&key_physical_attrs\s+([^>]+)>", attributes_body)]
 assert len(attributes) == 54 and attributes[:42] == baseline["attributes"]
+draw_layout = json.loads((ROOT / "config/lism.json").read_text())["layouts"]["LisM"]["layout"]
+assert len(draw_layout) == 54, "Keymap drawing must include both joystick virtual groups"
+for key, attrs in zip(draw_layout, attributes):
+    assert [key.get("w", 1), key.get("h", 1), key["x"], key["y"]] == [
+        value / 100 for value in attrs[:4]
+    ], (key, attrs)
 position_body = re.search(r"physical_42key_layout\s*\{\s*physical-layout.*?positions\s*=(.*?);", layout, re.S)[1]
 assert list(map(int, re.findall(r"\d+", position_body))) == list(range(54))
+legacy_map = re.search(r"physical_40key_layout\s*\{\s*physical-layout.*?positions\s*=(.*?);", layout, re.S)[1]
+legacy_positions = list(map(int, re.findall(r"\d+", legacy_map)))
+assert legacy_positions[:42] == [*range(33), 40, 33, 34, 35, 36, 41, 37, 38, 39]
+assert legacy_positions[42:] == list(range(42, 54))
+assert len(legacy_positions) == 54, "ZMK requires equal entry counts even for inactive maps"
+assert sorted(legacy_positions) == list(range(54)), "Legacy map must have no duplicates or omissions"
 
 jp19 = read("boards/shields/lism/lism_joystick.overlay")
 circle = read("boards/shields/lism/lism_circlepad.overlay")
