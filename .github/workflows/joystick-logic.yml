@@ -1,0 +1,54 @@
+name: JP19 and Circle Pad logic
+on:
+  workflow_dispatch:
+  push:
+    branches: [ codex/xiao147-all-peripherals ]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'boards/shields/lism/**'
+      - 'config/**'
+      - 'build.yaml'
+      - '.github/workflows/joystick-logic.yml'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'boards/shields/lism/**'
+      - 'config/**'
+      - 'build.yaml'
+      - '.github/workflows/joystick-logic.yml'
+
+jobs:
+  joystick-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify all peripheral targets and original keymap positions
+        run: python3 tests/all_peripherals_integration_test.py
+      - name: Verify selected joystick data and battery color boundaries
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -fsanitize=undefined,address tests/peripheral_roles_test.c -o /tmp/peripheral-roles-test
+          /tmp/peripheral-roles-test
+      - name: Compile and exercise the firmware sector function
+        run: |
+          python3 - <<'PYCONFIG'
+          import re
+          from pathlib import Path
+          text = Path('boards/shields/lism/lism_circlepad.overlay').read_text()
+          text = re.sub(r'/\*.*?\*/', '', text, flags=re.S)
+          props = {'SWAP_AXES': 'swap-axes', 'INVERT_X': 'invert-x', 'INVERT_Y': 'invert-y', 'STRICT': 'strict-sector-boundaries'}
+          lines = [f'#define CIRCLE_{key} {int(bool(re.search(r"\b" + prop + r"\s*;", text)))}' for key, prop in props.items()]
+          for key, prop in [('ACTIVATION', 'activation-threshold'), ('RELEASE', 'release-threshold'), ('HYSTERESIS', 'sector-hysteresis-degrees')]:
+              value = int(re.search(prop + r'\s*=\s*<(\d+)>', text).group(1))
+              lines.append(f'#define CIRCLE_{key} {value}')
+          Path('/tmp/circlepad-test-config.h').write_text('\n'.join(lines) + '\n')
+          PYCONFIG
+          cc -include /tmp/circlepad-test-config.h -std=c99 -Wall -Wextra -Werror -fsanitize=undefined,address tests/joystick_sector_test.c -lm -o /tmp/joystick-sector-test
+          /tmp/joystick-sector-test
+      - name: Exercise the latest JP19 driver cases
+        run: python3 tests/jp19_driver_host_test.py
+      - name: Replay the tested Circle Pad trace and release/sprint cases
+        run: python3 tests/joystick_driver_host_test.py
+      - name: Exercise charging and RGB policy with mocked hardware
+        run: python3 tests/joystick_status_host_test.py

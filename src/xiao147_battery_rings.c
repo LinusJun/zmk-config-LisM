@@ -18,6 +18,7 @@
 
 #include "xiao147_battery_rings.h"
 #include "xiao147_battery_colors.h"
+#include "xiao147_peripheral_roles.h"
 #include "xiao147_rotation.h"
 #include "xiao147_ui.h"
 
@@ -30,9 +31,9 @@ static lv_obj_t *ring_obj[RING_COUNT];
 static lv_obj_t *ring_row;
 static lv_obj_t *ring_badge[RING_COUNT];
 static lv_obj_t *ring_badge_text[RING_COUNT];
-static uint8_t battery_level[RING_COUNT];
-static bool battery_seen[RING_COUNT];
-static bool connected[RING_COUNT];
+static uint8_t battery_level[XIAO147_PERIPHERAL_COUNT];
+static bool battery_seen[XIAO147_PERIPHERAL_COUNT];
+static bool connected[XIAO147_PERIPHERAL_COUNT];
 static struct k_work_delayable deferred_init_work;
 static struct k_work display_init_work;
 
@@ -41,9 +42,10 @@ static void render_ring(uint8_t slot) {
         return;
     }
 
-    const bool active = connected[slot];
-    const bool known = active && battery_seen[slot];
-    const uint8_t level = battery_level[slot];
+    const uint8_t source_slot = slot < 2 ? slot : xiao147_active_joystick_slot(connected);
+    const bool active = connected[source_slot];
+    const bool known = active && battery_seen[source_slot];
+    const uint8_t level = battery_level[source_slot];
     const uint32_t ring_color = active ? 0x505050 : 0x282c30;
     const uint32_t fill_color = known ? xiao147_battery_color(level) : 0x383c42;
 
@@ -147,25 +149,25 @@ void xiao147_battery_rings_set_visible(bool visible) {
  * prevents a NULL initial read from overwriting an earlier connection.
  */
 struct battery_ring_state {
-    uint8_t level[RING_COUNT];
-    bool seen[RING_COUNT];
+    uint8_t level[XIAO147_PERIPHERAL_COUNT];
+    bool seen[XIAO147_PERIPHERAL_COUNT];
 };
 
 static struct battery_ring_state latest_battery;
 
 static void battery_update_cb(struct battery_ring_state state) {
-    for (uint8_t slot = 0; slot < RING_COUNT; slot++) {
+    for (uint8_t slot = 0; slot < XIAO147_PERIPHERAL_COUNT; slot++) {
         battery_level[slot] = state.level[slot];
         battery_seen[slot] = state.seen[slot];
-        render_ring(slot);
     }
+    for (uint8_t slot = 0; slot < RING_COUNT; slot++) { render_ring(slot); }
 }
 
 static struct battery_ring_state battery_get_state(const zmk_event_t *eh) {
     if (eh != NULL) {
         const struct zmk_peripheral_battery_state_changed *event =
             as_zmk_peripheral_battery_state_changed(eh);
-        if (event != NULL && event->source < RING_COUNT) {
+        if (event != NULL && event->source < XIAO147_PERIPHERAL_COUNT) {
             latest_battery.level[event->source] = event->state_of_charge;
             latest_battery.seen[event->source] = true;
         }
@@ -174,24 +176,24 @@ static struct battery_ring_state battery_get_state(const zmk_event_t *eh) {
 }
 
 struct connection_ring_state {
-    bool connected[RING_COUNT];
+    bool connected[XIAO147_PERIPHERAL_COUNT];
 };
 
 static struct connection_ring_state latest_connection;
 
 static void connection_update_cb(struct connection_ring_state state) {
-    for (uint8_t slot = 0; slot < RING_COUNT; slot++) {
+    for (uint8_t slot = 0; slot < XIAO147_PERIPHERAL_COUNT; slot++) {
         connected[slot] = state.connected[slot];
         if (!connected[slot]) { battery_seen[slot] = false; }
-        render_ring(slot);
     }
+    for (uint8_t slot = 0; slot < RING_COUNT; slot++) { render_ring(slot); }
 }
 
 static struct connection_ring_state connection_get_state(const zmk_event_t *eh) {
     if (eh != NULL) {
         const struct zmk_split_central_status_changed *event =
             as_zmk_split_central_status_changed(eh);
-        if (event != NULL && event->slot < RING_COUNT) {
+        if (event != NULL && event->slot < XIAO147_PERIPHERAL_COUNT) {
             latest_connection.connected[event->slot] = event->connected;
             if (!event->connected) {
                 latest_battery.seen[event->slot] = false;

@@ -41,9 +41,9 @@ LV_FONT_DECLARE(FG_Medium_20);
 enum rotation_mode { ROTATION_AUTO, ROTATION_LANDSCAPE, ROTATION_PORTRAIT };
 struct touch_sample { uint8_t fingers; uint16_t x; uint16_t y; };
 struct peripheral_state {
-    uint8_t battery[3];
-    bool seen[3];
-    bool connected[3];
+    uint8_t battery[XIAO147_PERIPHERAL_COUNT];
+    bool seen[XIAO147_PERIPHERAL_COUNT];
+    bool connected[XIAO147_PERIPHERAL_COUNT];
 };
 
 K_MSGQ_DEFINE(touch_queue, sizeof(struct touch_sample), 32, 4);
@@ -218,34 +218,37 @@ static void draw_devices(void)
     k_mutex_lock(&peripheral_lock, K_FOREVER);
     copy = peripheral;
     k_mutex_unlock(&peripheral_lock);
-    int8_t signal_values[4];
-    bool signal_valid[4];
+    int8_t signal_values[XIAO147_RSSI_COUNT];
+    bool signal_valid[XIAO147_RSSI_COUNT];
     xiao147_rssi_snapshot(signal_values, signal_valid);
     static const char *const names[] = {"DONGLE", "LISM LEFT", "LISM RIGHT", "JOYSTICK"};
     static const char *const short_names[] = {"DONGLE", "LEFT", "RIGHT", "JOY"};
     bool portrait = xiao147_rotation_is_portrait();
+    uint8_t joystick_slot = xiao147_active_joystick_slot(copy.connected);
     for (int row = 0; row < 4; row++) {
-        bool active = row == 0 || copy.connected[row - 1];
+        uint8_t source_slot = row == 0 ? 0 : row == 3 ? joystick_slot : row - 1;
+        uint8_t signal_index = row == 0 ? 0 : source_slot + 1;
+        bool active = row == 0 || copy.connected[source_slot];
         uint8_t level = 0;
         bool known = false;
         if (row == 0) {
             level = zmk_battery_state_of_charge();
             known = true;
-        } else if (active && copy.seen[row - 1]) {
-            level = copy.battery[row - 1];
+        } else if (active && copy.seen[source_slot]) {
+            level = copy.battery[source_slot];
             known = true;
         }
         lv_label_set_text(device_names[row], portrait ? short_names[row] : names[row]);
         char signal_text[12];
-        bool has_signal = signal_valid[row] && active;
+        bool has_signal = signal_valid[signal_index] && active;
         if (has_signal) {
-            snprintf(signal_text, sizeof(signal_text), "%ddBm", signal_values[row]);
+            snprintf(signal_text, sizeof(signal_text), "%ddBm", signal_values[signal_index]);
         } else {
             snprintf(signal_text, sizeof(signal_text), "--dBm");
         }
         lv_label_set_text(device_signals[row], signal_text);
         lv_obj_set_style_text_color(device_signals[row],
-                                    lv_color_hex(has_signal ? rssi_color(signal_values[row]) :
+                                    lv_color_hex(has_signal ? rssi_color(signal_values[signal_index]) :
                                                  0x606060), LV_PART_MAIN);
         lv_color_t battery_color = lv_color_hex(known ? xiao147_battery_color(level) :
                                                         0x485362);
@@ -731,11 +734,11 @@ static int peripheral_event_listener(const zmk_event_t *eh)
     const struct zmk_split_central_status_changed *connection =
         as_zmk_split_central_status_changed(eh);
     k_mutex_lock(&peripheral_lock, K_FOREVER);
-    if (battery && battery->source < 3) {
+    if (battery && battery->source < XIAO147_PERIPHERAL_COUNT) {
         peripheral.battery[battery->source] = battery->state_of_charge;
         peripheral.seen[battery->source] = true;
     }
-    if (connection && connection->slot < 3) {
+    if (connection && connection->slot < XIAO147_PERIPHERAL_COUNT) {
         peripheral.connected[connection->slot] = connection->connected;
         if (!connection->connected) { peripheral.seen[connection->slot] = false; }
     }

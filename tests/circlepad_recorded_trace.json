@@ -1,0 +1,2085 @@
+{
+  "source_firmware": "667020b67807657dbb971f97d0e49140d7d27967",
+  "samples": [
+    {
+      "uptime_s": 2.544097,
+      "x": 1950,
+      "y": 1816,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 3.0525510000000002,
+      "x": 1964,
+      "y": 1822,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 3.561004,
+      "x": 1952,
+      "y": 1821,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 4.069488,
+      "x": 1952,
+      "y": 1824,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 4.57788,
+      "x": 1945,
+      "y": 1822,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 5.086242,
+      "x": 1953,
+      "y": 1822,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 5.594604,
+      "x": 1949,
+      "y": 1823,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 6.103027,
+      "x": 1943,
+      "y": 1819,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 6.611389,
+      "x": 1952,
+      "y": 1815,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 7.119812,
+      "x": 1956,
+      "y": 1816,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 7.628143,
+      "x": 1960,
+      "y": 1821,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 8.136534999999999,
+      "x": 1950,
+      "y": 1822,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 8.644897,
+      "x": 1948,
+      "y": 1816,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 9.15332,
+      "x": 1944,
+      "y": 1818,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_start",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 9.661650999999999,
+      "x": 1953,
+      "y": 1824,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_start",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 10.170074,
+      "x": 1960,
+      "y": 1804,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_start",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 10.678436000000001,
+      "x": 1942,
+      "y": 1807,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_start",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 11.186828,
+      "x": 1942,
+      "y": 1819,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_start",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 11.69519,
+      "x": 1948,
+      "y": 1825,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_start",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 12.203552,
+      "x": 1947,
+      "y": 1826,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_start",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 12.711944,
+      "x": 1948,
+      "y": 1814,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_start",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 13.220367000000001,
+      "x": 1954,
+      "y": 1801,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_start",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 13.728729,
+      "x": 1955,
+      "y": 1806,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_start",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 14.237182,
+      "x": 1948,
+      "y": 1822,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_start",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 14.745512999999999,
+      "x": 1946,
+      "y": 1818,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_start",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 15.253936,
+      "x": 1951,
+      "y": 1810,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 15.762268,
+      "x": 1946,
+      "y": 1824,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 16.270629,
+      "x": 1951,
+      "y": 1811,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 16.779083,
+      "x": 1939,
+      "y": 1820,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 17.287384,
+      "x": 1950,
+      "y": 1811,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 17.795715,
+      "x": 1950,
+      "y": 1812,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 18.304138,
+      "x": 1948,
+      "y": 1826,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 18.812530000000002,
+      "x": 1951,
+      "y": 1822,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 19.320861,
+      "x": 1943,
+      "y": 1826,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 19.829223,
+      "x": 1948,
+      "y": 1811,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 20.337585,
+      "x": 1947,
+      "y": 1823,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 20.846038,
+      "x": 1943,
+      "y": 1816,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 21.354430999999998,
+      "x": 1952,
+      "y": 1826,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 21.863768999999998,
+      "x": 3176,
+      "y": 1545,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up",
+      "old_mask": 1
+    },
+    {
+      "uptime_s": 22.363189,
+      "x": 3168,
+      "y": 1536,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up",
+      "old_mask": 1
+    },
+    {
+      "uptime_s": 22.872833,
+      "x": 3170,
+      "y": 1538,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up",
+      "old_mask": 1
+    },
+    {
+      "uptime_s": 23.372253,
+      "x": 3175,
+      "y": 1538,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up",
+      "old_mask": 1
+    },
+    {
+      "uptime_s": 23.881896,
+      "x": 3180,
+      "y": 1525,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up",
+      "old_mask": 1
+    },
+    {
+      "uptime_s": 24.381317,
+      "x": 3180,
+      "y": 1539,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up",
+      "old_mask": 1
+    },
+    {
+      "uptime_s": 24.89096,
+      "x": 3163,
+      "y": 1528,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up",
+      "old_mask": 1
+    },
+    {
+      "uptime_s": 25.39038,
+      "x": 3169,
+      "y": 1515,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up",
+      "old_mask": 1
+    },
+    {
+      "uptime_s": 25.900024,
+      "x": 3171,
+      "y": 1529,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up",
+      "old_mask": 1
+    },
+    {
+      "uptime_s": 26.399414,
+      "x": 3175,
+      "y": 1536,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up",
+      "old_mask": 1
+    },
+    {
+      "uptime_s": 26.909057,
+      "x": 3180,
+      "y": 1523,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 1
+    },
+    {
+      "uptime_s": 27.408233000000003,
+      "x": 1933,
+      "y": 1926,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 27.916503,
+      "x": 1943,
+      "y": 1911,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 28.424896,
+      "x": 1936,
+      "y": 1924,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 28.933288,
+      "x": 1931,
+      "y": 1936,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 29.441741,
+      "x": 1945,
+      "y": 1927,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 29.950195,
+      "x": 1948,
+      "y": 1923,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 30.458586999999998,
+      "x": 1948,
+      "y": 1923,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 30.966918,
+      "x": 1948,
+      "y": 1921,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 31.475311,
+      "x": 1944,
+      "y": 1927,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 31.983612,
+      "x": 1938,
+      "y": 1933,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 32.492003999999994,
+      "x": 1958,
+      "y": 1925,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 33.000396,
+      "x": 1944,
+      "y": 1930,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "left",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 33.508758,
+      "x": 1935,
+      "y": 1928,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "left",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 34.017120000000006,
+      "x": 1877,
+      "y": 3252,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "left",
+      "old_mask": 4
+    },
+    {
+      "uptime_s": 34.52536,
+      "x": 1872,
+      "y": 3247,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "left",
+      "old_mask": 4
+    },
+    {
+      "uptime_s": 35.033721,
+      "x": 1865,
+      "y": 3253,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "left",
+      "old_mask": 4
+    },
+    {
+      "uptime_s": 35.54199199999999,
+      "x": 1866,
+      "y": 3249,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "left",
+      "old_mask": 4
+    },
+    {
+      "uptime_s": 36.050292,
+      "x": 1879,
+      "y": 3248,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "left",
+      "old_mask": 4
+    },
+    {
+      "uptime_s": 36.558654,
+      "x": 1861,
+      "y": 3245,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "left",
+      "old_mask": 4
+    },
+    {
+      "uptime_s": 37.067047,
+      "x": 1865,
+      "y": 3250,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "left",
+      "old_mask": 4
+    },
+    {
+      "uptime_s": 37.575378,
+      "x": 1861,
+      "y": 3244,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "left",
+      "old_mask": 4
+    },
+    {
+      "uptime_s": 38.083648,
+      "x": 1865,
+      "y": 3252,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "left",
+      "old_mask": 4
+    },
+    {
+      "uptime_s": 38.591918,
+      "x": 1870,
+      "y": 3249,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "left",
+      "old_mask": 4
+    },
+    {
+      "uptime_s": 39.100189,
+      "x": 1865,
+      "y": 3247,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 4
+    },
+    {
+      "uptime_s": 39.608611999999994,
+      "x": 1838,
+      "y": 1954,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 40.116851,
+      "x": 1840,
+      "y": 1961,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 40.625122,
+      "x": 1841,
+      "y": 1959,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 41.133422,
+      "x": 1844,
+      "y": 1966,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 41.641693,
+      "x": 1833,
+      "y": 1958,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 42.150054,
+      "x": 1832,
+      "y": 1959,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 42.658386,
+      "x": 1843,
+      "y": 1943,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 43.166748,
+      "x": 1844,
+      "y": 1964,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 43.675048,
+      "x": 1840,
+      "y": 1951,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 44.18338,
+      "x": 1842,
+      "y": 1951,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 44.691619,
+      "x": 1837,
+      "y": 1956,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 45.199981,
+      "x": 1842,
+      "y": 1970,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 45.708282,
+      "x": 1840,
+      "y": 1963,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 46.216583,
+      "x": 1836,
+      "y": 1949,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 46.725067,
+      "x": 488,
+      "y": 1927,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down",
+      "old_mask": 2
+    },
+    {
+      "uptime_s": 47.233397999999994,
+      "x": 487,
+      "y": 1930,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down",
+      "old_mask": 2
+    },
+    {
+      "uptime_s": 47.741729,
+      "x": 496,
+      "y": 1959,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down",
+      "old_mask": 2
+    },
+    {
+      "uptime_s": 48.250061,
+      "x": 479,
+      "y": 1943,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down",
+      "old_mask": 2
+    },
+    {
+      "uptime_s": 48.758361,
+      "x": 489,
+      "y": 1959,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down",
+      "old_mask": 2
+    },
+    {
+      "uptime_s": 49.266632,
+      "x": 485,
+      "y": 1956,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down",
+      "old_mask": 2
+    },
+    {
+      "uptime_s": 49.774963,
+      "x": 487,
+      "y": 1923,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down",
+      "old_mask": 2
+    },
+    {
+      "uptime_s": 50.283355,
+      "x": 488,
+      "y": 1911,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down",
+      "old_mask": 2
+    },
+    {
+      "uptime_s": 50.791717,
+      "x": 485,
+      "y": 1919,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down",
+      "old_mask": 2
+    },
+    {
+      "uptime_s": 51.300048,
+      "x": 487,
+      "y": 1915,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down",
+      "old_mask": 2
+    },
+    {
+      "uptime_s": 51.80838,
+      "x": 476,
+      "y": 1920,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down",
+      "old_mask": 2
+    },
+    {
+      "uptime_s": 52.316711000000005,
+      "x": 479,
+      "y": 1915,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 2
+    },
+    {
+      "uptime_s": 52.825195,
+      "x": 1801,
+      "y": 1899,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 53.333526,
+      "x": 1805,
+      "y": 1898,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 53.841766,
+      "x": 1795,
+      "y": 1910,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 54.350067,
+      "x": 1806,
+      "y": 1904,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 54.858397999999994,
+      "x": 1822,
+      "y": 1905,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 55.366729,
+      "x": 1795,
+      "y": 1900,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 55.87503,
+      "x": 1791,
+      "y": 1893,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 56.383331000000005,
+      "x": 1811,
+      "y": 1908,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "right",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 56.891601,
+      "x": 1806,
+      "y": 1900,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "right",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 57.399902000000004,
+      "x": 1805,
+      "y": 1901,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "right",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 57.908325,
+      "x": 1725,
+      "y": 635,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "right",
+      "old_mask": 8
+    },
+    {
+      "uptime_s": 58.416534,
+      "x": 1705,
+      "y": 521,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "right",
+      "old_mask": 8
+    },
+    {
+      "uptime_s": 58.924804,
+      "x": 1709,
+      "y": 536,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "right",
+      "old_mask": 8
+    },
+    {
+      "uptime_s": 59.433135,
+      "x": 1703,
+      "y": 528,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "right",
+      "old_mask": 8
+    },
+    {
+      "uptime_s": 59.941436,
+      "x": 1711,
+      "y": 532,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "right",
+      "old_mask": 8
+    },
+    {
+      "uptime_s": 60.449798,
+      "x": 1705,
+      "y": 522,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "right",
+      "old_mask": 8
+    },
+    {
+      "uptime_s": 60.958099,
+      "x": 1704,
+      "y": 526,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "right",
+      "old_mask": 8
+    },
+    {
+      "uptime_s": 61.466461,
+      "x": 1702,
+      "y": 534,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "right",
+      "old_mask": 8
+    },
+    {
+      "uptime_s": 61.974791999999994,
+      "x": 1700,
+      "y": 522,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "right",
+      "old_mask": 8
+    },
+    {
+      "uptime_s": 62.483093,
+      "x": 1700,
+      "y": 523,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 8
+    },
+    {
+      "uptime_s": 62.991424,
+      "x": 1693,
+      "y": 523,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 8
+    },
+    {
+      "uptime_s": 63.500091,
+      "x": 1805,
+      "y": 1811,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 64.008361,
+      "x": 1810,
+      "y": 1816,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 64.51660100000001,
+      "x": 1805,
+      "y": 1816,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 65.024932,
+      "x": 1805,
+      "y": 1822,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 65.533233,
+      "x": 1803,
+      "y": 1823,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 66.041687,
+      "x": 1809,
+      "y": 1816,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 66.549987,
+      "x": 1808,
+      "y": 1804,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 67.058288,
+      "x": 1808,
+      "y": 1830,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 67.56658900000001,
+      "x": 1804,
+      "y": 1819,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 68.074859,
+      "x": 1805,
+      "y": 1813,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_left",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 68.58315999999999,
+      "x": 1814,
+      "y": 1816,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_left",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 69.091583,
+      "x": 2377,
+      "y": 2655,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_left",
+      "old_mask": 5
+    },
+    {
+      "uptime_s": 69.59112499999999,
+      "x": 2379,
+      "y": 2855,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_left",
+      "old_mask": 4
+    },
+    {
+      "uptime_s": 70.09127799999999,
+      "x": 2389,
+      "y": 2857,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_left",
+      "old_mask": 5
+    },
+    {
+      "uptime_s": 70.600921,
+      "x": 2378,
+      "y": 2862,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_left",
+      "old_mask": 4
+    },
+    {
+      "uptime_s": 71.10061599999999,
+      "x": 2386,
+      "y": 2860,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_left",
+      "old_mask": 5
+    },
+    {
+      "uptime_s": 71.609985,
+      "x": 2608,
+      "y": 2942,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_left",
+      "old_mask": 5
+    },
+    {
+      "uptime_s": 72.118316,
+      "x": 2599,
+      "y": 2931,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_left",
+      "old_mask": 5
+    },
+    {
+      "uptime_s": 72.626647,
+      "x": 2600,
+      "y": 2940,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_left",
+      "old_mask": 5
+    },
+    {
+      "uptime_s": 73.134979,
+      "x": 2607,
+      "y": 2936,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_left",
+      "old_mask": 5
+    },
+    {
+      "uptime_s": 73.643341,
+      "x": 2607,
+      "y": 2939,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 5
+    },
+    {
+      "uptime_s": 74.15167199999999,
+      "x": 2611,
+      "y": 2951,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 5
+    },
+    {
+      "uptime_s": 74.65997300000001,
+      "x": 2596,
+      "y": 2947,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 5
+    },
+    {
+      "uptime_s": 75.16827300000001,
+      "x": 2601,
+      "y": 2926,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 5
+    },
+    {
+      "uptime_s": 75.676818,
+      "x": 1948,
+      "y": 1958,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 76.18515000000001,
+      "x": 1930,
+      "y": 1951,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 76.69345,
+      "x": 1940,
+      "y": 1953,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 77.201782,
+      "x": 1939,
+      "y": 1961,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 77.71005199999999,
+      "x": 1940,
+      "y": 1956,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 78.21835300000001,
+      "x": 1938,
+      "y": 1961,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 78.726654,
+      "x": 1936,
+      "y": 1959,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 79.234985,
+      "x": 1935,
+      "y": 1964,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 79.743316,
+      "x": 1939,
+      "y": 1964,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 80.251586,
+      "x": 1938,
+      "y": 1958,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 80.759857,
+      "x": 1932,
+      "y": 1956,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_left",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 81.268157,
+      "x": 1937,
+      "y": 1962,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_left",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 81.776489,
+      "x": 1816,
+      "y": 1956,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_left",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 82.28482000000001,
+      "x": 912,
+      "y": 2788,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_left",
+      "old_mask": 6
+    },
+    {
+      "uptime_s": 82.79315100000001,
+      "x": 771,
+      "y": 2791,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_left",
+      "old_mask": 6
+    },
+    {
+      "uptime_s": 83.301513,
+      "x": 775,
+      "y": 2808,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_left",
+      "old_mask": 6
+    },
+    {
+      "uptime_s": 83.809906,
+      "x": 776,
+      "y": 2804,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_left",
+      "old_mask": 6
+    },
+    {
+      "uptime_s": 84.318359,
+      "x": 767,
+      "y": 2802,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_left",
+      "old_mask": 6
+    },
+    {
+      "uptime_s": 84.82665999999999,
+      "x": 779,
+      "y": 2799,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_left",
+      "old_mask": 6
+    },
+    {
+      "uptime_s": 85.335021,
+      "x": 767,
+      "y": 2794,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_left",
+      "old_mask": 6
+    },
+    {
+      "uptime_s": 85.843292,
+      "x": 771,
+      "y": 2799,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_left",
+      "old_mask": 6
+    },
+    {
+      "uptime_s": 86.351654,
+      "x": 776,
+      "y": 2802,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_left",
+      "old_mask": 6
+    },
+    {
+      "uptime_s": 86.860076,
+      "x": 777,
+      "y": 2809,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 6
+    },
+    {
+      "uptime_s": 87.368499,
+      "x": 768,
+      "y": 2799,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 6
+    },
+    {
+      "uptime_s": 87.87707499999999,
+      "x": 1799,
+      "y": 1969,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 88.385406,
+      "x": 1808,
+      "y": 1965,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 88.893737,
+      "x": 1797,
+      "y": 1962,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 89.402038,
+      "x": 1803,
+      "y": 1972,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 89.910339,
+      "x": 1796,
+      "y": 1965,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 90.41864000000001,
+      "x": 1801,
+      "y": 1969,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 90.92703200000001,
+      "x": 1799,
+      "y": 1966,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 91.43530200000001,
+      "x": 1800,
+      "y": 1968,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_right",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 91.943572,
+      "x": 1803,
+      "y": 1967,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_right",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 92.451934,
+      "x": 1799,
+      "y": 2000,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_right",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 92.96057099999999,
+      "x": 995,
+      "y": 908,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_right",
+      "old_mask": 10
+    },
+    {
+      "uptime_s": 93.46899400000001,
+      "x": 991,
+      "y": 901,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_right",
+      "old_mask": 10
+    },
+    {
+      "uptime_s": 93.977264,
+      "x": 993,
+      "y": 856,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_right",
+      "old_mask": 10
+    },
+    {
+      "uptime_s": 94.485595,
+      "x": 996,
+      "y": 839,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_right",
+      "old_mask": 10
+    },
+    {
+      "uptime_s": 94.99389599999999,
+      "x": 997,
+      "y": 848,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_right",
+      "old_mask": 10
+    },
+    {
+      "uptime_s": 95.502258,
+      "x": 990,
+      "y": 847,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_right",
+      "old_mask": 10
+    },
+    {
+      "uptime_s": 96.010559,
+      "x": 990,
+      "y": 838,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_right",
+      "old_mask": 10
+    },
+    {
+      "uptime_s": 96.51889,
+      "x": 994,
+      "y": 842,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_right",
+      "old_mask": 10
+    },
+    {
+      "uptime_s": 97.027221,
+      "x": 986,
+      "y": 839,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "down_right",
+      "old_mask": 10
+    },
+    {
+      "uptime_s": 97.535522,
+      "x": 997,
+      "y": 843,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 10
+    },
+    {
+      "uptime_s": 98.043762,
+      "x": 1260,
+      "y": 985,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 10
+    },
+    {
+      "uptime_s": 98.55218500000001,
+      "x": 1807,
+      "y": 1823,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 99.060485,
+      "x": 1802,
+      "y": 1811,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 99.568939,
+      "x": 1805,
+      "y": 1823,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 100.077331,
+      "x": 1806,
+      "y": 1816,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 100.585601,
+      "x": 1810,
+      "y": 1822,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 101.093933,
+      "x": 1805,
+      "y": 1806,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 101.602264,
+      "x": 1807,
+      "y": 1812,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 102.110565,
+      "x": 1795,
+      "y": 1818,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_right",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 102.61883499999999,
+      "x": 1799,
+      "y": 1813,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_right",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 103.127105,
+      "x": 2239,
+      "y": 1613,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_right",
+      "old_mask": 9
+    },
+    {
+      "uptime_s": 103.635559,
+      "x": 2840,
+      "y": 901,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_right",
+      "old_mask": 9
+    },
+    {
+      "uptime_s": 104.143951,
+      "x": 2826,
+      "y": 910,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_right",
+      "old_mask": 9
+    },
+    {
+      "uptime_s": 104.652252,
+      "x": 2826,
+      "y": 903,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_right",
+      "old_mask": 9
+    },
+    {
+      "uptime_s": 105.160675,
+      "x": 2834,
+      "y": 898,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_right",
+      "old_mask": 9
+    },
+    {
+      "uptime_s": 105.669006,
+      "x": 2836,
+      "y": 891,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_right",
+      "old_mask": 9
+    },
+    {
+      "uptime_s": 106.177429,
+      "x": 2832,
+      "y": 900,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_right",
+      "old_mask": 9
+    },
+    {
+      "uptime_s": 106.68572900000001,
+      "x": 2838,
+      "y": 901,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_right",
+      "old_mask": 9
+    },
+    {
+      "uptime_s": 107.194061,
+      "x": 2834,
+      "y": 897,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_right",
+      "old_mask": 9
+    },
+    {
+      "uptime_s": 107.702331,
+      "x": 2835,
+      "y": 891,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "up_right",
+      "old_mask": 9
+    },
+    {
+      "uptime_s": 108.21078399999999,
+      "x": 2830,
+      "y": 904,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 9
+    },
+    {
+      "uptime_s": 108.719146,
+      "x": 2884,
+      "y": 936,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 9
+    },
+    {
+      "uptime_s": 109.227569,
+      "x": 1949,
+      "y": 1816,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 109.735839,
+      "x": 1957,
+      "y": 1824,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 110.244171,
+      "x": 1941,
+      "y": 1817,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 110.752471,
+      "x": 1951,
+      "y": 1810,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 111.260711,
+      "x": 1947,
+      "y": 1815,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 111.768981,
+      "x": 1943,
+      "y": 1811,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 112.277252,
+      "x": 1937,
+      "y": 1815,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 112.785583,
+      "x": 1954,
+      "y": 1805,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 113.293884,
+      "x": 1943,
+      "y": 1815,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": null,
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 113.802154,
+      "x": 1954,
+      "y": 1817,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_end",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 114.310424,
+      "x": 1949,
+      "y": 1824,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_end",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 114.81869499999999,
+      "x": 1955,
+      "y": 1819,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_end",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 115.326995,
+      "x": 1959,
+      "y": 1816,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_end",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 115.83526599999999,
+      "x": 1946,
+      "y": 1803,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_end",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 116.34356600000001,
+      "x": 1952,
+      "y": 1812,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_end",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 116.851867,
+      "x": 1952,
+      "y": 1813,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_end",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 117.36026,
+      "x": 1954,
+      "y": 1816,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_end",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 117.868591,
+      "x": 1961,
+      "y": 1814,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_end",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 118.37683100000001,
+      "x": 1951,
+      "y": 1815,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_end",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 118.885101,
+      "x": 1949,
+      "y": 1809,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_end",
+      "old_mask": 0
+    },
+    {
+      "uptime_s": 119.393402,
+      "x": 1945,
+      "y": 1814,
+      "center_x": 1950,
+      "center_y": 1814,
+      "label": "neutral_end",
+      "old_mask": 0
+    }
+  ],
+  "limitations": "Sparse chronological ADC log replay, not continuous 100Hz input or a new hardware test. Single-hand test with pin ribbon held; endpoints unverified. No span calibration applied."
+}

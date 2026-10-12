@@ -8,6 +8,8 @@ siblings:
   - lism_left
   - lism_right
   - lism_dongle
+  - lism_joystick
+  - lism_circlepad
 features:
   - keys
   - pointer

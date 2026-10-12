@@ -17,7 +17,7 @@
 
 #include "xiao147_rssi.h"
 
-#define RSSI_SLOTS 4
+#define RSSI_SLOTS XIAO147_RSSI_COUNT
 #define RSSI_SAMPLE_PERIOD K_SECONDS(3)
 #define RSSI_MAX_AGE_MS 10000
 
