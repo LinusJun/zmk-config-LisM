@@ -1,6 +1,7 @@
 /* Software RGB565 rotation: Zephyr 4.1's ST7789 driver cannot rotate at runtime. */
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
 #include <lvgl.h>
 #include <zephyr/device.h>
@@ -48,17 +49,24 @@ static void flush_cb(lv_display_t *display, const lv_area_t *area, uint8_t *pixe
         lv_display_flush_ready(display);
         return;
     }
-    if (w <= 0 || h <= 0) {
+    const lv_draw_buf_t *buffer = lv_display_get_buf_active(display);
+    uint32_t stride = buffer ? buffer->header.stride : 0;
+    bool portrait = atomic_get(&portrait_mode) != 0;
+    if (w <= 0 || h <= 0 || lv_display_get_color_format(display) != LV_COLOR_FORMAT_RGB565 ||
+        area->x1 < 0 || area->y1 < 0 || area->x2 >= (portrait ? PHYSICAL_H : PHYSICAL_W) ||
+        area->y2 >= (portrait ? PHYSICAL_W : PHYSICAL_H) ||
+        stride < (uint32_t)w * 2 || stride % 2 != 0 ||
+        !buffer || (size_t)stride * h > buffer->data_size) {
         xiao147_display_note_flush(false, -EINVAL);
         lv_display_flush_ready(display);
         return;
     }
-    if (!atomic_get(&portrait_mode)) {
+    if (!portrait) {
         struct display_buffer_descriptor desc = {
-            .buf_size = (size_t)w * h * 2,
+            .buf_size = (size_t)stride * h,
             .width = w,
             .height = h,
-            .pitch = w,
+            .pitch = stride / 2,
             .frame_incomplete = !lv_display_flush_is_last(display),
         };
         result = display_write(lcd, area->x1, area->y1, &desc, pixels);
@@ -73,7 +81,8 @@ static void flush_cb(lv_display_t *display, const lv_area_t *area, uint8_t *pixe
             if (rows > max_rows) { rows = max_rows; }
             for (int y = 0; y < rows; y++) {
                 for (int x = 0; x < w; x++) {
-                    rotate_tile[x * rows + (rows - 1 - y)] = src[(row + y) * w + x];
+                    rotate_tile[x * rows + (rows - 1 - y)] =
+                        src[(row + y) * (stride / 2) + x];
                 }
             }
             struct display_buffer_descriptor desc = {
@@ -112,6 +121,21 @@ void xiao147_rotation_set(bool portrait)
     if ((atomic_get(&portrait_mode) != 0) == portrait) { return; }
     lv_display_t *display = lv_display_get_default();
     if (display == NULL) { return; }
+    /* Invalidate the physical panel too: changed logical coordinates cannot
+     * erase pixels left behind by the previous portrait/landscape mapping.
+     * Reuse the rotation tile, never allocate a full-screen framebuffer.
+     */
+    memset(rotate_tile, 0, sizeof(rotate_tile));
+    for (int y = 0; y < PHYSICAL_H; y += ROTATE_TILE_PIXELS / PHYSICAL_W) {
+        int rows = PHYSICAL_H - y;
+        if (rows > ROTATE_TILE_PIXELS / PHYSICAL_W) { rows = ROTATE_TILE_PIXELS / PHYSICAL_W; }
+        struct display_buffer_descriptor desc = {
+            .width = PHYSICAL_W, .height = rows, .pitch = PHYSICAL_W,
+            .buf_size = PHYSICAL_W * rows * 2U,
+            .frame_incomplete = y + rows < PHYSICAL_H,
+        };
+        report_write(display_write(lcd, 0, y, &desc, rotate_tile));
+    }
     atomic_set(&portrait_mode, portrait);
     lv_display_set_rotation(display, portrait ? LV_DISPLAY_ROTATION_90 : LV_DISPLAY_ROTATION_0);
     lv_obj_invalidate(lv_scr_act());

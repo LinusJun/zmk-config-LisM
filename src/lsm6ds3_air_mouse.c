@@ -113,7 +113,11 @@ static int imu_init(const struct device *dev)
     if (!i2c_is_ready_dt(&cfg->bus)) { return -ENODEV; }
     uint8_t reg = IMU_WHO_AM_I;
     uint8_t who = 0;
-    if (i2c_write_read_dt(&cfg->bus, &reg, 1, &who, 1) != 0 || who != 0x69) {
+    /* Board U2 is LSM6DS3TR-C, not the original LSM6DS3: ST's driver
+     * lsm6ds3tr-c-pid 6735cd1 defines ID 0x6a with the same registers used here.
+     */
+    if (i2c_write_read_dt(&cfg->bus, &reg, 1, &who, 1) != 0 ||
+        (who != 0x69 && who != 0x6a)) {
         LOG_ERR("LSM6DS3 not detected (WHO_AM_I=0x%02x)", who);
         return -ENODEV;
     }
@@ -124,6 +128,7 @@ static int imu_init(const struct device *dev)
     }
     data->dev = dev;
     data->ready = true;
+    LOG_INF("IMU ready, WHO_AM_I=0x%02x", who);
     k_work_init_delayable(&data->poll_work, imu_poll);
     k_work_schedule(&data->poll_work, K_MSEC(IMU_SAMPLE_MS));
     return 0;

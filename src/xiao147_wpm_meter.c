@@ -54,13 +54,9 @@ static void wpm_meter_render(int active_bars) {
         }
 
         if (peak_position > active_bars && peak_position > 0) {
-            int bar_width = 8;
-            int bar_gap = 2;
-            int total_width = WPM_BAR_COUNT * bar_width + (WPM_BAR_COUNT - 1) * bar_gap;
-            int start_x = (260 - total_width) / 2;
             int peak_slot = (peak_position > active_bars + 1) ? (peak_position - 1) : active_bars;
             if (peak_slot >= WPM_BAR_COUNT) peak_slot = WPM_BAR_COUNT - 1;
-            int peak_x = start_x + peak_slot * (bar_width + bar_gap) + 2;
+            int peak_x = lv_obj_get_x(widget->bars[peak_slot]) + 2;
             lv_obj_set_pos(widget->peak_indicator, peak_x, 0);
             lv_obj_clear_flag(widget->peak_indicator, LV_OBJ_FLAG_HIDDEN);
         } else {

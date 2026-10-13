@@ -9,6 +9,7 @@
 #include <zephyr/input/input.h>
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
+#include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
 
 #include <zmk/battery.h>
@@ -26,6 +27,9 @@
 #include "xiao147_battery_colors.h"
 
 LV_FONT_DECLARE(FG_Medium_20);
+LV_FONT_DECLARE(FR_Medium_32);
+LV_FONT_DECLARE(DINishExpanded_Light_36);
+LOG_MODULE_REGISTER(xiao147_ui, LOG_LEVEL_INF);
 
 #define SCREEN_W 320
 #define SCREEN_H 172
@@ -284,28 +288,44 @@ static void layout_status(bool portrait)
 
     lv_obj_t *wpm = lv_obj_get_child(screen, 1);
     lv_obj_set_pos(wpm, portrait ? 4 : 10, portrait ? 33 : 28);
-    lv_obj_set_size(wpm, 260, portrait ? 120 : 65);
-    lv_obj_set_style_transform_pivot_x(wpm, 0, LV_PART_MAIN);
-    lv_obj_set_style_transform_pivot_y(wpm, 0, LV_PART_MAIN);
-    lv_obj_set_style_transform_scale_x(wpm, portrait ? 159 : 295, LV_PART_MAIN);
-    lv_obj_set_style_transform_scale_y(wpm, portrait ? 159 : 256, LV_PART_MAIN);
+    /* Native geometry avoids the ARGB transform layer (260*65*4 = 67600
+     * bytes before widgets, already larger than our entire 64 KiB LVGL heap).
+     */
+    int meter_width = portrait ? 164 : 300;
+    int meter_height = portrait ? 75 : 65;
+    lv_obj_set_size(wpm, meter_width, meter_height);
     uint32_t wpm_children = lv_obj_get_child_cnt(wpm);
-    if (wpm_children >= 3) {
-        for (uint32_t i = 0; i < wpm_children - 2; i++) {
-            lv_obj_set_height(lv_obj_get_child(wpm, i), portrait ? 120 : 65);
+    if (wpm_children > 3) {
+        uint32_t bars = wpm_children - 3; /* bars, peak, WPM label, layer label */
+        for (uint32_t i = 0; i < bars; i++) {
+            int gap = portrait ? 1 : 2;
+            int x = i * (meter_width + gap) / bars;
+            int end = (i + 1) * (meter_width + gap) / bars - gap;
+            lv_obj_t *bar = lv_obj_get_child(wpm, i);
+            lv_obj_set_pos(bar, x, 0);
+            lv_obj_set_size(bar, end - x, meter_height);
         }
-        lv_obj_align(lv_obj_get_child(wpm, wpm_children - 2), LV_ALIGN_TOP_LEFT,
-                     portrait ? -3 : -7, portrait ? -5 : -9);
-        lv_obj_align(lv_obj_get_child(wpm, wpm_children - 1), LV_ALIGN_BOTTOM_RIGHT,
-                     0, 0);
+        lv_obj_set_height(lv_obj_get_child(wpm, bars), meter_height);
+        lv_obj_t *number = lv_obj_get_child(wpm, wpm_children - 2);
+        lv_obj_t *name = lv_obj_get_child(wpm, wpm_children - 1);
+        lv_obj_set_style_text_font(number, portrait ? &FG_Medium_20 : &FR_Medium_32, LV_PART_MAIN);
+        lv_obj_set_style_text_font(name, portrait ? &FG_Medium_20 : &DINishExpanded_Light_36, LV_PART_MAIN);
+        lv_obj_align(number, LV_ALIGN_TOP_LEFT, 0, 0);
+        lv_obj_align(name, LV_ALIGN_BOTTOM_RIGHT, 0, 0);
     }
 
     lv_obj_t *layers = lv_obj_get_child(screen, 2);
     lv_obj_set_pos(layers, portrait ? 7 : 10, portrait ? 121 : 98);
-    lv_obj_set_style_transform_pivot_x(layers, 0, LV_PART_MAIN);
-    lv_obj_set_style_transform_pivot_y(layers, 0, LV_PART_MAIN);
-    lv_obj_set_style_transform_scale_x(layers, portrait ? 155 : 256, LV_PART_MAIN);
-    lv_obj_set_style_transform_scale_y(layers, portrait ? 155 : 256, LV_PART_MAIN);
+    int layer_width = portrait ? 158 : 300;
+    lv_obj_set_size(layers, layer_width, 6);
+    uint32_t layer_count = lv_obj_get_child_cnt(layers);
+    for (uint32_t i = 0; i < layer_count; i++) {
+        int x = i * (layer_width + 3) / layer_count;
+        int end = (i + 1) * (layer_width + 3) / layer_count - 3;
+        lv_obj_t *dot = lv_obj_get_child(layers, i);
+        lv_obj_set_pos(dot, x, 0);
+        lv_obj_set_size(dot, end - x, 6);
+    }
 
     /* The three-peripheral stock widget uses vertical bars; our matching
      * compact arcs live in their own status-only object. */
@@ -364,6 +384,7 @@ static void redraw(struct k_work *work)
         last_touch = (struct touch_sample){0};
         drawn_page = page;
         drawn_portrait = portrait;
+        LOG_INF("UI page %d, portrait %d, IMU %d", page, portrait, xiao147_ui_imu_enabled());
     }
     xiao147_rotation_set(portrait);
     lv_obj_set_size(panel, portrait ? SCREEN_H : SCREEN_W,
@@ -424,7 +445,9 @@ static void apply_brightness(void)
     const struct device *pwm_leds = DEVICE_DT_GET_ONE(pwm_leds);
     uint8_t target = atomic_get(&sleeping) ? 0 : brightness;
     if (target == applied_brightness || !device_is_ready(pwm_leds)) { return; }
-    if (led_set_brightness(pwm_leds, DISP_BL, target) == 0) {
+    int ret = led_set_brightness(pwm_leds, DISP_BL, target);
+    LOG_INF("Backlight USB %d, target %u%%, PWM result %d", usb_powered, target, ret);
+    if (ret == 0) {
         applied_brightness = target;
     }
 }
@@ -714,6 +737,7 @@ void xiao147_ui_touch(uint8_t fingers, uint16_t x, uint16_t y)
 
 static void menu_button_input(struct input_event *evt, void *user_data)
 {
+    LOG_INF("USR2 type %u code %u value %d", evt->type, evt->code, evt->value);
     if (evt->type == INPUT_EV_KEY && evt->code == INPUT_BTN_1 && evt->value == 1) {
         xiao147_ui_next_page();
     }
@@ -722,6 +746,7 @@ INPUT_CALLBACK_DEFINE(DEVICE_DT_GET(DT_NODELABEL(xiao_touch_menu_button)), menu_
 
 static void imu_button_input(struct input_event *evt, void *user_data)
 {
+    LOG_INF("USR1 type %u code %u value %d", evt->type, evt->code, evt->value);
     if (evt->type == INPUT_EV_KEY && evt->code == INPUT_BTN_0 && evt->value == 1) {
         xiao147_ui_toggle_imu();
     }

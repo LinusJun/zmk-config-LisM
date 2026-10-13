@@ -42,7 +42,7 @@ static bool sys_slist_is_empty(sys_slist_t *l) { return !l->head; }
 static void sys_slist_append(sys_slist_t *l,sys_snode_t *n) {
     n->next=NULL; if(l->tail) l->tail->next=n; else l->head=n; l->tail=n;
 }
-typedef struct lv_obj { struct lv_obj *child; char text[40]; } lv_obj_t;
+typedef struct lv_obj { struct lv_obj *child; char text[40]; int x; } lv_obj_t;
 typedef unsigned lv_color_t;
 static bool display_context;
 static lv_obj_t objects[160];
@@ -70,7 +70,8 @@ STYLE2(lv_obj_set_style_text_color)
 STYLE2(lv_obj_set_style_border_color)
 STYLE2(lv_obj_set_style_translate_y)
 static void lv_obj_set_style_text_font(lv_obj_t *o,const int *f,int p) {(void)o;(void)f;(void)p;gui();}
-static void lv_obj_set_pos(lv_obj_t *o,int x,int y) {(void)o;(void)x;(void)y;gui();}
+static void lv_obj_set_pos(lv_obj_t *o,int x,int y) {o->x=x;(void)y;gui();}
+static int lv_obj_get_x(lv_obj_t *o) { gui(); return o->x; }
 static void lv_obj_set_size(lv_obj_t *o,int w,int h) {(void)o;(void)w;(void)h;gui();}
 static void lv_obj_align(lv_obj_t *o,int a,int x,int y) {(void)o;(void)a;(void)x;(void)y;gui();}
 static void lv_obj_add_flag(lv_obj_t *o,int f) {(void)o;(void)f;gui();}

@@ -16,7 +16,7 @@
 
 #include "xiao147_ui.h"
 
-LOG_MODULE_REGISTER(lism_axs5106l, CONFIG_INPUT_LOG_LEVEL);
+LOG_MODULE_REGISTER(lism_axs5106l, LOG_LEVEL_INF);
 
 #define AXS_TOUCH_REPORT_REG 0x01
 #define AXS_TOUCH_REPORT_LEN 14
@@ -43,6 +43,10 @@ struct axs_touch_data {
     int16_t scroll_y_remainder;
     bool moved;
     bool swallow_until_release;
+    uint32_t read_errors;
+    uint32_t bad_reports;
+    bool id_logged;
+    uint8_t reported_fingers;
 };
 
 static bool point_valid(const uint8_t report[AXS_TOUCH_REPORT_LEN], uint8_t index)
@@ -110,10 +114,22 @@ static void axs_poll(struct k_work *work)
     struct k_work_delayable *dwork = k_work_delayable_from_work(work);
     struct axs_touch_data *data = CONTAINER_OF(dwork, struct axs_touch_data, poll_work);
     const struct axs_touch_config *cfg = data->dev->config;
+    if (!data->id_logged) {
+        uint8_t id_reg = 0x08, id[3] = {0};
+        int ret = i2c_write_dt(&cfg->bus, &id_reg, 1);
+        if (ret == 0) { ret = i2c_read_dt(&cfg->bus, id, sizeof(id)); }
+        LOG_INF("Touch ID %02x %02x %02x, result %d", id[0], id[1], id[2], ret);
+        data->id_logged = true;
+    }
     uint8_t reg = AXS_TOUCH_REPORT_REG;
     uint8_t report[AXS_TOUCH_REPORT_LEN];
-    int ret = i2c_write_read_dt(&cfg->bus, &reg, sizeof(reg), report, sizeof(report));
+    /* Match Seeed's separate STOP-terminated register select and read. */
+    int ret = i2c_write_dt(&cfg->bus, &reg, sizeof(reg));
+    if (ret == 0) { ret = i2c_read_dt(&cfg->bus, report, sizeof(report)); }
     if (ret < 0) {
+        if (data->read_errors++ % 200 == 0) {
+            LOG_WRN("Touch I2C error %d, failures %u", ret, data->read_errors);
+        }
         end_contact(data, false);
         goto next;
     }
@@ -121,8 +137,16 @@ static void axs_poll(struct k_work *work)
     uint8_t fingers = report[1];
     if (fingers > 2 || (fingers > 0 && !point_valid(report, 0)) ||
         (fingers == 2 && !point_valid(report, 1))) {
+        if (data->bad_reports++ % 200 == 0) {
+            LOG_WRN("Touch invalid count %u, xy bytes %02x %02x %02x %02x", fingers,
+                    report[2], report[3], report[4], report[5]);
+        }
         end_contact(data, false);
         goto next;
+    }
+    if (fingers != data->reported_fingers) {
+        data->reported_fingers = fingers;
+        LOG_INF("Touch contacts %u, page %d", fingers, xiao147_ui_page());
     }
 
     enum xiao147_page page = xiao147_ui_page();

@@ -104,7 +104,10 @@ static int st7789v_reset_display(const struct device *dev)
 	LOG_DBG("Resetting display");
 
 	k_sleep(K_MSEC(1));
-	ret = mipi_dbi_reset(config->mipi_dbi, 20);
+	/* LCD and CTP reset are tied by board R9. Seeed's AXS reset holds low
+	 * for 200 ms; do it once here, not concurrently in the touch driver.
+	 */
+	ret = mipi_dbi_reset(config->mipi_dbi, 200);
 	if (ret == -ENOTSUP) {
 		/* Send software reset command */
 		ret = st7789v_transmit(dev, ST7789V_CMD_SW_RESET, NULL, 0);

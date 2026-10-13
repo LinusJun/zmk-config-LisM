@@ -22,6 +22,7 @@ jobs:
       - run: python3 tests/xiao147_display_test.py
       - run: python3 tests/xiao147_display_host_test.py
       - run: python3 tests/xiao147_widgets_host_test.py
+      - run: python3 tests/xiao147_rotation_host_test.py
   build:
     needs: regression
     uses: zmkfirmware/zmk/.github/workflows/build-user-config.yml@9ebbeff0a8b69a42f14aec022cdf16c7a107b9e0
