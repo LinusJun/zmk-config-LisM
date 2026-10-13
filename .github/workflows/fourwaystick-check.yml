@@ -23,3 +23,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check left stick mappings and preserve right trackball
         run: python3 tests/fourwaystick_regression_test.py
+      - name: Verify held four-way scrolling using pinned ZMK behavior
+        run: python3 tests/fourwaystick_scroll_host_test.py
