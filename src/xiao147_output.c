@@ -132,7 +132,8 @@ static lv_obj_t *create_slot_btn(lv_obj_t *parent, int index, int x, int width, 
 
     if (show_number) {
         lv_obj_t *label = lv_label_create(slot);
-        char text[2];
+        /* Allow the full int representation, including sign and terminator. */
+        char text[12];
         snprintf(text, sizeof(text), "%d", index + 1);
         lv_label_set_text(label, text);
         lv_obj_set_style_text_font(label, &FG_Medium_20, LV_PART_MAIN);
