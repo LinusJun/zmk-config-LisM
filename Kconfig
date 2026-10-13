@@ -16,6 +16,15 @@ config LISM_XIAO147_TOUCH
       gestures into right click and natural-direction scrolling. USR1 toggles
       LSM6DS3 air-mouse mode and portrait/landscape display. USR2 cycles pages.
 
+config LISM_XIAO147_DISPLAY_SELFTEST
+    bool "Three-stage XIAO LCD startup diagnostic"
+    depends on LISM_XIAO147_TOUCH
+    default n
+    help
+      Before constructing OPERATOR and menus, show raw RGB565 bars, then a
+      minimal LVGL screen, then the complete existing status interface.
+      Does not reset settings, change key bindings or enable ADC diagnostics.
+
 menuconfig LISM_RESISTIVE_JOYSTICK
     bool "LisM resistive joystick kscan driver"
     default y if DT_HAS_LINUS_RESISTIVE_JOYSTICK_ENABLED

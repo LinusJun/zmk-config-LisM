@@ -12,6 +12,7 @@
 #include <zephyr/kernel.h>
 
 #include <zmk/display.h>
+#include "xiao147_display_test.h"
 #include <zmk/event_manager.h>
 #include <zmk/events/battery_state_changed.h>
 #include <zmk/events/split_central_status_changed.h>
@@ -221,7 +222,7 @@ static void display_init_work_handler(struct k_work *work) {
 }
 
 static void deferred_init_work_handler(struct k_work *work) {
-    if (!zmk_display_is_initialized()) {
+    if (!zmk_display_is_initialized() || !xiao147_display_ui_ready()) {
         k_work_reschedule(&deferred_init_work, K_MSEC(250));
         return;
     }

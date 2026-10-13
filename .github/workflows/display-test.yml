@@ -1,0 +1,28 @@
+name: XIAO147 display recovery test
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/xiao147-display-fix]
+    paths:
+      - '.github/workflows/display-test.yml'
+      - 'build-display-test.yaml'
+      - 'CMakeLists.txt'
+      - 'Kconfig'
+      - 'src/**'
+      - 'config/**'
+      - 'boards/**'
+      - 'tests/**'
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: python3 tests/fourwaystick_regression_test.py
+      - run: python3 tests/all_peripherals_integration_test.py
+      - run: python3 tests/xiao147_display_test.py
+  build:
+    needs: regression
+    uses: zmkfirmware/zmk/.github/workflows/build-user-config.yml@9ebbeff0a8b69a42f14aec022cdf16c7a107b9e0
+    with:
+      build_matrix_path: build-display-test.yaml
+      archive_name: xiao147-display-test

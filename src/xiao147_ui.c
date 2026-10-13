@@ -13,6 +13,7 @@
 
 #include <zmk/battery.h>
 #include <zmk/display.h>
+#include "xiao147_display_test.h"
 #include <zmk/event_manager.h>
 #include <zmk/events/battery_state_changed.h>
 #include <zmk/events/split_central_status_changed.h>
@@ -613,7 +614,7 @@ static void create_ui(struct k_work *work)
 
 static void init_retry(struct k_work *work)
 {
-    if (!zmk_display_is_initialized()) {
+    if (!zmk_display_is_initialized() || !xiao147_display_ui_ready()) {
         k_work_reschedule(&init_retry_work, K_MSEC(250));
         return;
     }

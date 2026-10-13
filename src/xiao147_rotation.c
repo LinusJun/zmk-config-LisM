@@ -10,6 +10,7 @@
 #include <zephyr/sys/atomic.h>
 
 #include "xiao147_rotation.h"
+#include "xiao147_display_test.h"
 
 LOG_MODULE_REGISTER(xiao147_rotation, LOG_LEVEL_INF);
 
@@ -20,11 +21,30 @@ LOG_MODULE_REGISTER(xiao147_rotation, LOG_LEVEL_INF);
 static const struct device *lcd = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 static uint16_t rotate_tile[ROTATE_TILE_PIXELS];
 static atomic_t portrait_mode = ATOMIC_INIT(0);
+static uint32_t write_errors;
+static bool first_write_logged;
+
+static void report_write(int ret)
+{
+    if (ret < 0) {
+        write_errors++;
+        if (write_errors == 1 || write_errors % 100 == 0) {
+            LOG_ERR("LCD flush failed: %d (%u failures)", ret, write_errors);
+        }
+    } else if (!first_write_logged) {
+        first_write_logged = true;
+        LOG_INF("First LVGL LCD flush succeeded");
+    }
+}
 
 static void flush_cb(lv_display_t *display, const lv_area_t *area, uint8_t *pixels)
 {
     const int w = area->x2 - area->x1 + 1;
     const int h = area->y2 - area->y1 + 1;
+    if (xiao147_display_hold_flush()) {
+        lv_display_flush_ready(display);
+        return;
+    }
     if (w <= 0 || h <= 0) {
         lv_display_flush_ready(display);
         return;
@@ -37,7 +57,7 @@ static void flush_cb(lv_display_t *display, const lv_area_t *area, uint8_t *pixe
             .pitch = w,
             .frame_incomplete = !lv_display_flush_is_last(display),
         };
-        display_write(lcd, area->x1, area->y1, &desc, pixels);
+        report_write(display_write(lcd, area->x1, area->y1, &desc, pixels));
     } else {
         /* Logical portrait (172x320) -> physical 320x172, clockwise.
          * Tile by logical rows so no full-screen framebuffer is required. */
@@ -61,8 +81,10 @@ static void flush_cb(lv_display_t *display, const lv_area_t *area, uint8_t *pixe
             if (row + rows == h) {
                 desc.frame_incomplete = !lv_display_flush_is_last(display);
             }
-            display_write(lcd, PHYSICAL_W - (area->y1 + row + rows), area->x1,
-                          &desc, rotate_tile);
+            int ret = display_write(lcd, PHYSICAL_W - (area->y1 + row + rows), area->x1,
+                                    &desc, rotate_tile);
+            report_write(ret);
+            if (ret < 0) { break; }
         }
     }
     lv_display_flush_ready(display);

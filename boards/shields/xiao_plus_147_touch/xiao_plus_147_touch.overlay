@@ -15,11 +15,14 @@
 };
 
 &st7789 {
+    mipi-max-frequency = <8000000>; /* Conservative first-hardware test. */
     width = <320>;
     height = <172>;
     x-offset = <0>;
     y-offset = <34>;
     mdac = <0x28>; /* MV | BGR, landscape */
+    colmod = <0x55>;
+    ram-param = [00 E0]; /* XIAO driver emits MSB-first pixels. */
     inversion-off;
 };
 
