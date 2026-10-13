@@ -7,7 +7,8 @@ read = lambda p: (root / p).read_text()
 config = read("config/xiao_plus_147_touch.conf")
 for setting in ("CONFIG_LV_Z_VDB_SIZE=10", "CONFIG_LV_Z_DOUBLE_VDB=n",
                 "CONFIG_LV_Z_MEM_POOL_SIZE=65536", "CONFIG_LV_COLOR_16_SWAP=n",
-                "CONFIG_LV_Z_FLUSH_THREAD=n", "CONFIG_LV_USE_LOG=y"):
+                "CONFIG_LV_Z_FLUSH_THREAD=n", "CONFIG_LV_USE_LOG=y",
+                "CONFIG_SYS_HEAP_RUNTIME_STATS=y", "CONFIG_LV_Z_MEM_POOL_SYS_HEAP=y"):
     assert setting in config, setting
 assert 320 * 172 * 2 * .1 + 65536 < 320 * 172 * 2 * .5 * 2 + 20000
 overlay = read("boards/shields/xiao_plus_147_touch/xiao_plus_147_touch.overlay")

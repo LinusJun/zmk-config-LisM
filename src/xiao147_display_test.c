@@ -7,6 +7,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
+#include <zephyr/sys/mem_stats.h>
 #include <zmk/display.h>
 #include "xiao147_rotation.h"
 #include "xiao147_display_test.h"
@@ -21,16 +22,20 @@ static uint16_t pattern[320 * 4];
 static uint16_t pattern_y;
 static uint32_t failed_writes;
 lv_obj_t *xiao147_stock_status_screen(void);
+/* Zephyr 4.1 modules/lvgl/lvgl_mem.c: measure the real private sys_heap,
+ * including peak use, rather than LVGL's custom-allocator monitor stub.
+ */
+void lvgl_heap_stats(struct sys_memory_stats *stats);
 
 bool xiao147_display_ui_ready(void) { return atomic_get(&stage) == 2; }
 bool xiao147_display_hold_flush(void) { return atomic_get(&stage) == 0; }
 
 static void report_memory(const char *name)
 {
-    lv_mem_monitor_t mem;
-    lv_mem_monitor(&mem);
-    LOG_INF("%s: LVGL total %zu, free %zu, largest %zu, used %u%%",
-            name, mem.total_size, mem.free_size, mem.free_biggest_size, mem.used_pct);
+    struct sys_memory_stats mem = {0};
+    lvgl_heap_stats(&mem);
+    LOG_INF("%s: LVGL allocated %zu, free %zu, peak %zu",
+            name, mem.allocated_bytes, mem.free_bytes, mem.max_allocated_bytes);
 }
 
 static void phase_handler(struct k_work *work)
