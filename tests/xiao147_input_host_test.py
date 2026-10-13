@@ -15,6 +15,19 @@ def function(signature):
     return ui[start:end]
 toggle = function("void xiao147_ui_toggle_imu(void)")
 callback = function("static void imu_button_input(struct input_event *evt, void *user_data)")
+# Unmodified upstream fixture from the pinned ZMK revision, MIT licensed.
+listener = (root / "tests/fixtures/zmk_input_listener.c").read_text()
+listener_types = listener[listener.index("enum input_listener_xy_data_mode"):
+                          listener.index("static void handle_rel_code")]
+def listener_function(signature):
+    start = listener.index(signature)
+    return listener[start:listener.index("\n}\n", start)+3]
+listener_functions = "\n".join(listener_function(s) for s in (
+    "static void handle_rel_code", "static void handle_abs_code",
+    "static void handle_key_code", "static void clear_xy_data", "static void input_handler"))
+# handle_abs_code is a one-line empty function; avoid capturing handle_key twice.
+listener_functions = listener_functions.replace(listener_function("static void handle_abs_code"),
+    listener[listener.index("static void handle_abs_code"):listener.index("static void handle_key_code")])
 prelude = r'''
 #include <assert.h>
 #include <stdbool.h>
@@ -25,6 +38,7 @@ prelude = r'''
 #include <stdlib.h>
 #include <errno.h>
 #include "xiao147_orientation.h"
+#include "xiao147_air_motion.h"
 enum xiao147_page {XIAO147_PAGE_STATUS,XIAO147_PAGE_SETTINGS,XIAO147_PAGE_DEVICES};
 #define LOG_MODULE_REGISTER(...)
 #define LOG_INF(...) ((void)0)
@@ -33,6 +47,18 @@ enum xiao147_page {XIAO147_PAGE_STATUS,XIAO147_PAGE_SETTINGS,XIAO147_PAGE_DEVICE
 #define INPUT_BTN_0 256
 #define INPUT_BTN_1 257
 #define INPUT_EV_KEY 1
+#define INPUT_EV_REL 2
+#define INPUT_EV_ABS 3
+#define INPUT_BTN_TOUCH 330
+#define INPUT_BTN_2 258
+#define INPUT_BTN_3 259
+#define INPUT_BTN_4 260
+#define WRITE_BIT(v,b,n) ((v)=(n)?((v)|(1U<<(b))):((v)&~(1U<<(b))))
+#define BIT(b) (1U<<(b))
+#define IS_ENABLED(x) (x)
+#define CONFIG_ZMK_POINTING_SMOOTH_SCROLLING 0
+#define ZMK_INPUT_PROC_STOP 1
+#define ZMK_HID_MOUSE_NUM_BUTTONS 5
 #define INPUT_REL_X 0
 #define INPUT_REL_Y 1
 #define INPUT_REL_WHEEL 8
@@ -46,7 +72,8 @@ struct k_work {int unused;};
 struct k_work_delayable {struct k_work work;};
 struct i2c_dt_spec {int unused;};
 struct device {void *data; const void *config;};
-struct input_event {uint8_t type;uint16_t code;int value;};
+struct input_event {uint8_t type;uint16_t code;int value;bool sync;const struct device *dev;};
+static void route_event(uint8_t type,uint16_t code,int value,bool sync,const struct device *dev);
 static uint32_t now;
 static int page,read_error,nrel,nkey,nsample,submitted,cancel_samples;
 static enum xiao147_orientation pose;
@@ -61,8 +88,8 @@ static uint32_t k_uptime_get_32(void) {return now;}
 static bool i2c_is_ready_dt(const struct i2c_dt_spec *b) {(void)b;return true;}
 static int i2c_write_dt(const struct i2c_dt_spec *b,const void *p,size_t n) {(void)b;(void)p;(void)n;return read_error;}
 static int i2c_read_dt(const struct i2c_dt_spec *b,void *p,size_t n) {(void)b;assert(n==3||n==14);if(n==14)memcpy(p,sensor,n);return read_error;}
-static void input_report_rel(const struct device*d,int c,int v,bool sync,int wait) {(void)d;(void)sync;(void)wait;rel_code[nrel]=c;rel_value[nrel++]=v;}
-static void input_report_key(const struct device*d,int c,int v,bool sync,int wait) {(void)d;(void)sync;(void)wait;key_code[nkey]=c;key_value[nkey++]=v;}
+static int input_report_rel(const struct device*d,int c,int v,bool sync,int wait) {(void)wait;rel_code[nrel]=c;rel_value[nrel++]=v;route_event(INPUT_EV_REL,c,v,sync,d);return 0;}
+static void input_report_key(const struct device*d,int c,int v,bool sync,int wait) {(void)wait;key_code[nkey]=c;key_value[nkey++]=v;route_event(INPUT_EV_KEY,c,v,sync,d);}
 static enum xiao147_page xiao147_ui_page(void) {return page;}
 static enum xiao147_orientation xiao147_rotation_get(void) {return pose;}
 static bool xiao147_ui_wake_on_touch(void) {return false;}
@@ -88,6 +115,25 @@ static int atomic_set(int *v,int next) {int old=*v;*v=next;return old;}
 static bool zmk_display_is_initialized(void) {return true;}
 static void *zmk_display_work_q(void) {return &redraw_work;}
 static void k_work_submit_to_queue(void *q,struct k_work *w) {assert(q==&redraw_work&&w==&redraw_work);submitted++;}
+'''
+hid_mocks = r'''
+static int hid_x,hid_y,hid_wheel,hid_pan,hid_buttons,hid_reports,last_wheel,last_pan;
+static void zmk_hid_mouse_scroll_set(int x,int y) {hid_pan=x;hid_wheel=y;}
+static void zmk_hid_mouse_movement_set(int x,int y) {hid_x=x;hid_y=y;}
+static void zmk_hid_mouse_button_press(int b) {hid_buttons|=BIT(b);}
+static void zmk_hid_mouse_button_release(int b) {hid_buttons&=~BIT(b);}
+static int zmk_endpoint_send_mouse_report(void) {hid_reports++;last_wheel=hid_wheel;last_pan=hid_pan;return 0;}
+static int filter_with_input_config(const struct input_listener_config *c,
+    struct input_listener_data *d,struct input_event *e) {
+    (void)d;(void)e;assert(!c->base.processors_len&&!c->layer_overrides_len);return 0;
+}
+'''
+hid_route = r'''
+static void route_event(uint8_t type,uint16_t code,int value,bool sync,const struct device *dev) {
+    static const struct input_listener_config cfg={0};
+    static struct input_listener_data data={0};
+    struct input_event event={type,code,value,sync,dev};input_handler(&cfg,&data,&event);
+}
 '''
 test = r'''
 static void contact(int index,int x,int y) {
@@ -134,6 +180,13 @@ int main(void) {
     contact(0,48,78);contact(1,68,98);nrel=0;poll(&d);
     assert(nrel==2&&rel_code[0]==INPUT_REL_HWHEEL&&rel_value[0]==-1);
     assert(rel_code[1]==INPUT_REL_WHEEL&&rel_value[1]==-1);
+    assert(last_pan==-1&&last_wheel==-1&&hid_reports>0&&!hid_pan&&!hid_wheel);
+    /* One scroll tick (<tap move threshold) must suppress any tap, and a
+     * 2->1 transition must not turn the rest of the gesture into a pointer. */
+    int scrolled_keys=nkey;sensor[1]=1;poll(&d);nrel=0;
+    contact(0,50,80);poll(&d);assert(nrel==0);
+    sensor[1]=0;poll(&d);assert(nkey==scrolled_keys);
+    sensor[1]=1;poll(&d);sensor[1]=2;poll(&d);
     /* Orientation switch while two fingers down must not click/scroll. */
     int keys=nkey;pose=2;poll(&d);nrel=0;poll(&d);assert(nrel==0);
     sensor[1]=0;poll(&d);assert(nkey==keys);
@@ -148,7 +201,7 @@ int main(void) {
     assert(!xiao147_gravity_orientation(10000,11000,&o));
     const int gyro[4][2]={{1300,-650},{650,1300},{-1300,650},{-650,-1300}};
     for(int i=0;i<4;i++){struct xiao147_xy p=xiao147_gyro_to_logical(i,1300,650);assert(p.x==gyro[i][0]&&p.y==gyro[i][1]);}
-    struct input_event e={INPUT_EV_KEY,INPUT_BTN_0,1};
+    struct input_event e={.type=INPUT_EV_KEY,.code=INPUT_BTN_0,.value=1};
     auto_rotate_mode=1;sleeping=1;imu_button_input(&e,NULL);
     assert(imu_mode==1&&auto_rotate_mode==0&&sleeping==0&&submitted==1);
     e.value=0;imu_button_input(&e,NULL);assert(imu_mode==1&&submitted==1);
@@ -169,14 +222,29 @@ int main(void) {
     now+=20;imu_poll(&id.poll_work.work);assert(auto_updates==2&&last_auto_pose==3);
     auto_rotate_mode=0;imu_mode=1;pose=1; /* desired buttons-bottom gyro */
     imu_axes[0]=0x14;imu_axes[1]=5;imu_axes[2]=0x8a;imu_axes[3]=2; /* gx=1300 gy=650 */
-    nrel=0;now+=20;imu_poll(&id.poll_work.work);
-    assert(nrel==2&&rel_value[0]==1&&rel_value[1]==2);
+    nrel=0;now+=20;imu_poll(&id.poll_work.work);assert(nrel==0);
+    now+=3000;imu_poll(&id.poll_work.work);
+    assert(nrel==2&&rel_value[0]==2&&rel_value[1]==4);
+    /* Stable bias, no moving calibration, fractional +/- symmetry, clearing. */
+    struct xiao147_air_motion m={0};int16_t stationary[3]={180,-120,50};
+    xiao147_air_begin(&m,0);
+    for(int i=0;i<50;i++) {struct xiao147_xy v=xiao147_air_sample(&m,i*20,0,stationary);assert(!v.x&&!v.y);}
+    assert(m.bias_valid&&m.bias[0]==180&&m.bias[1]==-120&&!m.calibrating);
+    int16_t slow[3]={280,-120,50};int sum=0;
+    for(int i=0;i<13;i++)sum+=xiao147_air_sample(&m,1100+i*20,0,slow).x;
+    assert(sum==4);xiao147_air_clear(&m);slow[0]=80;sum=0;
+    for(int i=0;i<13;i++)sum+=xiao147_air_sample(&m,1500+i*20,0,slow).x;
+    assert(sum==-4);xiao147_air_clear(&m);assert(!m.remainder[0]&&!m.remainder[1]);
+    xiao147_air_begin(&m,2000);int16_t moving[3]={2000,1000,0};
+    for(int i=0;i<149;i++)xiao147_air_sample(&m,2000+i*20,0,moving);
+    xiao147_air_sample(&m,5000,0,moving);assert(m.bias[0]==180&&m.bias[1]==-120&&!m.calibrating);
     puts("PASS: actual touch gestures/four poses, cancellation, actual IMU stability/error recovery/vectors and USR1 edge toggles");
 }
 '''
 with tempfile.TemporaryDirectory(prefix="xiao147-input-") as directory:
     c=Path(directory)/"test.c"
-    c.write_text(prelude+source+imu_source+toggle+callback+test)
+    c.write_text(prelude+listener_types+hid_mocks+listener_functions+hid_route+
+                 source+imu_source+toggle+callback+test)
     binary=Path(directory)/"test"
     subprocess.run(["cc","-std=gnu11","-Wall","-Wextra","-Werror",
                     "-Wno-unused-parameter","-fsanitize=address,undefined",

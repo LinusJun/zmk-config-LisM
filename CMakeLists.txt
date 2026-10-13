@@ -5,9 +5,10 @@ if(CONFIG_LISM_PROSPECTOR_LOCK_INDICATORS OR CONFIG_LISM_XIAO147_TOUCH OR CONFIG
   zephyr_library_sources_ifdef(CONFIG_LISM_XIAO147_TOUCH src/lsm6ds3_air_mouse.c)
   zephyr_library_sources_ifdef(CONFIG_LISM_XIAO147_TOUCH src/xiao147_rotation.c)
   zephyr_library_sources_ifdef(CONFIG_LISM_XIAO147_TOUCH src/display_jd9853a.c)
-  zephyr_library_sources_ifdef(CONFIG_LISM_XIAO147_DISPLAY_SELFTEST src/xiao147_display_test.c)
+  zephyr_library_sources_ifdef(CONFIG_LISM_XIAO147_TOUCH src/xiao147_display_test.c)
   zephyr_library_sources_ifdef(CONFIG_LISM_XIAO147_TOUCH src/xiao147_battery_rings.c)
   zephyr_library_sources_ifdef(CONFIG_LISM_XIAO147_TOUCH src/xiao147_rssi.c)
+  zephyr_library_sources_ifdef(CONFIG_LISM_XIAO147_TOUCH src/xiao147_hid_trace.c)
   zephyr_library_sources_ifdef(CONFIG_LISM_XIAO147_TOUCH src/xiao147_ui.c)
   zephyr_library_sources_ifdef(CONFIG_LISM_XIAO147_TOUCH src/fonts/xiao_menu_bold.c)
   zephyr_library_sources_ifdef(CONFIG_LISM_XIAO147_TOUCH src/xiao147_wpm_meter.c src/xiao147_output.c)
@@ -21,6 +22,7 @@ endif()
 # rotation swaps its dimensions and breaks both widgets and touch coordinates.
 # Only suppress that one Prospector source for this new dongle shield.
 if(CONFIG_LISM_XIAO147_TOUCH)
+  zephyr_link_options(-Wl,--wrap=zmk_endpoint_send_mouse_report)
   get_filename_component(_west_workspace_root "${ZEPHYR_BASE}" DIRECTORY)
   set(_prospector_shield_dir
       "${_west_workspace_root}/prospector-zmk-module/boards/shields/prospector_adapter")
@@ -52,10 +54,8 @@ if(CONFIG_LISM_XIAO147_TOUCH)
   endif()
   set_source_files_properties("${_prospector_driver}"
       TARGET_DIRECTORY drivers__display PROPERTIES HEADER_FILE_ONLY ON)
-  if(CONFIG_LISM_XIAO147_DISPLAY_SELFTEST)
     set_source_files_properties("${_prospector_shield_dir}/src/custom_status_screen.c"
         DIRECTORY "${_prospector_shield_dir}"
         PROPERTIES COMPILE_DEFINITIONS
         "zmk_display_status_screen=xiao147_stock_status_screen")
-  endif()
 endif()

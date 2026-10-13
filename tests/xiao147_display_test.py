@@ -32,7 +32,7 @@ cmake = read("CMakeLists.txt")
 assert 'if(CONFIG_LISM_XIAO147_TOUCH)' in cmake
 assert "TARGET_DIRECTORY drivers__display PROPERTIES HEADER_FILE_ONLY ON" in cmake
 assert "zmk_display_status_screen=xiao147_stock_status_screen" in cmake
-assert "CONFIG_LISM_XIAO147_DISPLAY_SELFTEST src/xiao147_display_test.c" in cmake
+assert "CONFIG_LISM_XIAO147_TOUCH src/xiao147_display_test.c" in cmake
 for path in ("src/xiao147_ui.c", "src/xiao147_battery_rings.c",
              "src/prospector_lock_indicators.c"):
     assert "!xiao147_display_ui_ready()" in read(path)
@@ -43,12 +43,16 @@ rotation = read("src/xiao147_rotation.c")
 assert "result = display_write" in rotation and "report_write(result)" in rotation
 assert "write_errors % 100" in rotation and "xiao147_display_hold_flush()" in rotation
 test_matrix = read("build-display-test.yaml")
-assert re.findall(r"artifact-name:\s*(\S+)", test_matrix) == ["lism_dongle_xiao147_slider_recovery_test"]
+assert re.findall(r"artifact-name:\s*(\S+)", test_matrix) == ["lism_dongle_xiao147_normal_start_test"]
 assert "raw_refresh_gate" in diag and "LV_EVENT_REFR_REQUEST" in diag
 assert "lv_timer_pause" in diag and "lv_timer_resume" in diag
-assert "CONFIG_LISM_XIAO147_DISPLAY_SELFTEST=y" in test_matrix
+assert "CONFIG_LISM_XIAO147_DISPLAY_SELFTEST=n" in test_matrix
 assert "settings_reset" not in test_matrix
 ui = read("src/xiao147_ui.c")
+assert "xiao147_display_layout_ready();" in ui[ui.index("static void create_ui"):ui.index("static void init_retry")]
+assert "usb_powered ? 100 : zmk_battery_state_of_charge()" in ui
+assert "DONGLE USB" in ui and "100%% USB" in ui
+assert "gpio_pin_get_raw" in ui and "NRF_P1->PIN_CNF[usr1.pin]" in ui
 native_layout = ui[ui.index("static void layout_status"):ui.index("static void redraw(struct k_work *work)\n{")]
 assert "portrait ? 164 : 300" in native_layout
 assert "portrait ? 55 : 65" in native_layout

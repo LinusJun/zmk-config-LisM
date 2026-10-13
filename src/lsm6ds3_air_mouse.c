@@ -12,6 +12,7 @@
 
 #include "xiao147_ui.h"
 #include "xiao147_rotation.h"
+#include "xiao147_air_motion.h"
 
 LOG_MODULE_REGISTER(lism_air_mouse, LOG_LEVEL_INF);
 
@@ -23,9 +24,6 @@ LOG_MODULE_REGISTER(lism_air_mouse, LOG_LEVEL_INF);
 #define IMU_OUTX_L_XL 0x28
 #define IMU_SAMPLE_MS 20
 #define ORIENTATION_STABLE_MS 600
-/* ±245 dps output is 114 LSB/dps. Keep the air mouse intentionally slow. */
-#define IMU_DEADBAND 250
-#define IMU_COUNTS_PER_CURSOR_STEP 650
 
 struct imu_config { struct i2c_dt_spec bus; };
 struct imu_data {
@@ -36,6 +34,9 @@ struct imu_data {
     bool auto_rotate_active;
     enum xiao147_orientation orientation_candidate;
     uint32_t orientation_since_ms;
+    struct xiao147_air_motion motion;
+    enum xiao147_orientation last_pose;
+    uint32_t last_gyro_trace;
 };
 
 static int imu_write(const struct i2c_dt_spec *bus, uint8_t reg, uint8_t value)
@@ -53,6 +54,8 @@ static void imu_poll(struct k_work *work)
     if (data->ready && enabled != data->gyro_on) {
         if (imu_write(&cfg->bus, IMU_CTRL2_G, enabled ? 0x40 : 0x00) == 0) {
             data->gyro_on = enabled;
+            if (enabled) { xiao147_air_begin(&data->motion, k_uptime_get_32()); }
+            else { xiao147_air_clear(&data->motion); }
         }
     }
     if (data->ready && xiao147_ui_auto_rotate_enabled()) {
@@ -85,22 +88,30 @@ static void imu_poll(struct k_work *work)
         uint8_t reg = IMU_OUTX_L_G;
         uint8_t axes[6];
         if (i2c_write_read_dt(&cfg->bus, &reg, 1, axes, sizeof(axes)) == 0) {
-            int16_t gx = (int16_t)((uint16_t)axes[1] << 8 | axes[0]);
-            int16_t gy = (int16_t)((uint16_t)axes[3] << 8 | axes[2]);
-            struct xiao147_xy motion = xiao147_gyro_to_logical(xiao147_rotation_get(), gx, gy);
-            int dx = motion.x > IMU_DEADBAND || motion.x < -IMU_DEADBAND ?
-                     motion.x / IMU_COUNTS_PER_CURSOR_STEP : 0;
-            int dy = motion.y > IMU_DEADBAND || motion.y < -IMU_DEADBAND ?
-                     motion.y / IMU_COUNTS_PER_CURSOR_STEP : 0;
-            if (dx > 5) { dx = 5; } else if (dx < -5) { dx = -5; }
-            if (dy > 5) { dy = 5; } else if (dy < -5) { dy = -5; }
+            int16_t raw[3];
+            for (int i = 0; i < 3; i++) { raw[i] = (int16_t)((uint16_t)axes[i*2+1] << 8 | axes[i*2]); }
+            enum xiao147_orientation pose = xiao147_rotation_get();
+            if (pose != data->last_pose) { xiao147_air_clear(&data->motion); data->last_pose = pose; }
+            struct xiao147_xy motion = xiao147_air_sample(&data->motion, k_uptime_get_32(), pose, raw);
+            int dx = motion.x, dy = motion.y;
+            if (k_uptime_get_32() - data->last_gyro_trace >= 2000) {
+                LOG_INF("IMU raw %d %d %d, bias %ld %ld, valid %d calibrating %d, mouse %d %d",
+                        raw[0], raw[1], raw[2], (long)data->motion.bias[0],
+                        (long)data->motion.bias[1], data->motion.bias_valid,
+                        data->motion.calibrating, dx, dy);
+                data->last_gyro_trace = k_uptime_get_32();
+            }
             if (dx || dy) {
                 bool woke = xiao147_ui_wake_on_motion();
                 if (!woke && xiao147_ui_page() == XIAO147_PAGE_STATUS) {
                     if (dx) { input_report_rel(data->dev, INPUT_REL_X, dx, dy == 0, K_NO_WAIT); }
                     if (dy) { input_report_rel(data->dev, INPUT_REL_Y, dy, true, K_NO_WAIT); }
                 }
+                else { xiao147_air_clear(&data->motion); }
             }
+        } else {
+            xiao147_air_clear(&data->motion);
+            data->motion.samples = 0;
         }
     }
     k_work_reschedule(&data->poll_work, K_MSEC(IMU_SAMPLE_MS));

@@ -16,6 +16,7 @@ LOG_MODULE_REGISTER(xiao147_display_test, LOG_LEVEL_INF);
 
 static const struct device *lcd = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));
 static atomic_t stage = ATOMIC_INIT(0);
+static atomic_t layout_ready;
 static struct k_work_delayable phase_work;
 static struct k_work_delayable heartbeat_work;
 static atomic_t progress;
@@ -37,7 +38,20 @@ lv_obj_t *xiao147_stock_status_screen(void);
 void lvgl_heap_stats(struct sys_memory_stats *stats);
 
 bool xiao147_display_ui_ready(void) { return atomic_get(&stage) == 2; }
-bool xiao147_display_hold_flush(void) { return atomic_get(&stage) == 0; }
+bool xiao147_display_hold_flush(void)
+{
+    return IS_ENABLED(CONFIG_LISM_XIAO147_DISPLAY_SELFTEST) ?
+           atomic_get(&stage) == 0 : !atomic_get(&layout_ready);
+}
+
+void xiao147_display_layout_ready(void)
+{
+    if (!atomic_cas(&layout_ready, 0, 1)) { return; }
+    lv_timer_t *timer = lv_display_get_refr_timer(lv_display_get_default());
+    if (timer != NULL) { lv_timer_resume(timer); }
+    lv_obj_invalidate(lv_screen_active());
+    LOG_INF("Native status layout ready; normal startup flush enabled");
+}
 
 static void raw_refresh_gate(lv_event_t *event)
 {
@@ -222,6 +236,16 @@ lv_obj_t *zmk_display_status_screen(void)
     lv_display_add_event_cb(display, raw_refresh_gate, LV_EVENT_REFR_REQUEST, NULL);
     lv_timer_t *timer = lv_display_get_refr_timer(display);
     if (timer != NULL) { lv_timer_pause(timer); }
+    k_work_init_delayable(&heartbeat_work, heartbeat);
+    k_work_schedule(&heartbeat_work, K_SECONDS(2));
+    if (!IS_ENABLED(CONFIG_LISM_XIAO147_DISPLAY_SELFTEST)) {
+        /* Base screen exists, but hold its refresh until create_ui() lays out
+         * the native 320x172 widgets. This is not a wait on layout_ready:
+         * init_retry() may now run once ZMK loads/initializes this screen. */
+        lv_obj_t *screen = xiao147_stock_status_screen();
+        if (screen != NULL) { atomic_set(&stage, 2); }
+        return screen;
+    }
     test_screen = lv_obj_create(NULL);
     if (test_screen == NULL) { return NULL; }
     lv_obj_set_style_bg_color(test_screen, lv_color_hex(0x000000), LV_PART_MAIN);
@@ -233,11 +257,9 @@ lv_obj_t *zmk_display_status_screen(void)
     lv_obj_set_style_text_font(label, &lv_font_montserrat_14, LV_PART_MAIN);
     lv_obj_center(label);
     k_work_init_delayable(&phase_work, diagnostic_work);
-    k_work_init_delayable(&heartbeat_work, heartbeat);
     checkpoint(1);
     report_memory("Stage 1/3 before stock UI allocation");
     checkpoint(2);
-    k_work_schedule(&heartbeat_work, K_SECONDS(2));
     k_work_schedule_for_queue(zmk_display_work_q(), &phase_work, K_MSEC(100));
     return test_screen;
 }

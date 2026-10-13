@@ -15,6 +15,7 @@ prelude = r"""
 #include <stdio.h>
 #include <stdarg.h>
 #include <errno.h>
+#define IS_ENABLED(x) (x)
 typedef int32_t atomic_t;
 #define ATOMIC_INIT(x) (x)
 static int32_t atomic_get(atomic_t *p) { return *p; }
@@ -74,6 +75,7 @@ static void request_refresh(void) {
 static struct device mock_lcd;
 static struct k_work_q display_queue;
 static lv_obj_t objects[8], *active_screen;
+static lv_obj_t *lv_screen_active(void) { return active_screen; }
 static uint32_t clock_ms;
 static unsigned object_count, raw_rows, markers[4], invalidations, refr_calls, stock_calls;
 static int write_failure_row=-1;
@@ -163,13 +165,14 @@ static void run(struct k_work_delayable *w) {
     w->handler(&w->work);
 }
 static void reset(void) {
-    stage=progress=progress_time=flush_entered=flush_exited=last_flush_result=transmitted=0;
+    stage=layout_ready=progress=progress_time=flush_entered=flush_exited=last_flush_result=transmitted=0;
     pattern_y=failed_writes=clock_ms=object_count=raw_rows=invalidations=refr_calls=stock_calls=0;
     for(unsigned i=0;i<4;i++) markers[i]=0;
     active_screen=NULL;
     test_screen=NULL;
     refresh_timer.paused=false; refresh_gate=NULL;
 }
+#if CONFIG_LISM_XIAO147_DISPLAY_SELFTEST
 static void pipeline(bool fail_one_write) {
     reset(); write_failure_row=fail_one_write ? 5 : -1;
     lv_obj_t *s=zmk_display_status_screen(); assert(s);
@@ -212,13 +215,30 @@ int main(void) {
     assert(object_count==objects_before && heartbeat_work.queue==NULL);
     puts("PASS: actual C phase scheduling/gates, raw colors/corners/bounds, write failure, markers, synchronous handoff, independent heartbeat");
 }
+#else
+int main(void) {
+    reset();
+    lv_obj_t *screen=zmk_display_status_screen();
+    assert(screen&&stock_calls==1&&xiao147_display_ui_ready());
+    lv_screen_load(screen);
+    assert(xiao147_display_hold_flush()&&refresh_timer.paused);
+    for(int i=0;i<3;i++) {lv_obj_invalidate(screen);assert(refresh_timer.paused);}
+    assert(!raw_rows&&!markers[2]&&!markers[3]&&!phase_work.pending);
+    xiao147_display_layout_ready();
+    assert(!xiao147_display_hold_flush()&&!refresh_timer.paused);
+    unsigned old=invalidations;xiao147_display_layout_ready();assert(invalidations==old);
+    run(&heartbeat_work);assert(!raw_rows&&stock_calls==1);
+    puts("PASS: direct status boot, first refresh held until native layout, idempotent release and independent diagnostics");
+}
+#endif
 """
 with tempfile.TemporaryDirectory(prefix="xiao147-phase-test-") as directory:
     folder = Path(directory)
     c = folder / "test.c"
-    c.write_text(prelude + source + test)
-    binary = folder / "test"
-    subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
+    for selftest in (0, 1):
+        c.write_text(f"#define CONFIG_LISM_XIAO147_DISPLAY_SELFTEST {selftest}\n" + prelude + source + test)
+        binary = folder / "test"
+        subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
                     "-Wno-unused-parameter", "-fsanitize=address,undefined",
                     str(c), "-o", str(binary)], check=True)
-    subprocess.run([str(binary)], check=True)
+        subprocess.run([str(binary)], check=True)

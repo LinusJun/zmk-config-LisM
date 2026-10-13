@@ -7,6 +7,7 @@
 #include <zephyr/device.h>
 #include <zephyr/drivers/led.h>
 #include <zephyr/drivers/gpio.h>
+#include <hal/nrf_gpio.h>
 #include <zephyr/input/input.h>
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
@@ -251,13 +252,17 @@ static void draw_devices(void)
         uint8_t level = 0;
         bool known = false;
         if (row == 0) {
-            level = zmk_battery_state_of_charge();
+            level = usb_powered ? 100 : zmk_battery_state_of_charge();
             known = true;
         } else if (active && copy.seen[source_slot]) {
             level = copy.battery[source_slot];
             known = true;
         }
         lv_label_set_text(device_names[row], portrait ? short_names[row] : names[row]);
+        if (row == 0 && usb_powered) {
+            lv_label_set_text(device_names[row], portrait ? "DONGLE\nUSB" : "DONGLE USB");
+            lv_obj_set_y(device_names[row], portrait ? 2 : 7);
+        }
         char signal_text[12];
         bool has_signal = signal_valid[signal_index] && active;
         if (has_signal) {
@@ -386,7 +391,7 @@ static void layout_status(bool portrait)
     lv_obj_set_size(dongle_battery_bar, 140, 6);
     lv_obj_set_pos(dongle_battery_label, portrait ? 123 : 166,
                    portrait ? 288 : 150);
-    lv_obj_set_width(dongle_battery_label, portrait ? 42 : 35);
+    lv_obj_set_width(dongle_battery_label, portrait ? 42 : 70);
     lv_obj_set_style_text_align(dongle_battery_label,
                                 portrait ? LV_TEXT_ALIGN_RIGHT : LV_TEXT_ALIGN_LEFT,
                                 LV_PART_MAIN);
@@ -450,7 +455,8 @@ static void redraw(struct k_work *work)
             draw_devices();
         }
     }
-    uint8_t dongle_level = zmk_battery_state_of_charge();
+    /* UI supply indicator only: leave the real battery/GATT state untouched. */
+    uint8_t dongle_level = usb_powered ? 100 : zmk_battery_state_of_charge();
     lv_bar_set_value(dongle_battery_bar, dongle_level, LV_ANIM_OFF);
     uint32_t dongle_color = xiao147_battery_color(dongle_level);
     lv_obj_set_style_bg_color(dongle_battery_bar, lv_color_hex(dongle_color),
@@ -463,8 +469,9 @@ static void redraw(struct k_work *work)
     }
     lv_obj_set_style_text_color(dongle_battery_label, lv_color_hex(dongle_color),
                                 LV_PART_MAIN);
-    char text[8];
-    snprintf(text, sizeof(text), "%u%%", dongle_level);
+    char text[16];
+    snprintf(text, sizeof(text), usb_powered ?
+             (portrait ? "100%%\nUSB" : "100%% USB") : "%u%%", dongle_level);
     lv_label_set_text(dongle_battery_label, text);
     apply_brightness();
     xiao147_display_note_ui(131);
@@ -491,11 +498,21 @@ static void periodic(struct k_work *work)
     static const struct gpio_dt_spec usr1 = GPIO_DT_SPEC_GET(
         DT_CHILD(DT_NODELABEL(xiao_touch_left_button), button_left), gpios);
     static int previous_level = -2;
+    static int previous_raw = -2;
+    /* This pinned gpio_nrfx backend has no pin_get_config implementation.
+     * Read the known P1.03 PIN_CNF register only; never reconfigure or scan. */
+    static uint32_t previous_config = UINT32_MAX;
+    uint32_t raw_config = NRF_P1->PIN_CNF[usr1.pin];
+    int raw = gpio_is_ready_dt(&usr1) ? gpio_pin_get_raw(usr1.port, usr1.pin) : -ENODEV;
     int level = gpio_is_ready_dt(&usr1) ? gpio_pin_get_dt(&usr1) : -ENODEV;
-    if (level != previous_level) {
-        LOG_INF("USR1 GPIO pressed %d, input ready %d (polling)", level,
-                device_is_ready(DEVICE_DT_GET(DT_NODELABEL(xiao_touch_left_button))));
+    if (level != previous_level || raw != previous_raw || raw_config != previous_config) {
+        LOG_INF("USR1 P1.%u raw %d pressed %d, input ready %d, PIN_CNF 0x%x (polling)",
+                usr1.pin, raw, level,
+                device_is_ready(DEVICE_DT_GET(DT_NODELABEL(xiao_touch_left_button))),
+                (unsigned)raw_config);
         previous_level = level;
+        previous_raw = raw;
+        previous_config = raw_config;
     }
     bool powered = zmk_usb_is_powered();
     if (powered != usb_powered) {
@@ -714,6 +731,7 @@ static void create_ui(struct k_work *work)
     brightness = usb_powered ? 100 : 50;
     apply_brightness();
     redraw(NULL);
+    xiao147_display_layout_ready();
     k_work_reschedule_for_queue(zmk_display_work_q(), &periodic_work, K_SECONDS(1));
 }
 

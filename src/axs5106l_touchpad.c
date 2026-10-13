@@ -43,11 +43,15 @@ struct axs_touch_data {
     int16_t scroll_x_remainder;
     int16_t scroll_y_remainder;
     bool moved;
+    bool scrolled;
     bool swallow_until_release;
     uint32_t read_errors;
     uint32_t bad_reports;
     bool id_logged;
     uint8_t reported_fingers;
+    uint32_t last_trace_ms;
+    uint32_t wheel_events;
+    uint32_t input_errors;
 };
 
 static bool point_valid(const uint8_t report[AXS_TOUCH_REPORT_LEN], uint8_t index)
@@ -89,13 +93,24 @@ static void report_scroll(struct axs_touch_data *data, int16_t dx, int16_t dy)
     data->scroll_x_remainder -= sx * SCROLL_PIXELS_PER_TICK;
     data->scroll_y_remainder -= sy * SCROLL_PIXELS_PER_TICK;
     /* HID wheel sign is inverted relative to content motion. */
-    if (sx != 0) { input_report_rel(data->dev, INPUT_REL_HWHEEL, -sx, sy == 0, K_NO_WAIT); }
-    if (sy != 0) { input_report_rel(data->dev, INPUT_REL_WHEEL, -sy, true, K_NO_WAIT); }
+    int horizontal = 0, vertical = 0;
+    if (sx != 0) { horizontal = input_report_rel(data->dev, INPUT_REL_HWHEEL, -sx, sy == 0, K_NO_WAIT); }
+    if (sy != 0) { vertical = input_report_rel(data->dev, INPUT_REL_WHEEL, -sy, true, K_NO_WAIT); }
+    if (sx || sy) {
+        data->scrolled = true; /* Even one tick cancels the right-click tap. */
+        data->wheel_events++;
+        if (horizontal < 0 || vertical < 0) { data->input_errors++; }
+        if (k_uptime_get_32() - data->last_trace_ms >= 1000) {
+            LOG_INF("Touch wheel %d %d, input result %d %d, events %u failures %u",
+                    -sx, -sy, horizontal, vertical, data->wheel_events, data->input_errors);
+            data->last_trace_ms = k_uptime_get_32();
+        }
+    }
 }
 
 static void end_contact(struct axs_touch_data *data, bool allow_tap)
 {
-    if (allow_tap && data->fingers != 0 && !data->moved &&
+    if (allow_tap && data->fingers != 0 && !data->moved && !data->scrolled &&
         !data->swallow_until_release &&
         k_uptime_get_32() - data->touch_start_ms <= TAP_MAX_MS) {
         report_button(data->dev, data->max_fingers >= 2 ? INPUT_BTN_1 : INPUT_BTN_0);
@@ -103,6 +118,7 @@ static void end_contact(struct axs_touch_data *data, bool allow_tap)
     data->fingers = 0;
     data->max_fingers = 0;
     data->moved = false;
+    data->scrolled = false;
     data->scroll_x_remainder = 0;
     data->scroll_y_remainder = 0;
     data->swallow_until_release = false;
@@ -158,7 +174,12 @@ static void axs_poll(struct k_work *work)
     }
     if (fingers != data->reported_fingers) {
         data->reported_fingers = fingers;
-        LOG_INF("Touch contacts %u, page %d", fingers, xiao147_ui_page());
+        /* Upper nibbles are retained for diagnosis rather than assuming an
+         * undocumented event/ID convention. The official example masks them.
+         * This real report (not host tests) establishes two-point capability. */
+        LOG_INF("Touch contacts %u, page %d, raw %02x %02x %02x %02x / %02x %02x %02x %02x",
+                fingers, xiao147_ui_page(), report[2], report[3], report[4], report[5],
+                report[8], report[9], report[10], report[11]);
     }
 
     enum xiao147_page page = xiao147_ui_page();
@@ -213,7 +234,7 @@ static void axs_poll(struct k_work *work)
         if (abs(p.x - data->start.x) > TAP_MAX_MOVE ||
             abs(p.y - data->start.y) > TAP_MAX_MOVE) { data->moved = true; }
         if (fingers == 2) { report_scroll(data, dx, dy); }
-        else { report_pointer(data->dev, dx, dy); }
+        else if (data->max_fingers < 2) { report_pointer(data->dev, dx, dy); }
     }
     data->last = p;
 

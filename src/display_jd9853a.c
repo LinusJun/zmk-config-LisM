@@ -176,23 +176,27 @@ static int st7789v_write(const struct device *dev, const uint16_t x,
     if (ret < 0) { return ret; }
     ret = st7789v_transmit(dev, ST7789V_CMD_RAMWR, NULL, 0);
     if (ret < 0) { return ret; }
-    for (uint16_t row = 0; row < desc->height; row++) {
-        for (uint16_t col = 0; col < desc->width; ) {
-            uint16_t count = MIN(desc->width - col, sizeof(wire_pixels) / 2);
+    /* The pinned MIPI SPI backend sends desc->buf_size bytes unchanged.
+     * RAMWR advances through the whole window, not one row per transaction.
+     * Pack across short portrait rows while skipping source pitch padding. */
+    size_t total = (size_t)desc->width * desc->height;
+    for (size_t cursor = 0; cursor < total; ) {
+            uint16_t count = MIN(total - cursor, sizeof(wire_pixels) / 2);
             for (uint16_t i = 0; i < count; i++) {
-                uint16_t pixel = pixels[(size_t)row * desc->pitch + col + i];
+                size_t logical = cursor + i;
+                uint16_t pixel = pixels[(logical / desc->width) * desc->pitch +
+                                        logical % desc->width];
                 sys_put_be16(pixel, &wire_pixels[i * 2]);
             }
             struct display_buffer_descriptor chunk = {
                 .width = count, .height = 1, .pitch = count, .buf_size = count * 2U,
-                .frame_incomplete = row + 1 < desc->height || col + count < desc->width ||
+                .frame_incomplete = cursor + count < total ||
                                     desc->frame_incomplete,
             };
             ret = mipi_dbi_write_display(config->mipi_dbi, &config->dbi_config,
                                         wire_pixels, &chunk, PIXEL_FORMAT_RGB_565);
             if (ret < 0) { return ret; }
-            col += count;
-        }
+            cursor += count;
     }
     return 0;
 }
