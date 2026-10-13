@@ -2,6 +2,6 @@
 include:
   - board: xiao_ble//zmk
     shield: lism_dongle prospector_adapter xiao_plus_147_touch
-    artifact-name: lism_dongle_xiao147_display_test
-    cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=y -DCONFIG_LISM_XIAO147_DISPLAY_SELFTEST=y -DCONFIG_LOG_PROCESS_THREAD_STARTUP_DELAY_MS=0
+    artifact-name: lism_dongle_xiao147_display_handoff_test
+    cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=y -DCONFIG_LISM_XIAO147_DISPLAY_SELFTEST=y -DCONFIG_LOG_PROCESS_THREAD_STARTUP_DELAY_MS=0 -DCONFIG_LOG_PROCESS_THREAD_STACK_SIZE=1536 -DCONFIG_LOG_PROCESS_THREAD_CUSTOM_PRIORITY=y -DCONFIG_LOG_PROCESS_THREAD_PRIORITY=4
     snippet: zmk-usb-logging

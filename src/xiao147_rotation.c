@@ -39,13 +39,17 @@ static void report_write(int ret)
 
 static void flush_cb(lv_display_t *display, const lv_area_t *area, uint8_t *pixels)
 {
+    xiao147_display_note_flush(true, 0);
+    int result = 0;
     const int w = area->x2 - area->x1 + 1;
     const int h = area->y2 - area->y1 + 1;
     if (xiao147_display_hold_flush()) {
+        xiao147_display_note_flush(false, 1); /* intentionally held raw test */
         lv_display_flush_ready(display);
         return;
     }
     if (w <= 0 || h <= 0) {
+        xiao147_display_note_flush(false, -EINVAL);
         lv_display_flush_ready(display);
         return;
     }
@@ -57,7 +61,8 @@ static void flush_cb(lv_display_t *display, const lv_area_t *area, uint8_t *pixe
             .pitch = w,
             .frame_incomplete = !lv_display_flush_is_last(display),
         };
-        report_write(display_write(lcd, area->x1, area->y1, &desc, pixels));
+        result = display_write(lcd, area->x1, area->y1, &desc, pixels);
+        report_write(result);
     } else {
         /* Logical portrait (172x320) -> physical 320x172, clockwise.
          * Tile by logical rows so no full-screen framebuffer is required. */
@@ -84,9 +89,11 @@ static void flush_cb(lv_display_t *display, const lv_area_t *area, uint8_t *pixe
             int ret = display_write(lcd, PHYSICAL_W - (area->y1 + row + rows), area->x1,
                                     &desc, rotate_tile);
             report_write(ret);
+            result = ret;
             if (ret < 0) { break; }
         }
     }
+    xiao147_display_note_flush(false, result);
     lv_display_flush_ready(display);
 }
 
