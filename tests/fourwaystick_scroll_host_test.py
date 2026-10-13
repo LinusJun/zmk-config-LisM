@@ -86,7 +86,8 @@ test = r"""
 static struct behavior_input_two_axis_data data;
 static const struct behavior_input_two_axis_config config={
     .x_code=INPUT_REL_HWHEEL,.y_code=INPUT_REL_WHEEL,.delay_ms=0,
-    .time_to_max_speed_ms=0,.trigger_period_ms=10,.acceleration_exponent=0,
+    /* 16ms is the pinned zmk,behavior-input-two-axis binding default. */
+    .time_to_max_speed_ms=0,.trigger_period_ms=16,.acceleration_exponent=0,
 };
 static struct device dev={.data=&data,.config=&config};
 static void start(void) {
@@ -96,7 +97,7 @@ static void start(void) {
 }
 static void tick(unsigned n) {
     for(unsigned i=0;i<n;i++) {
-        ticks+=10; data.tick_work.scheduled=false;
+        ticks+=config.trigger_period_ms; data.tick_work.scheduled=false;
         tick_work_cb(&data.tick_work.work);
     }
 }
@@ -114,26 +115,26 @@ static void release(unsigned i) {
 int main(void) {
     for(unsigned dir=0;dir<4;dir++) {
         start(); press(dir);
-        assert(data.tick_work.scheduled && data.tick_work.delay==10);
-        tick(100);
-        int want_x=dir==1?-scroll_speed:(dir==3?scroll_speed:0);
-        int want_y=dir==0?-scroll_speed:(dir==2?scroll_speed:0);
+        assert(data.tick_work.scheduled && data.tick_work.delay==16);
+        tick(125); /* Two seconds at the actual 16ms trigger period. */
+        int want_x=dir==1?-2*scroll_speed:(dir==3?2*scroll_speed:0);
+        int want_y=dir==0?-2*scroll_speed:(dir==2?2*scroll_speed:0);
         assert(output_x==want_x && output_y==want_y && event_count>1);
         int x=output_x,y=output_y;
-        tick(100); assert(output_x==2*x && output_y==2*y); /* sustained, no ramp */
+        tick(125); assert(output_x==2*x && output_y==2*y); /* sustained, no ramp */
         release(dir); assert(!data.tick_work.scheduled && !data.state.x.speed && !data.state.y.speed);
-        int count=event_count; tick(100);
+        int count=event_count; tick(125);
         assert(event_count==count && output_x==2*x && output_y==2*y);
     }
-    start(); press(0); press(3); tick(100); /* Up+Left: down+right wheel signs */
-    assert(output_x==scroll_speed && output_y==-scroll_speed);
-    release(0); assert(data.tick_work.scheduled); tick(100);
-    assert(output_x==2*scroll_speed && output_y==-scroll_speed);
+    start(); press(0); press(3); tick(125); /* Up+Left: down+right wheel signs */
+    assert(output_x==2*scroll_speed && output_y==-2*scroll_speed);
+    release(0); assert(data.tick_work.scheduled); tick(125);
+    assert(output_x==4*scroll_speed && output_y==-2*scroll_speed);
     release(3); assert(!data.tick_work.scheduled);
-    start(); press(0); press(2); tick(100); /* opposing directions cancel */
+    start(); press(0); press(2); tick(125); /* opposing directions cancel */
     assert(!event_count && !data.tick_work.scheduled);
-    release(0); tick(100);
-    assert(output_y==scroll_speed && output_x==0);
+    release(0); tick(125);
+    assert(output_y==2*scroll_speed && output_x==0);
     release(2); assert(!data.tick_work.scheduled);
     puts("PASS: actual pinned ZMK scroll press/hold/release, all four signs, constant repeat, diagonals, one-axis release, opposing cancellation");
 }
