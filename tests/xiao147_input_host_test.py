@@ -38,6 +38,7 @@ enum xiao147_page {XIAO147_PAGE_STATUS,XIAO147_PAGE_SETTINGS,XIAO147_PAGE_DEVICE
 #define INPUT_REL_WHEEL 8
 #define INPUT_REL_HWHEEL 6
 #define K_NO_WAIT 0
+#define XIAO147_TOUCH_CANCEL UINT8_MAX
 #define K_MSEC(x) (x)
 #define DT_INST_FOREACH_STATUS_OKAY(x)
 #define CONTAINER_OF(p,t,m) ((t *)((char *)(p)-offsetof(t,m)))

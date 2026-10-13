@@ -108,6 +108,15 @@ static void end_contact(struct axs_touch_data *data, bool allow_tap)
     data->swallow_until_release = false;
 }
 
+static void cancel_contact(struct axs_touch_data *data)
+{
+    if (data->last_page != XIAO147_PAGE_STATUS && data->fingers != 0) {
+        /* Cancel is not a release: an I2C glitch must not toggle a menu row. */
+        xiao147_ui_touch(XIAO147_TOUCH_CANCEL, 0, 0, data->last_orientation);
+    }
+    end_contact(data, false);
+}
+
 static void axs_poll(struct k_work *work)
 {
     struct k_work_delayable *dwork = k_work_delayable_from_work(work);
@@ -129,7 +138,7 @@ static void axs_poll(struct k_work *work)
         if (data->read_errors++ % 200 == 0) {
             LOG_WRN("Touch I2C error %d, failures %u", ret, data->read_errors);
         }
-        end_contact(data, false);
+        cancel_contact(data);
         goto next;
     }
 
@@ -140,7 +149,7 @@ static void axs_poll(struct k_work *work)
             LOG_WRN("Touch invalid count %u, xy bytes %02x %02x %02x %02x", fingers,
                     report[2], report[3], report[4], report[5]);
         }
-        end_contact(data, false);
+        cancel_contact(data);
         goto next;
     }
     if (fingers != data->reported_fingers) {
@@ -158,7 +167,7 @@ static void axs_poll(struct k_work *work)
     }
 
     if (fingers == 0) {
-        if (page != XIAO147_PAGE_STATUS && !data->swallow_until_release) {
+        if (page != XIAO147_PAGE_STATUS && data->fingers != 0 && !data->swallow_until_release) {
             xiao147_ui_touch(0, 0, 0, orientation);
         }
         end_contact(data, page == XIAO147_PAGE_STATUS);

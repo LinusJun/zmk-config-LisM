@@ -43,7 +43,7 @@ rotation = read("src/xiao147_rotation.c")
 assert "result = display_write" in rotation and "report_write(result)" in rotation
 assert "write_errors % 100" in rotation and "xiao147_display_hold_flush()" in rotation
 test_matrix = read("build-display-test.yaml")
-assert re.findall(r"artifact-name:\s*(\S+)", test_matrix) == ["lism_dongle_xiao147_four_direction_test"]
+assert re.findall(r"artifact-name:\s*(\S+)", test_matrix) == ["lism_dongle_xiao147_slider_recovery_test"]
 assert "raw_refresh_gate" in diag and "LV_EVENT_REFR_REQUEST" in diag
 assert "lv_timer_pause" in diag and "lv_timer_resume" in diag
 assert "CONFIG_LISM_XIAO147_DISPLAY_SELFTEST=y" in test_matrix
@@ -57,6 +57,13 @@ assert "portrait && i == 5" in native_layout
 assert "polling-mode;" in overlay
 assert "XiaoMenu_Bold_16" in ui and "XiaoMenu_Bold_12" in ui
 assert "sample.orientation != xiao147_rotation_get()" in ui
+handler = ui[ui.index("static void touch_handler(struct k_work *work)\n{"):
+             ui.index("static void create_ui")]
+assert "processed++ < TOUCH_BATCH_LIMIT" in handler
+assert "update_brightness_widgets();" in handler
+assert "k_work_reschedule_for_queue" not in handler
+assert "CONFIG_ZMK_LOGGING_MINIMAL=y" in config
+assert "UI %ld age %u" in diag
 assert "transform_scale" not in native_layout[:native_layout.index("lv_obj_t *output")]
 assert "transform_scale" not in read("src/prospector_lock_indicators.c")
 for width, gap in ((300, 2), (164, 1)):

@@ -24,6 +24,8 @@ static atomic_t flush_entered;
 static atomic_t flush_exited;
 static atomic_t last_flush_result;
 static atomic_t transmitted;
+static atomic_t ui_point;
+static atomic_t ui_time;
 static lv_obj_t *test_screen;
 static uint16_t pattern[320 * 4];
 static uint16_t pattern_y;
@@ -74,12 +76,20 @@ void xiao147_display_note_flush(bool entering, int result)
 static void heartbeat(struct k_work *work)
 {
     /* No LVGL, heap statistics or SPI here: survives a blocked display queue. */
-    LOG_INF("Heartbeat stage %ld checkpoint %ld age %u ms flush %ld/%ld result %ld",
+    LOG_INF("Heartbeat stage %ld checkpoint %ld age %u ms flush %ld/%ld result %ld UI %ld age %u",
             (long)atomic_get(&stage), (long)atomic_get(&progress),
             k_uptime_get_32() - (uint32_t)atomic_get(&progress_time),
             (long)atomic_get(&flush_entered), (long)atomic_get(&flush_exited),
-            (long)atomic_get(&last_flush_result));
+            (long)atomic_get(&last_flush_result), (long)atomic_get(&ui_point),
+            k_uptime_get_32() - (uint32_t)atomic_get(&ui_time));
     k_work_reschedule(&heartbeat_work, K_SECONDS(2));
+}
+
+void xiao147_display_note_ui(int point)
+{
+    /* Pure atomic breadcrumbs: no LVGL/heap/SPI from the system queue. */
+    atomic_set(&ui_time, k_uptime_get_32());
+    atomic_set(&ui_point, point);
 }
 
 static void raw_stage_marker(int number)

@@ -3,6 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "xiao147_orientation.h"
+#define XIAO147_TOUCH_CANCEL UINT8_MAX
 
 enum xiao147_page {
     XIAO147_PAGE_STATUS = 0,

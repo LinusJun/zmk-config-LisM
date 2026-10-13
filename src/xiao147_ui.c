@@ -43,6 +43,8 @@ LOG_MODULE_REGISTER(xiao147_ui, LOG_LEVEL_INF);
 #define COLOR_ACCENT 0x39bdec
 #define COLOR_GREEN 0x78c79c
 #define OFF_AFTER_MS 300000
+#define TOUCH_BATCH_LIMIT 8
+#define TOUCH_FRAME_MS 33
 
 #define DISP_BL DT_NODE_CHILD_IDX(DT_NODELABEL(disp_bl))
 
@@ -74,6 +76,7 @@ static bool usb_powered;
 static enum rotation_mode rotation = ROTATION_LANDSCAPE;
 static uint8_t previous_touch_fingers;
 static struct touch_sample last_touch;
+static bool slider_drag;
 
 static lv_obj_t *panel;
 static lv_obj_t *title_label;
@@ -95,7 +98,7 @@ static lv_obj_t *dongle_battery_ticks;
 static lv_obj_t *dongle_battery_segment[DONGLE_BATTERY_SEGMENTS];
 static struct k_work init_work;
 static struct k_work redraw_work;
-static struct k_work touch_work;
+static struct k_work_delayable touch_work;
 static struct k_work_delayable init_retry_work;
 static struct k_work_delayable periodic_work;
 
@@ -163,17 +166,21 @@ static void layout_settings(bool portrait)
     }
 }
 
-static void draw_settings(void)
+static void update_brightness_widgets(void)
 {
-    const bool portrait = xiao147_rotation_is_portrait();
-    layout_settings(portrait);
-    lv_label_set_text(title_label, "Display Settings");
     char text[8];
     uint8_t limit = usb_powered ? 100 : 50;
     lv_slider_set_range(settings_slider, 1, limit);
     lv_slider_set_value(settings_slider, brightness, LV_ANIM_OFF);
     snprintf(text, sizeof(text), "%u%%", brightness);
     lv_label_set_text(brightness_value, text);
+}
+
+static void draw_settings(void)
+{
+    layout_settings(xiao147_rotation_is_portrait());
+    lv_label_set_text(title_label, "Display Settings");
+    update_brightness_widgets();
     set_switch(settings_switches[0], rotation == ROTATION_AUTO);
     set_switch(settings_switches[1], rotation == ROTATION_LANDSCAPE && !xiao147_ui_imu_enabled());
     set_switch(settings_switches[2], rotation == ROTATION_PORTRAIT);
@@ -388,6 +395,7 @@ static void layout_status(bool portrait)
 static void redraw(struct k_work *work)
 {
     if (panel == NULL) { return; }
+    xiao147_display_note_ui(130);
     /* The left button is the authoritative IMU-mode toggle. */
     if (xiao147_ui_imu_enabled()) { rotation = ROTATION_PORTRAIT; }
     else if (atomic_set(&restore_landscape, 0)) { rotation = ROTATION_LANDSCAPE; }
@@ -401,6 +409,7 @@ static void redraw(struct k_work *work)
     if (page != drawn_page || orientation != drawn_orientation) {
         k_msgq_purge(&touch_queue);
         previous_touch_fingers = 0;
+        slider_drag = false;
         last_touch = (struct touch_sample){0};
         drawn_page = page;
         drawn_orientation = orientation;
@@ -458,6 +467,7 @@ static void redraw(struct k_work *work)
     snprintf(text, sizeof(text), "%u%%", dongle_level);
     lv_label_set_text(dongle_battery_label, text);
     apply_brightness();
+    xiao147_display_note_ui(131);
 }
 
 static void apply_brightness(void)
@@ -465,7 +475,9 @@ static void apply_brightness(void)
     const struct device *pwm_leds = DEVICE_DT_GET_ONE(pwm_leds);
     uint8_t target = atomic_get(&sleeping) ? 0 : brightness;
     if (target == applied_brightness || !device_is_ready(pwm_leds)) { return; }
+    xiao147_display_note_ui(110);
     int ret = led_set_brightness(pwm_leds, DISP_BL, target);
+    xiao147_display_note_ui(111);
     LOG_INF("Backlight USB %d, target %u%%, PWM result %d", usb_powered, target, ret);
     if (ret == 0) {
         applied_brightness = target;
@@ -502,47 +514,80 @@ static void periodic(struct k_work *work)
 
 static void touch_handler(struct k_work *work)
 {
+    xiao147_display_note_ui(100);
     struct touch_sample sample;
-    while (k_msgq_get(&touch_queue, &sample, K_NO_WAIT) == 0) {
+    bool brightness_changed = false;
+    int processed = 0;
+    /* Yield to LVGL refresh even if input continues arriving during dragging. */
+    while (processed++ < TOUCH_BATCH_LIMIT &&
+           k_msgq_get(&touch_queue, &sample, K_NO_WAIT) == 0) {
+        if (sample.fingers == XIAO147_TOUCH_CANCEL) {
+            previous_touch_fingers = 0;
+            slider_drag = false;
+            last_touch = (struct touch_sample){0};
+            continue;
+        }
         if (sample.orientation != xiao147_rotation_get()) {
             previous_touch_fingers = 0;
+            slider_drag = false;
             continue;
         }
         if (atomic_get(&page_atomic) != XIAO147_PAGE_SETTINGS) {
             previous_touch_fingers = sample.fingers;
+            slider_drag = false;
             continue;
         }
         bool portrait = xiao147_rotation_is_portrait();
-        if (sample.fingers == 1 && sample.y >= (portrait ? 64 : 42) &&
-            sample.y <= (portrait ? 94 : 66)) {
+        if (sample.fingers == 1 && (slider_drag ||
+            (sample.y >= (portrait ? 64 : 42) && sample.y <= (portrait ? 94 : 66)))) {
+            slider_drag = true;
             int x = sample.x;
             if (x < 14) { x = 14; }
             if (x > (portrait ? 156 : 301)) { x = portrait ? 156 : 301; }
             int value = (x - 14) * (usb_powered ? 100 : 50) / (portrait ? 142 : 287);
-            brightness = value < 1 ? 1 : value;
-            apply_brightness();
-            redraw(NULL);
+            uint8_t target = value < 1 ? 1 : value;
+            if (target != brightness) {
+                brightness = target;
+                brightness_changed = true;
+            }
         } else if (sample.fingers == 0 && previous_touch_fingers == 1) {
+            bool controls_changed = false;
             uint16_t y = last_touch.y;
             uint16_t x = last_touch.x;
-            if (y >= (portrait ? 103 : 65) && y < (portrait ? 141 : 98)) {
+            if (!slider_drag && y >= (portrait ? 103 : 65) && y < (portrait ? 141 : 98)) {
                 if (!xiao147_ui_imu_enabled()) {
                     rotation = rotation == ROTATION_AUTO ? ROTATION_LANDSCAPE : ROTATION_AUTO;
                     atomic_set(&auto_rotate_mode, rotation == ROTATION_AUTO);
+                    controls_changed = true;
                 }
-            } else if (y >= (portrait ? 145 : 99) && y < (portrait ? 226 : 133)) {
+            } else if (!slider_drag && y >= (portrait ? 145 : 99) && y < (portrait ? 226 : 133)) {
                 if (!xiao147_ui_imu_enabled()) {
                     rotation = portrait ? (y < 185 ? ROTATION_LANDSCAPE : ROTATION_PORTRAIT) :
                               (x < SCREEN_W / 2 ? ROTATION_LANDSCAPE : ROTATION_PORTRAIT);
                     atomic_set(&auto_rotate_mode, 0);
+                    controls_changed = true;
                 }
-            } else if (y >= (portrait ? 232 : 134) && y < (portrait ? 274 : 170)) {
+            } else if (!slider_drag && y >= (portrait ? 232 : 134) && y < (portrait ? 274 : 170)) {
                 xiao147_ui_toggle_imu();
+                controls_changed = true;
             }
-            redraw(NULL);
+            slider_drag = false;
+            if (controls_changed) { redraw(NULL); }
         }
         if (sample.fingers != 0) { last_touch = sample; }
         previous_touch_fingers = sample.fingers;
+    }
+    if (brightness_changed) {
+        /* Only the final value in this batch touches PWM and the two widgets.
+         * No status layout, battery rings or switches are rebuilt per sample. */
+        apply_brightness();
+        xiao147_display_note_ui(120);
+        update_brightness_widgets();
+        xiao147_display_note_ui(121);
+    }
+    xiao147_display_note_ui(101);
+    if (k_msgq_num_used_get(&touch_queue) != 0) {
+        k_work_schedule_for_queue(zmk_display_work_q(), &touch_work, K_MSEC(TOUCH_FRAME_MS));
     }
 }
 
@@ -769,7 +814,11 @@ void xiao147_ui_touch(uint8_t fingers, uint16_t x, uint16_t y,
         k_msgq_get(&touch_queue, &discarded, K_NO_WAIT);
         k_msgq_put(&touch_queue, &sample, K_NO_WAIT);
     }
-    if (zmk_display_is_initialized()) { k_work_submit_to_queue(zmk_display_work_q(), &touch_work); }
+    if (zmk_display_is_initialized()) {
+        /* schedule, NOT reschedule: a continuous drag must not move the
+         * pending deadline forward on every 16 ms sensor sample. */
+        k_work_schedule_for_queue(zmk_display_work_q(), &touch_work, K_MSEC(TOUCH_FRAME_MS));
+    }
 }
 
 static void menu_button_input(struct input_event *evt, void *user_data)
@@ -820,7 +869,7 @@ static int xiao147_ui_init(void)
 {
     k_work_init(&init_work, create_ui);
     k_work_init(&redraw_work, redraw);
-    k_work_init(&touch_work, touch_handler);
+    k_work_init_delayable(&touch_work, touch_handler);
     k_work_init_delayable(&init_retry_work, init_retry);
     k_work_init_delayable(&periodic_work, periodic);
     k_work_schedule(&init_retry_work, K_SECONDS(1));
