@@ -43,10 +43,10 @@ layers:
   - F1
   - F2
   - {t: ESC, h: Device}
-  - '&stick_scroll MOVE_Y(25)'
-  - '&stick_scroll MOVE_X(25)'
   - '&stick_scroll MOVE_Y(-25)'
   - '&stick_scroll MOVE_X(-25)'
+  - '&stick_scroll MOVE_Y(25)'
+  - '&stick_scroll MOVE_X(25)'
   Game:
   - ESC
   - Q
@@ -90,10 +90,10 @@ layers:
   - {t: ▽, type: trans}
   - LEFT ALT
   - Sft+F2
-  - ↑
-  - →
-  - ↓
-  - ←
+  - LEFT SHIFT
+  - LEFT GUI
+  - LEFT CONTROL
+  - LEFT ALT
   Nav:
   - Gui+Sft+←
   - HOME
@@ -137,10 +137,10 @@ layers:
   - KP 0
   - KP DOT
   - KP DOT
-  - LEFT SHIFT
-  - LEFT GUI
-  - LEFT CONTROL
-  - LEFT ALT
+  - ↑
+  - →
+  - ↓
+  - ←
   Mark:
   - '!'
   - '@'
@@ -184,13 +184,13 @@ layers:
   - F8
   - F11
   - F12
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
-  - {t: ▽, type: trans}
+  - LEFT SHIFT
+  - LEFT GUI
+  - LEFT CONTROL
+  - LEFT ALT
   Device:
   - {t: Game, h: toggle}
-  - {t: StickWASD, h: toggle}
+  - {t: GameJoystick, h: toggle}
   - ''
   - ''
   - BT CLR
@@ -278,10 +278,10 @@ layers:
   - {t: ▽, type: trans}
   - LEFT GUI
   - C
-  - LEFT SHIFT
-  - LEFT GUI
-  - LEFT CONTROL
-  - LEFT ALT
+  - W
+  - D
+  - S
+  - A
   StickWASD:
   - {t: ▽, type: trans}
   - {t: Base, h: toggle}
