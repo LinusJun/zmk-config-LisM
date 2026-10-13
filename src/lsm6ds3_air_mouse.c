@@ -11,6 +11,7 @@
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 #include "xiao147_ui.h"
+#include "xiao147_rotation.h"
 
 LOG_MODULE_REGISTER(lism_air_mouse, LOG_LEVEL_INF);
 
@@ -22,7 +23,6 @@ LOG_MODULE_REGISTER(lism_air_mouse, LOG_LEVEL_INF);
 #define IMU_OUTX_L_XL 0x28
 #define IMU_SAMPLE_MS 20
 #define ORIENTATION_STABLE_MS 600
-#define ORIENTATION_MIN_COUNTS 7500
 /* ±245 dps output is 114 LSB/dps. Keep the air mouse intentionally slow. */
 #define IMU_DEADBAND 250
 #define IMU_COUNTS_PER_CURSOR_STEP 650
@@ -34,7 +34,7 @@ struct imu_data {
     bool ready;
     bool gyro_on;
     bool auto_rotate_active;
-    bool orientation_candidate;
+    enum xiao147_orientation orientation_candidate;
     uint32_t orientation_since_ms;
 };
 
@@ -61,14 +61,13 @@ static void imu_poll(struct k_work *work)
         if (i2c_write_read_dt(&cfg->bus, &reg, 1, axes, sizeof(axes)) == 0) {
             int16_t ax = (int16_t)((uint16_t)axes[1] << 8 | axes[0]);
             int16_t ay = (int16_t)((uint16_t)axes[3] << 8 | axes[2]);
-            int ax_abs = ax < 0 ? -ax : ax;
-            int ay_abs = ay < 0 ? -ay : ay;
-            if (ax_abs > ORIENTATION_MIN_COUNTS || ay_abs > ORIENTATION_MIN_COUNTS) {
-                bool candidate = ay_abs > ax_abs;
+            enum xiao147_orientation candidate;
+            if (xiao147_gravity_orientation(ax, ay, &candidate)) {
                 if (!data->auto_rotate_active || candidate != data->orientation_candidate) {
                     data->auto_rotate_active = true;
                     data->orientation_candidate = candidate;
                     data->orientation_since_ms = k_uptime_get_32();
+                    LOG_INF("Orientation candidate %d, gravity %d %d", candidate, ax, ay);
                 } else if (k_uptime_get_32() - data->orientation_since_ms >=
                            ORIENTATION_STABLE_MS) {
                     xiao147_ui_set_auto_orientation(candidate);
@@ -88,10 +87,11 @@ static void imu_poll(struct k_work *work)
         if (i2c_write_read_dt(&cfg->bus, &reg, 1, axes, sizeof(axes)) == 0) {
             int16_t gx = (int16_t)((uint16_t)axes[1] << 8 | axes[0]);
             int16_t gy = (int16_t)((uint16_t)axes[3] << 8 | axes[2]);
-            int dx = gy > IMU_DEADBAND || gy < -IMU_DEADBAND ?
-                     gy / IMU_COUNTS_PER_CURSOR_STEP : 0;
-            int dy = gx > IMU_DEADBAND || gx < -IMU_DEADBAND ?
-                     gx / IMU_COUNTS_PER_CURSOR_STEP : 0;
+            struct xiao147_xy motion = xiao147_gyro_to_logical(xiao147_rotation_get(), gx, gy);
+            int dx = motion.x > IMU_DEADBAND || motion.x < -IMU_DEADBAND ?
+                     motion.x / IMU_COUNTS_PER_CURSOR_STEP : 0;
+            int dy = motion.y > IMU_DEADBAND || motion.y < -IMU_DEADBAND ?
+                     motion.y / IMU_COUNTS_PER_CURSOR_STEP : 0;
             if (dx > 5) { dx = 5; } else if (dx < -5) { dx = -5; }
             if (dy > 5) { dy = 5; } else if (dy < -5) { dy = -5; }
             if (dx || dy) {

@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "xiao147_orientation.h"
 
 enum xiao147_page {
     XIAO147_PAGE_STATUS = 0,
@@ -16,7 +17,8 @@ void xiao147_ui_toggle_imu(void);
 bool xiao147_ui_imu_enabled(void);
 bool xiao147_ui_portrait(void);
 bool xiao147_ui_auto_rotate_enabled(void);
-void xiao147_ui_set_auto_orientation(bool portrait);
+void xiao147_ui_set_auto_orientation(enum xiao147_orientation orientation);
 bool xiao147_ui_wake_on_motion(void);
-void xiao147_ui_touch(uint8_t fingers, uint16_t x, uint16_t y);
+void xiao147_ui_touch(uint8_t fingers, uint16_t x, uint16_t y,
+                       enum xiao147_orientation orientation);
 bool xiao147_ui_wake_on_touch(void);

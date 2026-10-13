@@ -15,6 +15,7 @@
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 #include "xiao147_ui.h"
+#include "xiao147_rotation.h"
 
 LOG_MODULE_REGISTER(lism_axs5106l, LOG_LEVEL_INF);
 
@@ -35,7 +36,7 @@ struct axs_touch_data {
     enum xiao147_page last_page;
     uint8_t fingers;
     uint8_t max_fingers;
-    bool last_portrait;
+    enum xiao147_orientation last_orientation;
     struct point last;
     struct point start;
     uint32_t touch_start_ms;
@@ -57,16 +58,14 @@ static bool point_valid(const uint8_t report[AXS_TOUCH_REPORT_LEN], uint8_t inde
     return x < 172 && y < 320;
 }
 
-static struct point decode_point(const uint8_t report[AXS_TOUCH_REPORT_LEN], uint8_t index)
+static struct point decode_point(const uint8_t report[AXS_TOUCH_REPORT_LEN], uint8_t index,
+                                 enum xiao147_orientation orientation)
 {
     const uint8_t off = 2 + index * 6;
     uint16_t raw_x = ((uint16_t)(report[off] & 0x0f) << 8) | report[off + 1];
     uint16_t raw_y = ((uint16_t)(report[off + 2] & 0x0f) << 8) | report[off + 3];
-    /* The sensor is mounted as 172x320; logical coordinates follow LVGL. */
-    if (xiao147_ui_portrait()) {
-        return (struct point){.x = 171 - raw_x, .y = 319 - raw_y};
-    }
-    return (struct point){.x = raw_y, .y = 171 - raw_x};
+    struct xiao147_xy p = xiao147_touch_to_logical(orientation, raw_x, raw_y);
+    return (struct point){.x = p.x, .y = p.y};
 }
 
 static void report_button(const struct device *dev, uint16_t code)
@@ -150,25 +149,25 @@ static void axs_poll(struct k_work *work)
     }
 
     enum xiao147_page page = xiao147_ui_page();
-    bool portrait = xiao147_ui_portrait();
-    if (page != data->last_page || portrait != data->last_portrait) {
+    enum xiao147_orientation orientation = xiao147_rotation_get();
+    if (page != data->last_page || orientation != data->last_orientation) {
         end_contact(data, false);
         data->last_page = page;
-        data->last_portrait = portrait;
+        data->last_orientation = orientation;
         data->swallow_until_release = fingers != 0;
     }
 
     if (fingers == 0) {
         if (page != XIAO147_PAGE_STATUS && !data->swallow_until_release) {
-            xiao147_ui_touch(0, 0, 0);
+            xiao147_ui_touch(0, 0, 0, orientation);
         }
         end_contact(data, page == XIAO147_PAGE_STATUS);
         goto next;
     }
 
-    struct point p = decode_point(report, 0);
+    struct point p = decode_point(report, 0, orientation);
     if (fingers == 2) {
-        struct point q = decode_point(report, 1);
+        struct point q = decode_point(report, 1, orientation);
         p.x = (p.x + q.x) / 2;
         p.y = (p.y + q.y) / 2;
     }
@@ -176,7 +175,7 @@ static void axs_poll(struct k_work *work)
     if (xiao147_ui_wake_on_touch()) { data->swallow_until_release = true; }
     if (data->swallow_until_release) { goto next; }
     if (page != XIAO147_PAGE_STATUS) {
-        xiao147_ui_touch(fingers, p.x, p.y);
+        xiao147_ui_touch(fingers, p.x, p.y, orientation);
         data->fingers = fingers;
         goto next;
     }

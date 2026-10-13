@@ -6,6 +6,7 @@
 #include <lvgl.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/led.h>
+#include <zephyr/drivers/gpio.h>
 #include <zephyr/input/input.h>
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
@@ -29,6 +30,8 @@
 LV_FONT_DECLARE(FG_Medium_20);
 LV_FONT_DECLARE(FR_Medium_32);
 LV_FONT_DECLARE(DINishExpanded_Light_36);
+LV_FONT_DECLARE(XiaoMenu_Bold_16);
+LV_FONT_DECLARE(XiaoMenu_Bold_12);
 LOG_MODULE_REGISTER(xiao147_ui, LOG_LEVEL_INF);
 
 #define SCREEN_W 320
@@ -44,7 +47,11 @@ LOG_MODULE_REGISTER(xiao147_ui, LOG_LEVEL_INF);
 #define DISP_BL DT_NODE_CHILD_IDX(DT_NODELABEL(disp_bl))
 
 enum rotation_mode { ROTATION_AUTO, ROTATION_LANDSCAPE, ROTATION_PORTRAIT };
-struct touch_sample { uint8_t fingers; uint16_t x; uint16_t y; };
+struct touch_sample {
+    uint8_t fingers;
+    uint16_t x, y;
+    enum xiao147_orientation orientation;
+};
 struct peripheral_state {
     uint8_t battery[XIAO147_PERIPHERAL_COUNT];
     bool seen[XIAO147_PERIPHERAL_COUNT];
@@ -59,7 +66,7 @@ static atomic_t sleeping = ATOMIC_INIT(0);
 static atomic_t imu_mode = ATOMIC_INIT(0);
 static atomic_t restore_landscape = ATOMIC_INIT(0);
 static atomic_t auto_rotate_mode = ATOMIC_INIT(0);
-static atomic_t auto_portrait = ATOMIC_INIT(0);
+static atomic_t auto_orientation = ATOMIC_INIT(XIAO147_USB_LEFT);
 static uint32_t last_activity_ms;
 static uint8_t brightness = 50;
 static uint8_t applied_brightness = 255;
@@ -103,7 +110,7 @@ static lv_obj_t *make_label(lv_obj_t *parent, int x, int y, int w, const char *t
     lv_obj_set_width(obj, w);
     lv_label_set_text(obj, text);
     lv_obj_set_style_text_color(obj, lv_color_hex(color), LV_PART_MAIN);
-    lv_obj_set_style_text_font(obj, &lv_font_montserrat_14, LV_PART_MAIN);
+    lv_obj_set_style_text_font(obj, &XiaoMenu_Bold_16, LV_PART_MAIN);
     return obj;
 }
 
@@ -194,12 +201,12 @@ static void layout_devices(bool portrait)
         lv_obj_set_pos(device_names[row], portrait ? 94 : 125,
                        portrait ? 9 : 7);
         lv_obj_set_width(device_names[row], portrait ? 54 : 165);
-        lv_obj_set_style_text_font(device_signals[row], &lv_font_montserrat_12,
+        lv_obj_set_style_text_font(device_signals[row], &XiaoMenu_Bold_12,
                                    LV_PART_MAIN);
         lv_obj_set_style_text_letter_space(device_signals[row], -1, LV_PART_MAIN);
         lv_obj_set_style_text_font(device_names[row],
-                                   portrait ? &lv_font_montserrat_12 :
-                                              &lv_font_montserrat_14, LV_PART_MAIN);
+                                   portrait ? &XiaoMenu_Bold_12 :
+                                              &XiaoMenu_Bold_16, LV_PART_MAIN);
     }
 }
 
@@ -274,25 +281,36 @@ static void layout_status(bool portrait)
     /* The pinned OPERATOR layout creates these five children in this order. */
     if (lv_obj_get_child_cnt(screen) < 5) { return; }
     lv_obj_t *modifiers = lv_obj_get_child(screen, 0);
-    lv_obj_set_pos(modifiers, portrait ? 6 : 10, portrait ? 7 : 2);
-    lv_obj_set_size(modifiers, portrait ? 160 : 300, portrait ? 18 : 24);
+    lv_obj_set_layout(modifiers, LV_LAYOUT_NONE);
+    lv_obj_set_style_pad_all(modifiers, 0, LV_PART_MAIN);
+    lv_obj_set_pos(modifiers, portrait ? 6 : 10, portrait ? 5 : 2);
+    lv_obj_set_size(modifiers, portrait ? 162 : 300, portrait ? 50 : 24);
     for (uint32_t i = 0; i < lv_obj_get_child_cnt(modifiers); i++) {
         lv_obj_t *child = lv_obj_get_child(modifiers, i);
         if (i % 2 == 0) {
-            lv_obj_set_style_text_font(child,
-                   portrait ? &lv_font_montserrat_14 : &FG_Medium_20, LV_PART_MAIN);
+            int label = i / 2;
+            lv_obj_set_pos(child, portrait ? label % 3 * 54 : label * 50,
+                           portrait ? label / 3 * 25 : 0);
+            lv_obj_set_width(child, portrait ? 44 : 47);
+            lv_label_set_long_mode(child, LV_LABEL_LONG_CLIP);
+            lv_obj_set_style_text_font(child, &FG_Medium_20, LV_PART_MAIN);
         } else {
-            lv_obj_set_height(child, portrait ? 16 : 24);
+            int label = i / 2;
+            lv_obj_set_pos(child, portrait ? label % 3 * 54 + 48 : label * 50 + 47,
+                           portrait ? label / 3 * 25 : 0);
+            lv_obj_set_height(child, portrait ? 20 : 24);
+            if (portrait && i == 5) { lv_obj_add_flag(child, LV_OBJ_FLAG_HIDDEN); }
+            else { lv_obj_clear_flag(child, LV_OBJ_FLAG_HIDDEN); }
         }
     }
 
     lv_obj_t *wpm = lv_obj_get_child(screen, 1);
-    lv_obj_set_pos(wpm, portrait ? 4 : 10, portrait ? 33 : 28);
+    lv_obj_set_pos(wpm, portrait ? 4 : 10, portrait ? 61 : 28);
     /* Native geometry avoids the ARGB transform layer (260*65*4 = 67600
      * bytes before widgets, already larger than our entire 64 KiB LVGL heap).
      */
     int meter_width = portrait ? 164 : 300;
-    int meter_height = portrait ? 75 : 65;
+    int meter_height = portrait ? 55 : 65;
     lv_obj_set_size(wpm, meter_width, meter_height);
     uint32_t wpm_children = lv_obj_get_child_cnt(wpm);
     if (wpm_children > 3) {
@@ -315,7 +333,7 @@ static void layout_status(bool portrait)
     }
 
     lv_obj_t *layers = lv_obj_get_child(screen, 2);
-    lv_obj_set_pos(layers, portrait ? 7 : 10, portrait ? 121 : 98);
+    lv_obj_set_pos(layers, portrait ? 7 : 10, portrait ? 128 : 98);
     int layer_width = portrait ? 158 : 300;
     lv_obj_set_size(layers, layer_width, 6);
     uint32_t layer_count = lv_obj_get_child_cnt(layers);
@@ -373,20 +391,22 @@ static void redraw(struct k_work *work)
     /* The left button is the authoritative IMU-mode toggle. */
     if (xiao147_ui_imu_enabled()) { rotation = ROTATION_PORTRAIT; }
     else if (atomic_set(&restore_landscape, 0)) { rotation = ROTATION_LANDSCAPE; }
-    const bool portrait = rotation == ROTATION_PORTRAIT ||
-                          (rotation == ROTATION_AUTO && atomic_get(&auto_portrait));
+    enum xiao147_orientation orientation = rotation == ROTATION_PORTRAIT ?
+        XIAO147_BUTTONS_BOTTOM : rotation == ROTATION_AUTO ?
+        (enum xiao147_orientation)atomic_get(&auto_orientation) : XIAO147_USB_LEFT;
+    const bool portrait = xiao147_orientation_portrait(orientation);
     enum xiao147_page page = atomic_get(&page_atomic);
     static enum xiao147_page drawn_page = XIAO147_PAGE_STATUS;
-    static bool drawn_portrait;
-    if (page != drawn_page || portrait != drawn_portrait) {
+    static enum xiao147_orientation drawn_orientation;
+    if (page != drawn_page || orientation != drawn_orientation) {
         k_msgq_purge(&touch_queue);
         previous_touch_fingers = 0;
         last_touch = (struct touch_sample){0};
         drawn_page = page;
-        drawn_portrait = portrait;
-        LOG_INF("UI page %d, portrait %d, IMU %d", page, portrait, xiao147_ui_imu_enabled());
+        drawn_orientation = orientation;
+        LOG_INF("UI page %d, orientation %d, IMU %d", page, orientation, xiao147_ui_imu_enabled());
     }
-    xiao147_rotation_set(portrait);
+    xiao147_rotation_set(orientation);
     lv_obj_set_size(panel, portrait ? SCREEN_H : SCREEN_W,
                     portrait ? SCREEN_W : SCREEN_H);
     lv_obj_set_pos(title_label, 0, portrait ? 8 : 3);
@@ -454,6 +474,17 @@ static void apply_brightness(void)
 
 static void periodic(struct k_work *work)
 {
+    /* A raw transition trace separates a missing IRQ from wiring/pin mismatch.
+     * Read only: gpio-keys owns configuration and emits the sole key event. */
+    static const struct gpio_dt_spec usr1 = GPIO_DT_SPEC_GET(
+        DT_CHILD(DT_NODELABEL(xiao_touch_left_button), button_left), gpios);
+    static int previous_level = -2;
+    int level = gpio_is_ready_dt(&usr1) ? gpio_pin_get_dt(&usr1) : -ENODEV;
+    if (level != previous_level) {
+        LOG_INF("USR1 GPIO pressed %d, input ready %d (polling)", level,
+                device_is_ready(DEVICE_DT_GET(DT_NODELABEL(xiao_touch_left_button))));
+        previous_level = level;
+    }
     bool powered = zmk_usb_is_powered();
     if (powered != usb_powered) {
         usb_powered = powered;
@@ -473,6 +504,10 @@ static void touch_handler(struct k_work *work)
 {
     struct touch_sample sample;
     while (k_msgq_get(&touch_queue, &sample, K_NO_WAIT) == 0) {
+        if (sample.orientation != xiao147_rotation_get()) {
+            previous_touch_fingers = 0;
+            continue;
+        }
         if (atomic_get(&page_atomic) != XIAO147_PAGE_SETTINGS) {
             previous_touch_fingers = sample.fingers;
             continue;
@@ -664,9 +699,9 @@ bool xiao147_ui_auto_rotate_enabled(void)
     return atomic_get(&auto_rotate_mode) != 0;
 }
 
-void xiao147_ui_set_auto_orientation(bool portrait)
+void xiao147_ui_set_auto_orientation(enum xiao147_orientation orientation)
 {
-    if (atomic_set(&auto_portrait, portrait) != portrait &&
+    if (atomic_set(&auto_orientation, orientation) != orientation &&
         zmk_display_is_initialized()) {
         k_work_submit_to_queue(zmk_display_work_q(), &redraw_work);
     }
@@ -724,9 +759,11 @@ bool xiao147_ui_wake_on_motion(void)
     return false;
 }
 
-void xiao147_ui_touch(uint8_t fingers, uint16_t x, uint16_t y)
+void xiao147_ui_touch(uint8_t fingers, uint16_t x, uint16_t y,
+                       enum xiao147_orientation orientation)
 {
-    struct touch_sample sample = {.fingers = fingers, .x = x, .y = y};
+    struct touch_sample sample = {.fingers = fingers, .x = x, .y = y,
+                                  .orientation = orientation};
     if (k_msgq_put(&touch_queue, &sample, K_NO_WAIT) != 0) {
         struct touch_sample discarded;
         k_msgq_get(&touch_queue, &discarded, K_NO_WAIT);

@@ -61,7 +61,10 @@
 / {
     xiao_touch_left_button: xiao_touch_left_button {
         compatible = "gpio-keys";
-        debounce-interval-ms = <15>;
+        /* USR1 produced no IRQ events in the real-panel capture. Poll only
+         * this key; the working USR2 interrupt path remains unchanged. */
+        polling-mode;
+        debounce-interval-ms = <20>;
 
         button_left {
             gpios = <&gpio1 3 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; /* D19/USR1 */

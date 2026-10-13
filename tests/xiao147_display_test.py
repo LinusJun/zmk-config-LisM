@@ -43,7 +43,7 @@ rotation = read("src/xiao147_rotation.c")
 assert "result = display_write" in rotation and "report_write(result)" in rotation
 assert "write_errors % 100" in rotation and "xiao147_display_hold_flush()" in rotation
 test_matrix = read("build-display-test.yaml")
-assert re.findall(r"artifact-name:\s*(\S+)", test_matrix) == ["lism_dongle_xiao147_native_input_test"]
+assert re.findall(r"artifact-name:\s*(\S+)", test_matrix) == ["lism_dongle_xiao147_four_direction_test"]
 assert "raw_refresh_gate" in diag and "LV_EVENT_REFR_REQUEST" in diag
 assert "lv_timer_pause" in diag and "lv_timer_resume" in diag
 assert "CONFIG_LISM_XIAO147_DISPLAY_SELFTEST=y" in test_matrix
@@ -51,7 +51,12 @@ assert "settings_reset" not in test_matrix
 ui = read("src/xiao147_ui.c")
 native_layout = ui[ui.index("static void layout_status"):ui.index("static void redraw(struct k_work *work)\n{")]
 assert "portrait ? 164 : 300" in native_layout
-assert "portrait ? 75 : 65" in native_layout
+assert "portrait ? 55 : 65" in native_layout
+assert "LV_LAYOUT_NONE" in native_layout and "portrait ? 50 : 24" in native_layout
+assert "portrait && i == 5" in native_layout
+assert "polling-mode;" in overlay
+assert "XiaoMenu_Bold_16" in ui and "XiaoMenu_Bold_12" in ui
+assert "sample.orientation != xiao147_rotation_get()" in ui
 assert "transform_scale" not in native_layout[:native_layout.index("lv_obj_t *output")]
 assert "transform_scale" not in read("src/prospector_lock_indicators.c")
 for width, gap in ((300, 2), (164, 1)):

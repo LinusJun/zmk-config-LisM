@@ -14,6 +14,7 @@ prelude = r"""
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include "xiao147_rotation.h"
 typedef int atomic_t;
 #define ATOMIC_INIT(x) (x)
 static int atomic_get(atomic_t *x) { return *x; }
@@ -26,6 +27,9 @@ static void atomic_set(atomic_t *x,int y) { *x=y; }
 #define LV_COLOR_FORMAT_RGB565 16
 #define LV_DISPLAY_ROTATION_0 0
 #define LV_DISPLAY_ROTATION_90 1
+#define LV_DISPLAY_ROTATION_180 2
+#define LV_DISPLAY_ROTATION_270 3
+typedef int lv_display_rotation_t;
 struct device { int unused; };
 static struct device dev;
 struct display_buffer_descriptor { uint16_t width,height,pitch; size_t buf_size; bool frame_incomplete; };
@@ -70,21 +74,31 @@ int main(void) {
     assert(last_result==0 && ready_calls==1 && panel[3][2]==0xf800 && panel[4][2]==0xffff);
     assert(panel[4][4]==0x5678); /* padding poison must never become a pixel */
     memset(panel,0x55,sizeof(panel));
-    xiao147_rotation_set(true);
-    assert(rotation==1 && xiao147_rotation_is_portrait() && invalidations==1);
+    xiao147_rotation_set(XIAO147_BUTTONS_BOTTOM);
+    assert(rotation==3 && xiao147_rotation_is_portrait() && invalidations==1);
     for(int y=0;y<172;y++)for(int x=0;x<320;x++)assert(panel[y][x]==0);
     flush_cb(&disp,&area,(uint8_t *)pixels);
-    for(int y=0;y<2;y++)for(int x=0;x<3;x++)assert(panel[2+x][319-(3+y)]==pixels[y*4+x]);
+    for(int y=0;y<2;y++)for(int x=0;x<3;x++)assert(panel[171-(2+x)][3+y]==pixels[y*4+x]);
     uint16_t large[172*40];
     for(int y=0;y<40;y++)for(int x=0;x<172;x++)large[y*172+x]=x==171?0xdead:(uint16_t)(1+y*171+x);
     draw_buf=(lv_draw_buf_t){.header={.stride=344},.data_size=sizeof(large)};
     lv_area_t wide={0,0,170,39};
     flush_cb(&disp,&wide,(uint8_t *)large);
-    for(int y=0;y<40;y++)for(int x=0;x<171;x++)assert(panel[x][319-y]==large[y*172+x]);
+    for(int y=0;y<40;y++)for(int x=0;x<171;x++)assert(panel[171-x][y]==large[y*172+x]);
+    /* Independently specified maps, not helper/inverse round-trip tests. */
+    for(int pose=0;pose<4;pose++) {
+        xiao147_rotation_set(pose);
+        flush_cb(&disp,&wide,(uint8_t *)large);
+        for(int y=0;y<40;y++)for(int x=0;x<171;x++) {
+            int px=pose==0?x:pose==1?y:pose==2?319-x:319-y;
+            int py=pose==0?y:pose==1?171-x:pose==2?171-y:x;
+            assert(panel[py][px]==large[y*172+x]);
+        }
+    }
     draw_buf=(lv_draw_buf_t){.header={.stride=8},.data_size=sizeof(pixels)};
     memset(panel,0x55,sizeof(panel));
-    xiao147_rotation_set(false);
-    assert(rotation==0 && !xiao147_rotation_is_portrait() && invalidations==2);
+    xiao147_rotation_set(XIAO147_USB_LEFT);
+    assert(rotation==0 && !xiao147_rotation_is_portrait() && invalidations==6);
     for(int y=0;y<172;y++)for(int x=0;x<320;x++)assert(panel[y][x]==0);
     int before=writes;
     hold=true;flush_cb(&disp,&area,(uint8_t *)pixels);assert(writes==before && last_result==1);
@@ -94,8 +108,8 @@ int main(void) {
     flush_cb(&disp,&area,(uint8_t *)pixels);assert(writes==before && last_result==-EINVAL);
     draw_buf.data_size=sizeof(pixels);format=24;
     flush_cb(&disp,&area,(uint8_t *)pixels);assert(writes==before && last_result==-EINVAL);
-    assert(ready_calls==7 && flush_notes==14);
-    puts("PASS: actual RGB565 stride, odd-width padded partials, clockwise rotation, physical clearing, bad-buffer guards and flush completion");
+    assert(ready_calls==11 && flush_notes==22);
+    puts("PASS: actual RGB565 stride, padded partials, all four rotation maps, multi-tile boundaries, physical clearing and bad-buffer guards");
 }
 """
 with tempfile.TemporaryDirectory(prefix="xiao147-rotation-") as directory:
@@ -104,5 +118,5 @@ with tempfile.TemporaryDirectory(prefix="xiao147-rotation-") as directory:
     c.write_text(prelude + source + test)
     binary = folder / "test"
     subprocess.run(["cc", "-std=gnu11", "-Wall", "-Wextra", "-Werror",
-                    "-fsanitize=address,undefined", str(c), "-o", str(binary)], check=True)
+                    "-fsanitize=address,undefined", "-I",str(root / "src"), str(c), "-o", str(binary)], check=True)
     subprocess.run([str(binary)], check=True)
