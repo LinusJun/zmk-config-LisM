@@ -110,11 +110,15 @@ static void end_contact(struct axs_touch_data *data, bool allow_tap)
 
 static void cancel_contact(struct axs_touch_data *data)
 {
+    bool active = data->fingers != 0 || data->swallow_until_release;
     if (data->last_page != XIAO147_PAGE_STATUS && data->fingers != 0) {
         /* Cancel is not a release: an I2C glitch must not toggle a menu row. */
         xiao147_ui_touch(XIAO147_TOUCH_CANCEL, 0, 0, data->last_orientation);
     }
     end_contact(data, false);
+    /* The unread sample is not evidence of release. Preserve cancellation
+     * through repeated errors, until a valid zero-contact report arrives. */
+    data->swallow_until_release = active;
 }
 
 static void axs_poll(struct k_work *work)

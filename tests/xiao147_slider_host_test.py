@@ -87,6 +87,9 @@ int main(void) {
     send(1,80,80);send(XIAO147_TOUCH_CANCEL,0,0);send(0,0,0);frame();assert(redraws==0&&!slider_drag);
     send(1,80,52);frame();assert(slider_drag);
     xiao147_ui_touch(1,90,52,XIAO147_USB_RIGHT);frame();assert(!slider_drag&&previous_touch_fingers==0);
+    /* Accidental second finger followed by lift must end, not latch, drag. */
+    send(1,90,52);send(2,90,80);send(0,0,0);frame();
+    assert(!slider_drag&&previous_touch_fingers==0&&redraws==0);
     /* Real release still activates one row exactly once. */
     send(1,80,80);send(0,0,0);frame();assert(rotation==ROTATION_AUTO&&redraws==1);
     send(0,0,0);frame();assert(redraws==1);

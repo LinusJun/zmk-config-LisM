@@ -574,6 +574,8 @@ static void touch_handler(struct k_work *work)
             slider_drag = false;
             if (controls_changed) { redraw(NULL); }
         }
+        /* A 1->2->0 gesture is not a menu tap, but still ends a slider drag. */
+        if (sample.fingers == 0) { slider_drag = false; }
         if (sample.fingers != 0) { last_touch = sample; }
         previous_touch_fingers = sample.fingers;
     }

@@ -48,7 +48,7 @@ struct i2c_dt_spec {int unused;};
 struct device {void *data; const void *config;};
 struct input_event {uint8_t type;uint16_t code;int value;};
 static uint32_t now;
-static int page,read_error,nrel,nkey,nsample,submitted;
+static int page,read_error,nrel,nkey,nsample,submitted,cancel_samples;
 static enum xiao147_orientation pose;
 static int rel_code[32],rel_value[32],key_code[32],key_value[32];
 static uint8_t sensor[14];
@@ -66,7 +66,7 @@ static void input_report_key(const struct device*d,int c,int v,bool sync,int wai
 static enum xiao147_page xiao147_ui_page(void) {return page;}
 static enum xiao147_orientation xiao147_rotation_get(void) {return pose;}
 static bool xiao147_ui_wake_on_touch(void) {return false;}
-static void xiao147_ui_touch(uint8_t f,uint16_t x,uint16_t y,enum xiao147_orientation o) {assert(o==pose);if(f){sample_x=x;sample_y=y;nsample++;}}
+static void xiao147_ui_touch(uint8_t f,uint16_t x,uint16_t y,enum xiao147_orientation o) {assert(o==pose);if(f==XIAO147_TOUCH_CANCEL){cancel_samples++;}else if(f){sample_x=x;sample_y=y;nsample++;}}
 typedef int atomic_val_t;
 static int imu_mode,auto_rotate_mode,restore_landscape,sleeping;
 static int auto_updates,last_auto_pose;
@@ -122,6 +122,13 @@ int main(void) {
     int before=nsample;pose=2;poll(&d);assert(nsample==before&&d.swallow_until_release);
     poll(&d);assert(nsample==before);sensor[1]=0;poll(&d);
     sensor[1]=1;poll(&d);assert(sample_x==249&&sample_y==131);
+    /* I2C cancellation swallows a held finger across menu rows until lift. */
+    int samples=nsample;read_error=-EIO;poll(&d);
+    assert(cancel_samples==1&&d.swallow_until_release&&d.fingers==0);
+    poll(&d);assert(cancel_samples==1&&d.swallow_until_release);
+    read_error=0;contact(0,80,140);poll(&d);assert(nsample==samples&&d.swallow_until_release);
+    sensor[1]=0;poll(&d);assert(!d.swallow_until_release);
+    sensor[1]=1;poll(&d);assert(nsample==samples+1);
     page=0;pose=0;sensor[1]=0;poll(&d);
     contact(0,40,70);contact(1,60,90);sensor[1]=2;poll(&d);
     contact(0,48,78);contact(1,68,98);nrel=0;poll(&d);
