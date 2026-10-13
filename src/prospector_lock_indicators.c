@@ -50,38 +50,9 @@ static lv_obj_t *get_operator_modifier_row(lv_obj_t *screen) {
     lv_obj_set_pos(modifiers, 10, 8);
     lv_obj_set_size(modifiers, lv_obj_get_width(screen) - 20, 24);
 
-#if IS_ENABLED(CONFIG_LISM_XIAO147_TOUCH)
-    /*
-     * The stock OPERATOR layout assumes a taller 240x280 display. Reflow its
-     * five root widgets for the Seeed panel's 320x172 landscape geometry.
-     * Keep the same widgets and event subscriptions as the working dongle.
+    /* XIAO's UI owns responsive native geometry. Do not reintroduce an
+     * oversized transform layer when this deferred CAP/NUM row is created.
      */
-    lv_obj_set_pos(modifiers, 10, 3);
-    lv_obj_set_size(modifiers, 300, 24);
-
-    lv_obj_t *wpm = lv_obj_get_child(screen, 1);
-    /*
-     * Keep the live WPM animation but shorten its vertical bars. This leaves
-     * room for the six status labels and the bottom battery/output widgets.
-     * The peak indicator is part of the same child range as the bars.
-     */
-    lv_obj_set_pos(wpm, 10, 28);
-    lv_obj_set_size(wpm, 260, 65);
-    lv_obj_set_style_transform_pivot_x(wpm, 0, LV_PART_MAIN);
-    lv_obj_set_style_transform_scale_x(wpm, 295, LV_PART_MAIN);
-    uint32_t wpm_children = lv_obj_get_child_cnt(wpm);
-    if (wpm_children >= 3) {
-        for (uint32_t i = 0; i < wpm_children - 2; i++) {
-            lv_obj_set_height(lv_obj_get_child(wpm, i), 65);
-        }
-        lv_obj_align(lv_obj_get_child(wpm, wpm_children - 1), LV_ALIGN_BOTTOM_RIGHT,
-                     0, 0);
-    }
-
-    lv_obj_set_pos(lv_obj_get_child(screen, 2), 10, 98); /* layer dots */
-    lv_obj_set_pos(lv_obj_get_child(screen, 3), 10, 110); /* battery placeholder */
-    lv_obj_set_pos(lv_obj_get_child(screen, 4), 194, 110); /* USB/BLE output */
-#endif
 
     static const char *const modifier_labels[] = {"GUI", "ALT", "CTL", "SFT"};
 

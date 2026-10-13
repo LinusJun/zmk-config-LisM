@@ -53,6 +53,7 @@ native_layout = ui[ui.index("static void layout_status"):ui.index("static void r
 assert "portrait ? 164 : 300" in native_layout
 assert "portrait ? 75 : 65" in native_layout
 assert "transform_scale" not in native_layout[:native_layout.index("lv_obj_t *output")]
+assert "transform_scale" not in read("src/prospector_lock_indicators.c")
 for width, gap in ((300, 2), (164, 1)):
     bars = [(i*(width+gap)//26, (i+1)*(width+gap)//26-gap) for i in range(26)]
     assert bars[0][0] == 0 and bars[-1][1] == width
