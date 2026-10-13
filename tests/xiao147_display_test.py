@@ -51,7 +51,7 @@ assert "settings_reset" not in test_matrix
 ui = read("src/xiao147_ui.c")
 assert "xiao147_display_layout_ready();" in ui[ui.index("static void create_ui"):ui.index("static void init_retry")]
 assert "usb_powered ? 100 : zmk_battery_state_of_charge()" in ui
-assert "DONGLE USB" in ui and "100%% USB" in ui
+assert "DONGLE USB" in ui and '"USB\\n100%%"' in ui
 assert "gpio_pin_get_raw" in ui and "NRF_P1->PIN_CNF[usr1.pin]" in ui
 native_layout = ui[ui.index("static void layout_status"):ui.index("static void redraw(struct k_work *work)\n{")]
 assert "portrait ? 164 : 300" in native_layout

@@ -52,6 +52,7 @@ struct axs_touch_data {
     uint32_t last_trace_ms;
     uint32_t wheel_events;
     uint32_t input_errors;
+    uint32_t last_report_trace_ms;
 };
 
 static bool point_valid(const uint8_t report[AXS_TOUCH_REPORT_LEN], uint8_t index)
@@ -163,8 +164,18 @@ static void axs_poll(struct k_work *work)
     }
 
     uint8_t fingers = report[1];
-    if (fingers > 2 || (fingers > 0 && !point_valid(report, 0)) ||
-        (fingers == 2 && !point_valid(report, 1))) {
+    bool invalid = fingers > 2 || (fingers > 0 && !point_valid(report, 0)) ||
+                   (fingers == 2 && !point_valid(report, 1));
+    /* Capture BEFORE rejection: diagnose count/ID/event nibbles and the full
+     * second record even if our current format assumption rejects it. */
+    if ((invalid || fingers == 2 || fingers != data->reported_fingers) &&
+        k_uptime_get_32() - data->last_report_trace_ms >= 1000) {
+        LOG_INF("Touch raw14 %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x, invalid %d",
+                report[0], report[1], report[2], report[3], report[4], report[5], report[6],
+                report[7], report[8], report[9], report[10], report[11], report[12], report[13], invalid);
+        data->last_report_trace_ms = k_uptime_get_32();
+    }
+    if (invalid) {
         if (data->bad_reports++ % 200 == 0) {
             LOG_WRN("Touch invalid count %u, xy bytes %02x %02x %02x %02x", fingers,
                     report[2], report[3], report[4], report[5]);
@@ -177,9 +188,7 @@ static void axs_poll(struct k_work *work)
         /* Upper nibbles are retained for diagnosis rather than assuming an
          * undocumented event/ID convention. The official example masks them.
          * This real report (not host tests) establishes two-point capability. */
-        LOG_INF("Touch contacts %u, page %d, raw %02x %02x %02x %02x / %02x %02x %02x %02x",
-                fingers, xiao147_ui_page(), report[2], report[3], report[4], report[5],
-                report[8], report[9], report[10], report[11]);
+        LOG_DBG("Touch contacts %u, page %d", fingers, xiao147_ui_page());
     }
 
     enum xiao147_page page = xiao147_ui_page();

@@ -44,6 +44,7 @@ enum xiao147_page {XIAO147_PAGE_STATUS,XIAO147_PAGE_SETTINGS,XIAO147_PAGE_DEVICE
 #define LOG_INF(...) ((void)0)
 #define LOG_WRN(...) ((void)0)
 #define LOG_ERR(...) ((void)0)
+#define LOG_DBG(...) ((void)0)
 #define INPUT_BTN_0 256
 #define INPUT_BTN_1 257
 #define INPUT_EV_KEY 1
@@ -226,18 +227,25 @@ int main(void) {
     now+=3000;imu_poll(&id.poll_work.work);
     assert(nrel==2&&rel_value[0]==2&&rel_value[1]==4);
     /* Stable bias, no moving calibration, fractional +/- symmetry, clearing. */
-    struct xiao147_air_motion m={0};int16_t stationary[3]={180,-120,50};
+    struct xiao147_air_motion m={0};int16_t stationary[3]={100,-100,50};
     xiao147_air_begin(&m,0);
     for(int i=0;i<50;i++) {struct xiao147_xy v=xiao147_air_sample(&m,i*20,0,stationary);assert(!v.x&&!v.y);}
-    assert(m.bias_valid&&m.bias[0]==180&&m.bias[1]==-120&&!m.calibrating);
-    int16_t slow[3]={280,-120,50};int sum=0;
+    assert(m.bias_valid&&m.bias[0]==100&&m.bias[1]==-100&&!m.calibrating);
+    int16_t slow[3]={200,-100,50};int sum=0;
     for(int i=0;i<13;i++)sum+=xiao147_air_sample(&m,1100+i*20,0,slow).x;
-    assert(sum==4);xiao147_air_clear(&m);slow[0]=80;sum=0;
+    assert(sum==4);xiao147_air_clear(&m);slow[0]=0;sum=0;
     for(int i=0;i<13;i++)sum+=xiao147_air_sample(&m,1500+i*20,0,slow).x;
     assert(sum==-4);xiao147_air_clear(&m);assert(!m.remainder[0]&&!m.remainder[1]);
     xiao147_air_begin(&m,2000);int16_t moving[3]={2000,1000,0};
     for(int i=0;i<149;i++)xiao147_air_sample(&m,2000+i*20,0,moving);
-    xiao147_air_sample(&m,5000,0,moving);assert(m.bias[0]==180&&m.bias[1]==-120&&!m.calibrating);
+    xiao147_air_sample(&m,5000,0,moving);assert(m.bias[0]==100&&m.bias[1]==-100&&!m.calibrating);
+    xiao147_air_begin(&m,6000);moving[0]=300;moving[1]=moving[2]=0;
+    for(int i=0;i<150;i++)xiao147_air_sample(&m,6000+i*20,0,moving);
+    xiao147_air_sample(&m,9000,0,moving);assert(m.bias[0]==100&&m.bias[1]==-100);
+    /* Even below the admission bound, don't silently overwrite a trusted zero. */
+    xiao147_air_begin(&m,10000);moving[0]=150;moving[1]=-100;moving[2]=50;
+    for(int i=0;i<151;i++)xiao147_air_sample(&m,10000+i*20,0,moving);
+    assert(m.bias[0]==100&&m.bias[1]==-100);
     puts("PASS: actual touch gestures/four poses, cancellation, actual IMU stability/error recovery/vectors and USR1 edge toggles");
 }
 '''

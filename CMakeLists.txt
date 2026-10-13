@@ -22,7 +22,7 @@ endif()
 # rotation swaps its dimensions and breaks both widgets and touch coordinates.
 # Only suppress that one Prospector source for this new dongle shield.
 if(CONFIG_LISM_XIAO147_TOUCH)
-  zephyr_link_options(-Wl,--wrap=zmk_endpoint_send_mouse_report)
+  zephyr_link_libraries(-Wl,--wrap=zmk_endpoint_send_mouse_report)
   get_filename_component(_west_workspace_root "${ZEPHYR_BASE}" DIRECTORY)
   set(_prospector_shield_dir
       "${_west_workspace_root}/prospector-zmk-module/boards/shields/prospector_adapter")

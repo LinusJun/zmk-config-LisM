@@ -36,7 +36,14 @@ static inline struct xiao147_xy xiao147_air_sample(struct xiao147_air_motion *s,
         } else {
             bool stable = true;
             for (int i = 0; i < 3; i++) {
-                if (abs(raw[i]) > 500) { stable = false; }
+                /* Calibration assumes the user holds the device still on
+                 * enabling. Gyro alone cannot distinguish true bias from
+                 * perfectly constant rotation. Use a conservative admission
+                 * bound and never silently move an established zero far. */
+                if (abs(raw[i]) > 160 ||
+                    (s->bias_valid && abs((int)raw[i] - s->bias[i]) > 32)) {
+                    stable = false;
+                }
                 if (s->samples && (abs((int)raw[i] - s->minimum[i]) > 80 ||
                                    abs((int)raw[i] - s->maximum[i]) > 80)) {
                     stable = false;

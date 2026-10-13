@@ -390,8 +390,8 @@ static void layout_status(bool portrait)
     lv_obj_set_pos(dongle_battery_bar, 10, 160);
     lv_obj_set_size(dongle_battery_bar, 140, 6);
     lv_obj_set_pos(dongle_battery_label, portrait ? 123 : 166,
-                   portrait ? 288 : 150);
-    lv_obj_set_width(dongle_battery_label, portrait ? 42 : 70);
+                   portrait ? 288 : usb_powered ? 136 : 150);
+    lv_obj_set_width(dongle_battery_label, portrait ? 42 : 35);
     lv_obj_set_style_text_align(dongle_battery_label,
                                 portrait ? LV_TEXT_ALIGN_RIGHT : LV_TEXT_ALIGN_LEFT,
                                 LV_PART_MAIN);
@@ -471,7 +471,7 @@ static void redraw(struct k_work *work)
                                 LV_PART_MAIN);
     char text[16];
     snprintf(text, sizeof(text), usb_powered ?
-             (portrait ? "100%%\nUSB" : "100%% USB") : "%u%%", dongle_level);
+             (portrait ? "100%%\nUSB" : "USB\n100%%") : "%u%%", dongle_level);
     lv_label_set_text(dongle_battery_label, text);
     apply_brightness();
     xiao147_display_note_ui(131);
