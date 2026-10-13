@@ -37,6 +37,18 @@ void lvgl_heap_stats(struct sys_memory_stats *stats);
 bool xiao147_display_ui_ready(void) { return atomic_get(&stage) == 2; }
 bool xiao147_display_hold_flush(void) { return atomic_get(&stage) == 0; }
 
+static void raw_refresh_gate(lv_event_t *event)
+{
+    /* Actual LVGL f1db87ee registers its resume callback at display creation.
+     * Event callbacks run in registration order, so this later gate pauses it
+     * again during raw mode, including ZMK's subsequent lv_screen_load().
+     */
+    if (xiao147_display_hold_flush()) {
+        lv_timer_t *timer = lv_display_get_refr_timer(lv_event_get_target(event));
+        if (timer != NULL) { lv_timer_pause(timer); }
+    }
+}
+
 static void checkpoint(int point)
 {
     atomic_set(&progress_time, k_uptime_get_32());
@@ -173,6 +185,8 @@ static void diagnostic_work(struct k_work *work)
         checkpoint(20);
         raw_stage_marker(2);
         atomic_set(&stage, 1);
+        lv_timer_t *timer = lv_display_get_refr_timer(lv_display_get_default());
+        if (timer != NULL) { lv_timer_resume(timer); }
         checkpoint(21);
         lv_obj_invalidate(test_screen);
         checkpoint(22);
@@ -193,6 +207,11 @@ static void diagnostic_work(struct k_work *work)
 lv_obj_t *zmk_display_status_screen(void)
 {
     xiao147_rotation_install();
+    lv_display_t *display = lv_display_get_default();
+    if (display == NULL) { return NULL; }
+    lv_display_add_event_cb(display, raw_refresh_gate, LV_EVENT_REFR_REQUEST, NULL);
+    lv_timer_t *timer = lv_display_get_refr_timer(display);
+    if (timer != NULL) { lv_timer_pause(timer); }
     test_screen = lv_obj_create(NULL);
     if (test_screen == NULL) { return NULL; }
     lv_obj_set_style_bg_color(test_screen, lv_color_hex(0x000000), LV_PART_MAIN);

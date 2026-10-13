@@ -47,6 +47,30 @@ struct display_buffer_descriptor {
 };
 struct sys_memory_stats { size_t free_bytes, allocated_bytes, max_allocated_bytes; };
 typedef struct { int id; bool deleted; } lv_obj_t;
+typedef struct { bool paused; } lv_timer_t;
+typedef struct { int dummy; } lv_display_t;
+typedef struct { lv_display_t *target; } lv_event_t;
+static lv_display_t mock_display;
+static lv_timer_t refresh_timer;
+static void (*refresh_gate)(lv_event_t *);
+#define LV_EVENT_REFR_REQUEST 1
+static lv_display_t *lv_display_get_default(void) { return &mock_display; }
+static lv_timer_t *lv_display_get_refr_timer(lv_display_t *d) {
+    assert(d==&mock_display); return &refresh_timer;
+}
+static lv_display_t *lv_event_get_target(lv_event_t *e) { return e->target; }
+static void lv_timer_pause(lv_timer_t *t) { t->paused=true; }
+static void lv_timer_resume(lv_timer_t *t) { t->paused=false; }
+static void lv_display_add_event_cb(lv_display_t *d,void (*cb)(lv_event_t *),int event,void *data) {
+    (void)data; assert(d==&mock_display && event==LV_EVENT_REFR_REQUEST); refresh_gate=cb;
+}
+static void request_refresh(void) {
+    /* Actual f1db87ee dispatches callbacks in registration order:
+     * the built-in callback resumes, then our later gate may pause again.
+     */
+    lv_timer_resume(&refresh_timer);
+    if(refresh_gate) { lv_event_t e={.target=&mock_display}; refresh_gate(&e); }
+}
 static struct device mock_lcd;
 static struct k_work_q display_queue;
 static lv_obj_t objects[8], *active_screen;
@@ -111,14 +135,15 @@ static void lv_obj_set_style_text_color(lv_obj_t *o,unsigned c,int p) {(void)o;(
 static void lv_obj_set_style_text_font(lv_obj_t *o,const int *f,int p) {(void)o;(void)f;(void)p;}
 static void lv_label_set_text(lv_obj_t *o,const char *t) {(void)o;(void)t;}
 static void lv_obj_center(lv_obj_t *o) {(void)o;}
-static void lv_obj_invalidate(lv_obj_t *o) { assert(o && !o->deleted); invalidations++; }
-static void lv_screen_load(lv_obj_t *o) { assert(o && !o->deleted); active_screen=o; }
+static void lv_obj_invalidate(lv_obj_t *o) { assert(o && !o->deleted); invalidations++; request_refresh(); }
+static void lv_screen_load(lv_obj_t *o) { assert(o && !o->deleted); active_screen=o; request_refresh(); }
 static void lv_obj_delete(lv_obj_t *o) { assert(o && o!=active_screen); o->deleted=true; }
 static void xiao147_rotation_install(void) {}
 bool xiao147_display_hold_flush(void);
 static void lv_refr_now(void *d) {
     (void)d; refr_calls++; last_render_hold=xiao147_display_hold_flush();
     assert(!last_render_hold);
+    assert(!refresh_timer.paused);
     /* In the blocked case do not execute any subsequent display work.
      * The independent system heartbeat is still executable.
      */
@@ -143,11 +168,15 @@ static void reset(void) {
     for(unsigned i=0;i<4;i++) markers[i]=0;
     active_screen=NULL;
     test_screen=NULL;
+    refresh_timer.paused=false; refresh_gate=NULL;
 }
 static void pipeline(bool fail_one_write) {
     reset(); write_failure_row=fail_one_write ? 5 : -1;
     lv_obj_t *s=zmk_display_status_screen(); assert(s);
-    active_screen=s;
+    lv_screen_load(s);
+    assert(refresh_timer.paused);
+    /* Screen loads and later invalidations must not re-enable raw rendering. */
+    for(unsigned i=0;i<10;i++) { lv_obj_invalidate(s); assert(refresh_timer.paused); }
     assert(!xiao147_display_ui_ready() && xiao147_display_hold_flush());
     assert(phase_work.queue==&display_queue && heartbeat_work.queue==NULL);
     for(unsigned i=0;i<43;i++) run(&phase_work);
@@ -156,6 +185,7 @@ static void pipeline(bool fail_one_write) {
     uint32_t due=phase_work.deadline; assert(due-clock_ms==5000);
     run(&phase_work);
     assert(stage==1 && !xiao147_display_hold_flush() && !xiao147_display_ui_ready());
+    assert(!refresh_timer.paused);
     assert(markers[2]==1 && refr_calls==1 && !last_render_hold);
     assert(phase_work.deadline-clock_ms==5000 && !stock_calls);
     run(&phase_work);

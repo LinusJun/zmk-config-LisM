@@ -21,12 +21,13 @@ keymap = read("config/lism.keymap")
 for m in re.finditer(r"(default_layer|layer_\d+)\s*\{.*?bindings\s*=\s*<(.*?)>;", keymap, re.S):
     layers[m[1]] = [" ".join(x.split()) for x in re.findall(r"&[A-Za-z_]\w*[^&]*", m[2])]
 expected = [
-    ["&stick_scroll MOVE_Y(LISM_4WAY_SCROLL_SPEED)", "&stick_scroll MOVE_X(LISM_4WAY_SCROLL_SPEED)",
-     "&stick_scroll MOVE_Y(-LISM_4WAY_SCROLL_SPEED)", "&stick_scroll MOVE_X(-LISM_4WAY_SCROLL_SPEED)"],
+    ["&stick_scroll MOVE_Y(-LISM_4WAY_SCROLL_SPEED)", "&stick_scroll MOVE_X(-LISM_4WAY_SCROLL_SPEED)",
+     "&stick_scroll MOVE_Y(LISM_4WAY_SCROLL_SPEED)", "&stick_scroll MOVE_X(LISM_4WAY_SCROLL_SPEED)"],
+    ["&kp LEFT_SHIFT", "&kp LEFT_GUI", "&kp LEFT_CONTROL", "&kp LEFT_ALT"],
     ["&kp UP", "&kp RIGHT", "&kp DOWN", "&kp LEFT"],
     ["&kp LEFT_SHIFT", "&kp LEFT_GUI", "&kp LEFT_CONTROL", "&kp LEFT_ALT"],
-    ["&trans"] * 4, ["&trans"] * 4,
-    ["&kp LEFT_SHIFT", "&kp LEFT_GUI", "&kp LEFT_CONTROL", "&kp LEFT_ALT"],
+    ["&trans"] * 4,
+    ["&kp W", "&kp D", "&kp S", "&kp A"],
     ["&kp W", "&kp D", "&kp S", "&kp A"], ["&trans"] * 4,
 ]
 assert layers.keys() == baseline["layers"].keys()
@@ -35,12 +36,13 @@ for index, (name, bindings) in enumerate(layers.items()):
     previous = baseline["layers"][name].copy()
     if name == "layer_4":
         assert previous[1] == "&none"
-        previous[1] = "&to 6"
+        previous[1] = "&to 5"
     elif name == "layer_6":
         assert previous[1] == "&trans"
         previous[1] = "&to 0"
     assert bindings[:old_count] == previous, name
     assert bindings[old_count:] == expected[index], (name, bindings[old_count:])
+assert layers["layer_4"][10] == "&to 5"
 
 matrix_text = read("boards/shields/lism/lism.dtsi")
 body = re.search(r"transform_42keymap:.*?map\s*=\s*<(.*?)>", matrix_text, re.S)[1]
@@ -100,4 +102,4 @@ assert "lism_right_peripheral_trackball" in build
 assert not re.search(r"artifact-name:.*(?:adc_logging|diagnostic)", build)
 dongle = read("boards/shields/lism/lism_dongle.overlay")
 assert '&trackball_split_listener { status = "disabled"; };' in dongle
-print(f"PASS: {count} unique positions, four-way mappings on layers 0/1/2/5/6, stock GPIO order, right trackball and previous devices unchanged")
+print(f"PASS: {count} unique positions, validated four-way mappings on layers 0/1/2/3/5, stock GPIO order, right trackball and previous devices unchanged")

@@ -25,7 +25,7 @@ for name, bindings in layers.items():
     assert len(bindings) == 58, (name, len(bindings))
     original = baseline["layers"][name].copy()
     if name == "layer_4":
-        original[1] = "&to 6"
+        original[1] = "&to 5"
     elif name == "layer_6":
         original[1] = "&to 0"
     assert bindings[:42] == original, name

@@ -9,6 +9,7 @@ if(CONFIG_LISM_PROSPECTOR_LOCK_INDICATORS OR CONFIG_LISM_XIAO147_TOUCH OR CONFIG
   zephyr_library_sources_ifdef(CONFIG_LISM_XIAO147_TOUCH src/xiao147_battery_rings.c)
   zephyr_library_sources_ifdef(CONFIG_LISM_XIAO147_TOUCH src/xiao147_rssi.c)
   zephyr_library_sources_ifdef(CONFIG_LISM_XIAO147_TOUCH src/xiao147_ui.c)
+  zephyr_library_sources_ifdef(CONFIG_LISM_XIAO147_TOUCH src/xiao147_wpm_meter.c src/xiao147_output.c)
   zephyr_library_sources_ifdef(CONFIG_LISM_RESISTIVE_JOYSTICK src/kscan_resistive_joystick.c)
   zephyr_library_sources_ifdef(CONFIG_LISM_JOYSTICK_STATUS src/joystick_status.c)
 endif()
@@ -30,6 +31,17 @@ if(CONFIG_LISM_XIAO147_TOUCH)
   set_source_files_properties("${_prospector_rotate_src}"
       DIRECTORY "${_prospector_shield_dir}"
       PROPERTIES HEADER_FILE_ONLY ON)
+  # Preserve OPERATOR geometry but fix widget startup and LVGL thread ownership.
+  zephyr_library_include_directories("${_prospector_shield_dir}/include"
+                                    "${_prospector_shield_dir}/src/layouts/operator")
+  foreach(_widget wpm_meter output)
+    set(_widget_src "${_prospector_shield_dir}/src/layouts/operator/${_widget}.c")
+    if(NOT EXISTS "${_widget_src}")
+      message(FATAL_ERROR "Prospector widget source moved: ${_widget_src}")
+    endif()
+    set_source_files_properties("${_widget_src}"
+        DIRECTORY "${_prospector_shield_dir}" PROPERTIES HEADER_FILE_ONLY ON)
+  endforeach()
   # Prospector already removes Zephyr's original ST7789 source. Replace its
   # fork only for this shield: exactly one DEVICE_DT_INST_DEFINE remains.
   set(_prospector_driver
