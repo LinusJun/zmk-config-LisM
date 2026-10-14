@@ -1,5 +1,8 @@
-/* AXS5106L report layout follows Seeed's xiao_nrf52840_147_touch example:
- * count at byte 1, two six-byte contact records beginning at bytes 2 and 8.
+/* AXS5106L prefix layout follows Seeed's xiao_nrf52840_147_touch example:
+ * count at byte 1, six-byte contact records beginning at byte 2.
+ * 32-byte reads probe the vendor's claimed five-point capability; this is NOT
+ * an established five-point protocol or a controller configuration command.
+ * A failed extended read locks this boot to the original 14-byte reader.
  */
 #define DT_DRV_COMPAT lism_axs5106l_touchpad
 
@@ -20,7 +23,9 @@
 LOG_MODULE_REGISTER(lism_axs5106l, LOG_LEVEL_INF);
 
 #define AXS_TOUCH_REPORT_REG 0x01
-#define AXS_TOUCH_REPORT_LEN 14
+#define AXS_MAX_POINTS 5
+#define AXS_LEGACY_REPORT_LEN 14
+#define AXS_TOUCH_REPORT_LEN (2 + AXS_MAX_POINTS * 6)
 #define TOUCH_POLL_MS 16
 #define TOUCH_JUMP_LIMIT 80
 #define TAP_MAX_MS 240
@@ -53,6 +58,12 @@ struct axs_touch_data {
     uint32_t wheel_events;
     uint32_t input_errors;
     uint32_t last_report_trace_ms;
+    uint32_t count_histogram[AXS_MAX_POINTS + 1];
+    uint32_t reads_extended;
+    uint32_t reads_legacy;
+    uint32_t extended_failures;
+    uint32_t last_summary_ms;
+    bool legacy_only;
 };
 
 static bool point_valid(const uint8_t report[AXS_TOUCH_REPORT_LEN], uint8_t index)
@@ -154,7 +165,19 @@ static void axs_poll(struct k_work *work)
     uint8_t report[AXS_TOUCH_REPORT_LEN];
     /* Match Seeed's separate STOP-terminated register select and read. */
     int ret = i2c_write_dt(&cfg->bus, &reg, sizeof(reg));
-    if (ret == 0) { ret = i2c_read_dt(&cfg->bus, report, sizeof(report)); }
+    size_t report_len = data->legacy_only ? AXS_LEGACY_REPORT_LEN : sizeof(report);
+    bool extended_read_attempted = ret == 0 && !data->legacy_only;
+    if (ret == 0) { ret = i2c_read_dt(&cfg->bus, report, report_len); }
+    if (ret < 0 && extended_read_attempted) {
+        /* Do not repeatedly probe an unsupported length every 16ms. */
+        data->legacy_only = true;
+        data->extended_failures++;
+        cancel_contact(data);
+        LOG_WRN("Touch extended read failed %d; lock this boot to legacy 14-byte reads", ret);
+        report_len = AXS_LEGACY_REPORT_LEN;
+        ret = i2c_write_dt(&cfg->bus, &reg, sizeof(reg));
+        if (ret == 0) { ret = i2c_read_dt(&cfg->bus, report, report_len); }
+    }
     if (ret < 0) {
         if (data->read_errors++ % 200 == 0) {
             LOG_WRN("Touch I2C error %d, failures %u", ret, data->read_errors);
@@ -164,16 +187,28 @@ static void axs_poll(struct k_work *work)
     }
 
     uint8_t fingers = report[1];
-    bool invalid = fingers > 2 || (fingers > 0 && !point_valid(report, 0)) ||
-                   (fingers == 2 && !point_valid(report, 1));
+    if (report_len == AXS_LEGACY_REPORT_LEN) { data->reads_legacy++; }
+    else { data->reads_extended++; }
+    if (fingers <= AXS_MAX_POINTS) { data->count_histogram[fingers]++; }
+    uint8_t available = (report_len - 2) / 6;
+    bool invalid = fingers > available;
+    if (!invalid) {
+        for (uint8_t i = 0; i < fingers; i++) {
+            if (!point_valid(report, i)) { invalid = true; break; }
+        }
+    }
     /* Capture BEFORE rejection: diagnose count/ID/event nibbles and the full
      * second record even if our current format assumption rejects it. */
-    if ((invalid || fingers == 2 || fingers != data->reported_fingers) &&
+    if ((invalid || fingers >= 2 || fingers != data->reported_fingers) &&
         k_uptime_get_32() - data->last_report_trace_ms >= 1000) {
         LOG_INF("Touch raw14 %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x, invalid %d",
                 report[0], report[1], report[2], report[3], report[4], report[5], report[6],
                 report[7], report[8], report[9], report[10], report[11], report[12], report[13], invalid);
         data->last_report_trace_ms = k_uptime_get_32();
+        if (report_len > AXS_LEGACY_REPORT_LEN) {
+            LOG_HEXDUMP_INF(report + AXS_LEGACY_REPORT_LEN,
+                            report_len - AXS_LEGACY_REPORT_LEN, "Touch probe tail (points 3-5)");
+        }
     }
     if (invalid) {
         if (data->bad_reports++ % 200 == 0) {
@@ -181,13 +216,16 @@ static void axs_poll(struct k_work *work)
                     report[2], report[3], report[4], report[5]);
         }
         cancel_contact(data);
+        /* A malformed nonzero report is not evidence of a new gesture or a
+         * release. Even from idle, swallow its remainder until valid zero. */
+        if (fingers != 0) { data->swallow_until_release = true; }
         goto next;
     }
     if (fingers != data->reported_fingers) {
         data->reported_fingers = fingers;
         /* Upper nibbles are retained for diagnosis rather than assuming an
          * undocumented event/ID convention. The official example masks them.
-         * This real report (not host tests) establishes two-point capability. */
+         * Only real multi-contact reports can establish device capability. */
         LOG_DBG("Touch contacts %u, page %d", fingers, xiao147_ui_page());
     }
 
@@ -205,6 +243,13 @@ static void axs_poll(struct k_work *work)
             xiao147_ui_touch(0, 0, 0, orientation);
         }
         end_contact(data, page == XIAO147_PAGE_STATUS);
+        goto next;
+    }
+    if (fingers > 2) {
+        /* Only one-/two-finger gestures are assigned. A third contact cancels
+         * the whole gesture, even if it later becomes 2->1 before release. */
+        cancel_contact(data);
+        data->swallow_until_release = true;
         goto next;
     }
 
@@ -248,6 +293,14 @@ static void axs_poll(struct k_work *work)
     data->last = p;
 
 next:
+    if (k_uptime_get_32() - data->last_summary_ms >= 2000) {
+        LOG_INF("Touch summary count0..5 %u %u %u %u %u %u, reads32 %u reads14 %u fallback %u invalid %u I2C %u wheel %u",
+                data->count_histogram[0], data->count_histogram[1], data->count_histogram[2],
+                data->count_histogram[3], data->count_histogram[4], data->count_histogram[5],
+                data->reads_extended, data->reads_legacy, data->extended_failures,
+                data->bad_reports, data->read_errors, data->wheel_events);
+        data->last_summary_ms = k_uptime_get_32();
+    }
     k_work_reschedule(&data->poll_work, K_MSEC(TOUCH_POLL_MS));
 }
 
@@ -258,6 +311,7 @@ static int axs_touch_init(const struct device *dev)
     if (!i2c_is_ready_dt(&cfg->bus)) { return -ENODEV; }
     data->dev = dev;
     data->last_page = XIAO147_PAGE_STATUS;
+    LOG_INF("Touch reader: reg01 extended32 probe, single failure locks legacy14; no controller reprogramming");
     k_work_init_delayable(&data->poll_work, axs_poll);
     k_work_schedule(&data->poll_work, K_MSEC(1000));
     return 0;

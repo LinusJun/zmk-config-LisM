@@ -45,6 +45,7 @@ enum xiao147_page {XIAO147_PAGE_STATUS,XIAO147_PAGE_SETTINGS,XIAO147_PAGE_DEVICE
 #define LOG_WRN(...) ((void)0)
 #define LOG_ERR(...) ((void)0)
 #define LOG_DBG(...) ((void)0)
+#define LOG_HEXDUMP_INF(...) ((void)0)
 #define INPUT_BTN_0 256
 #define INPUT_BTN_1 257
 #define INPUT_EV_KEY 1
@@ -76,10 +77,11 @@ struct device {void *data; const void *config;};
 struct input_event {uint8_t type;uint16_t code;int value;bool sync;const struct device *dev;};
 static void route_event(uint8_t type,uint16_t code,int value,bool sync,const struct device *dev);
 static uint32_t now;
-static int page,read_error,nrel,nkey,nsample,submitted,cancel_samples;
+static int page,read_error,nrel,nkey,nsample,submitted,cancel_samples,extended_calls;
+static bool reject_extended;
 static enum xiao147_orientation pose;
 static int rel_code[32],rel_value[32],key_code[32],key_value[32];
-static uint8_t sensor[14];
+static uint8_t sensor[32];
 static uint16_t sample_x,sample_y;
 static struct k_work_delayable *k_work_delayable_from_work(struct k_work *w) {return (void *)w;}
 static void k_work_reschedule(struct k_work_delayable *w,int t) {(void)w;(void)t;}
@@ -88,7 +90,11 @@ static void k_work_init_delayable(struct k_work_delayable *w,void(*f)(struct k_w
 static uint32_t k_uptime_get_32(void) {return now;}
 static bool i2c_is_ready_dt(const struct i2c_dt_spec *b) {(void)b;return true;}
 static int i2c_write_dt(const struct i2c_dt_spec *b,const void *p,size_t n) {(void)b;(void)p;(void)n;return read_error;}
-static int i2c_read_dt(const struct i2c_dt_spec *b,void *p,size_t n) {(void)b;assert(n==3||n==14);if(n==14)memcpy(p,sensor,n);return read_error;}
+static int i2c_read_dt(const struct i2c_dt_spec *b,void *p,size_t n) {
+    (void)b;assert(n==3||n==14||n==32);
+    if(n==32){extended_calls++;if(reject_extended)return -EIO;}
+    if(n==14||n==32){memcpy(p,sensor,n);}return read_error;
+}
 static int input_report_rel(const struct device*d,int c,int v,bool sync,int wait) {(void)wait;rel_code[nrel]=c;rel_value[nrel++]=v;route_event(INPUT_EV_REL,c,v,sync,d);return 0;}
 static void input_report_key(const struct device*d,int c,int v,bool sync,int wait) {(void)wait;key_code[nkey]=c;key_value[nkey++]=v;route_event(INPUT_EV_KEY,c,v,sync,d);}
 static enum xiao147_page xiao147_ui_page(void) {return page;}
@@ -193,6 +199,31 @@ int main(void) {
     sensor[1]=0;poll(&d);assert(nkey==keys);
     sensor[1]=2;poll(&d);sensor[1]=0;poll(&d);
     assert(nkey==keys+2&&key_code[keys]==INPUT_BTN_1&&key_value[keys]==1&&key_value[keys+1]==0);
+    /* 2->3->2->1->0 cancels the full gesture, not just the 3-point sample. */
+    keys=nkey;sensor[1]=2;poll(&d);
+    for(int i=0;i<5;i++)contact(i,20+i*20,40+i*40);
+    sensor[1]=3;poll(&d);assert(d.swallow_until_release&&!d.fingers);
+    sensor[1]=2;nrel=0;poll(&d);sensor[1]=1;poll(&d);sensor[1]=0;poll(&d);
+    assert(nkey==keys&&!nrel&&!d.swallow_until_release);
+    for(int i=3;i<=5;i++){sensor[1]=i;poll(&d);sensor[1]=0;poll(&d);}
+    assert(d.count_histogram[3]&&d.count_histogram[4]&&d.count_histogram[5]&&!d.bad_reports);
+    /* Full-frame idle tail FF is normal if count=1, invalid if claimed count=5. */
+    memset(sensor+8,0xff,24);sensor[1]=1;poll(&d);assert(!d.bad_reports);
+    sensor[1]=5;poll(&d);assert(d.bad_reports==1&&d.swallow_until_release);
+    sensor[1]=0;poll(&d);assert(nkey==keys);
+    sensor[1]=5;poll(&d);assert(d.bad_reports==2&&d.swallow_until_release);
+    sensor[1]=1;poll(&d);sensor[1]=0;poll(&d);assert(nkey==keys);
+    /* Unsupported 32-byte read locks to 14 once. Poison unseen tail: never parse it. */
+    reject_extended=true;poll(&d);assert(d.legacy_only&&d.extended_failures==1);
+    int attempts=extended_calls;
+    sensor[1]=1;contact(0,40,70);poll(&d);sensor[1]=0;poll(&d);
+    assert(extended_calls==attempts&&d.reads_legacy>=3);
+    unsigned bad=d.bad_reports;sensor[1]=3;poll(&d);assert(d.bad_reports==bad+1);
+    keys=nkey;assert(d.swallow_until_release);
+    sensor[1]=1;poll(&d);sensor[1]=0;poll(&d);
+    assert(nkey==keys&&!d.swallow_until_release);reject_extended=false;
+    sensor[1]=1;poll(&d);sensor[1]=0;poll(&d);
+    assert(nkey==keys+2&&key_code[keys]==INPUT_BTN_0);
     enum xiao147_orientation o;
     assert(xiao147_gravity_orientation(-16000,0,&o)&&o==XIAO147_USB_LEFT);
     assert(xiao147_gravity_orientation(16000,0,&o)&&o==XIAO147_USB_RIGHT);
