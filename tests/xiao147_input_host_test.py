@@ -41,10 +41,11 @@ prelude = r'''
 #include "xiao147_air_motion.h"
 enum xiao147_page {XIAO147_PAGE_STATUS,XIAO147_PAGE_SETTINGS,XIAO147_PAGE_DEVICES};
 #define LOG_MODULE_REGISTER(...)
-#define LOG_INF(...) ((void)0)
-#define LOG_WRN(...) ((void)0)
-#define LOG_ERR(...) ((void)0)
-#define LOG_DBG(...) ((void)0)
+static void host_log(const char *format, ...) {(void)format;}
+#define LOG_INF(...) host_log(__VA_ARGS__)
+#define LOG_WRN(...) host_log(__VA_ARGS__)
+#define LOG_ERR(...) host_log(__VA_ARGS__)
+#define LOG_DBG(...) host_log(__VA_ARGS__)
 #define LOG_HEXDUMP_INF(...) ((void)0)
 #define INPUT_BTN_0 256
 #define INPUT_BTN_1 257
