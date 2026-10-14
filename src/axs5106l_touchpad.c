@@ -26,6 +26,7 @@ LOG_MODULE_REGISTER(lism_axs5106l, LOG_LEVEL_INF);
 #define AXS_MAX_POINTS 5
 #define AXS_LEGACY_REPORT_LEN 14
 #define AXS_TOUCH_REPORT_LEN (2 + AXS_MAX_POINTS * 6)
+#define AXS_REGISTER_SETTLE_US 100
 #define TOUCH_POLL_MS 16
 #define TOUCH_JUMP_LIMIT 80
 #define TAP_MAX_MS 240
@@ -149,6 +150,21 @@ static void cancel_contact(struct axs_touch_data *data)
     data->swallow_until_release = active;
 }
 
+static int axs_read_register(const struct i2c_dt_spec *bus, uint8_t reg,
+                             uint8_t *report, size_t len)
+{
+    int ret = i2c_write_dt(bus, &reg, 1);
+    if (ret != 0) { return ret; }
+    /* ChipSourceTek's companion CST5106L document (linked from its AXS5106L
+     * product page) has an indexed excerpt labeling STOP -> data preparation
+     * Twr >45us; the full PDF could not be verified. Use 100us
+     * margin, including ID and legacy fallback. This is a timing trial, NOT
+     * a documented command for enabling multitouch on this panel firmware.
+     * Keep STOP-separated transactions; do not change to repeated START. */
+    k_busy_wait(AXS_REGISTER_SETTLE_US);
+    return i2c_read_dt(bus, report, len);
+}
+
 static void axs_poll(struct k_work *work)
 {
     struct k_work_delayable *dwork = k_work_delayable_from_work(work);
@@ -156,8 +172,7 @@ static void axs_poll(struct k_work *work)
     const struct axs_touch_config *cfg = data->dev->config;
     if (!data->id_logged) {
         uint8_t id_reg = 0x08, id[3] = {0};
-        int ret = i2c_write_dt(&cfg->bus, &id_reg, 1);
-        if (ret == 0) { ret = i2c_read_dt(&cfg->bus, id, sizeof(id)); }
+        int ret = axs_read_register(&cfg->bus, id_reg, id, sizeof(id));
         LOG_INF("Touch ID %02x %02x %02x, result %d", id[0], id[1], id[2], ret);
         data->id_logged = true;
     }
@@ -167,7 +182,10 @@ static void axs_poll(struct k_work *work)
     int ret = i2c_write_dt(&cfg->bus, &reg, sizeof(reg));
     size_t report_len = data->legacy_only ? AXS_LEGACY_REPORT_LEN : sizeof(report);
     bool extended_read_attempted = ret == 0 && !data->legacy_only;
-    if (ret == 0) { ret = i2c_read_dt(&cfg->bus, report, report_len); }
+    if (ret == 0) {
+        k_busy_wait(AXS_REGISTER_SETTLE_US);
+        ret = i2c_read_dt(&cfg->bus, report, report_len);
+    }
     if (ret < 0 && extended_read_attempted) {
         /* Do not repeatedly probe an unsupported length every 16ms. */
         data->legacy_only = true;
@@ -175,8 +193,7 @@ static void axs_poll(struct k_work *work)
         cancel_contact(data);
         LOG_WRN("Touch extended read failed %d; lock this boot to legacy 14-byte reads", ret);
         report_len = AXS_LEGACY_REPORT_LEN;
-        ret = i2c_write_dt(&cfg->bus, &reg, sizeof(reg));
-        if (ret == 0) { ret = i2c_read_dt(&cfg->bus, report, report_len); }
+        ret = axs_read_register(&cfg->bus, reg, report, report_len);
     }
     if (ret < 0) {
         if (data->read_errors++ % 200 == 0) {
@@ -199,8 +216,9 @@ static void axs_poll(struct k_work *work)
     }
     /* Capture BEFORE rejection: diagnose count/ID/event nibbles and the full
      * second record even if our current format assumption rejects it. */
-    if ((invalid || fingers >= 2 || fingers != data->reported_fingers) &&
-        k_uptime_get_32() - data->last_report_trace_ms >= 1000) {
+    bool first_report = data->reads_extended + data->reads_legacy == 1;
+    if (first_report || ((invalid || fingers > 0 || fingers != data->reported_fingers) &&
+        k_uptime_get_32() - data->last_report_trace_ms >= 1000)) {
         LOG_INF("Touch raw14 %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x, invalid %d",
                 report[0], report[1], report[2], report[3], report[4], report[5], report[6],
                 report[7], report[8], report[9], report[10], report[11], report[12], report[13], invalid);
@@ -311,7 +329,7 @@ static int axs_touch_init(const struct device *dev)
     if (!i2c_is_ready_dt(&cfg->bus)) { return -ENODEV; }
     data->dev = dev;
     data->last_page = XIAO147_PAGE_STATUS;
-    LOG_INF("Touch reader: reg01 extended32 probe, single failure locks legacy14; no controller reprogramming");
+    LOG_INF("Touch reader: reg01 extended32 probe, settle100us; single failure locks legacy14; no controller reprogramming");
     k_work_init_delayable(&data->poll_work, axs_poll);
     k_work_schedule(&data->poll_work, K_MSEC(1000));
     return 0;

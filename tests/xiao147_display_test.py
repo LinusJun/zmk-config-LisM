@@ -43,7 +43,7 @@ rotation = read("src/xiao147_rotation.c")
 assert "result = display_write" in rotation and "report_write(result)" in rotation
 assert "write_errors % 100" in rotation and "xiao147_display_hold_flush()" in rotation
 test_matrix = read("build-display-test.yaml")
-assert re.findall(r"artifact-name:\s*(\S+)", test_matrix) == ["lism_dongle_xiao147_touch32_probe"]
+assert re.findall(r"artifact-name:\s*(\S+)", test_matrix) == ["lism_dongle_xiao147_touch_timing_test"]
 assert "raw_refresh_gate" in diag and "LV_EVENT_REFR_REQUEST" in diag
 assert "lv_timer_pause" in diag and "lv_timer_resume" in diag
 assert "CONFIG_LISM_XIAO147_DISPLAY_SELFTEST=n" in test_matrix

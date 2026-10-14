@@ -79,6 +79,7 @@ static void route_event(uint8_t type,uint16_t code,int value,bool sync,const str
 static uint32_t now;
 static int page,read_error,nrel,nkey,nsample,submitted,cancel_samples,extended_calls;
 static bool reject_extended;
+static unsigned touch_io_phase, settle_calls;
 static enum xiao147_orientation pose;
 static int rel_code[32],rel_value[32],key_code[32],key_value[32];
 static uint8_t sensor[32];
@@ -89,9 +90,15 @@ static void k_work_schedule(struct k_work_delayable *w,int t) {(void)w;(void)t;}
 static void k_work_init_delayable(struct k_work_delayable *w,void(*f)(struct k_work *)) {(void)w;(void)f;}
 static uint32_t k_uptime_get_32(void) {return now;}
 static bool i2c_is_ready_dt(const struct i2c_dt_spec *b) {(void)b;return true;}
-static int i2c_write_dt(const struct i2c_dt_spec *b,const void *p,size_t n) {(void)b;(void)p;(void)n;return read_error;}
+static int i2c_write_dt(const struct i2c_dt_spec *b,const void *p,size_t n) {
+    (void)b;(void)p;touch_io_phase=n==1&&!read_error?1:0;return read_error;
+}
+static void k_busy_wait(uint32_t us) {
+    assert(us==100&&touch_io_phase==1);touch_io_phase=2;settle_calls++;
+}
 static int i2c_read_dt(const struct i2c_dt_spec *b,void *p,size_t n) {
     (void)b;assert(n==3||n==14||n==32);
+    assert(touch_io_phase==2);touch_io_phase=0;
     if(n==32){extended_calls++;if(reject_extended)return -EIO;}
     if(n==14||n==32){memcpy(p,sensor,n);}return read_error;
 }
@@ -155,7 +162,7 @@ int main(void) {
     const int expected[4][6]={{0,0,319,171,70,40},{171,0,0,319,131,70},
                               {319,171,0,0,249,131},{0,319,171,0,40,249}};
     for(pose=0;pose<4;pose++) {
-        sensor[1]=0;poll(&d);
+        sensor[1]=0;poll(&d);assert(settle_calls>=2);
         for(int i=0;i<3;i++) {
             int x=i==0?0:i==1?171:40,y=i==0?0:i==1?319:70;
             contact(0,x,y);sensor[1]=1;
@@ -169,6 +176,16 @@ int main(void) {
         assert(rel_code[1]==INPUT_REL_Y&&rel_value[1]==deltas[pose][1]);
         sensor[1]=0;poll(&d);
     }
+    /* Real ZMK listener wheel/pan: both signs, both axes, all four poses. */
+    const int natural[4][2]={{-1,-1},{1,-1},{1,1},{-1,1}};
+    for(pose=0;pose<4;pose++) {
+        sensor[1]=0;poll(&d);contact(0,40,70);contact(1,60,90);
+        sensor[1]=2;poll(&d);contact(0,48,78);contact(1,68,98);nrel=0;poll(&d);
+        assert(nrel==2&&last_pan==natural[pose][0]&&last_wheel==natural[pose][1]);
+        contact(0,40,70);contact(1,60,90);nrel=0;poll(&d);
+        assert(nrel==2&&last_pan==-natural[pose][0]&&last_wheel==-natural[pose][1]);
+        int clicks=nkey;sensor[1]=0;poll(&d);assert(nkey==clicks);
+    }
     pose=0;page=XIAO147_PAGE_SETTINGS;sensor[1]=0;poll(&d);
     sensor[1]=1;contact(0,40,70);poll(&d);assert(sample_x==70&&sample_y==40);
     /* All 180-degree changes cancel an active gesture, including settings. */
@@ -176,7 +193,8 @@ int main(void) {
     poll(&d);assert(nsample==before);sensor[1]=0;poll(&d);
     sensor[1]=1;poll(&d);assert(sample_x==249&&sample_y==131);
     /* I2C cancellation swallows a held finger across menu rows until lift. */
-    int samples=nsample;read_error=-EIO;poll(&d);
+    int samples=nsample;unsigned waits=settle_calls;read_error=-EIO;poll(&d);
+    assert(settle_calls==waits);
     assert(cancel_samples==1&&d.swallow_until_release&&d.fingers==0);
     poll(&d);assert(cancel_samples==1&&d.swallow_until_release);
     read_error=0;contact(0,80,140);poll(&d);assert(nsample==samples&&d.swallow_until_release);
