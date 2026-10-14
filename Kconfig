@@ -38,6 +38,19 @@ config LISM_XIAO147_RAW_CAPTURE
       verifies normal reporting. A restoration fault requires a power cycle.
       The normal firmware contains no factory-page switch or serial commands.
 
+config LISM_XIAO147_GESTURE_SHADOW
+    bool "Experimental AXS differential profile and gesture shadow logs"
+    depends on LISM_XIAO147_RAW_CAPTURE
+    default n
+    help
+      Explicit, bounded FAST-DIFF sessions only. Uses the four captured
+      stationary scenes to test spatial morphology, not general finger count.
+      Requires confirmed normal-mode release before entry and a fresh quiet
+      differential baseline. Logs candidate tap and natural wheel/pan only;
+      the test firmware sends NO mouse events from inferred raw profiles.
+      USR2/menu, USR1/air-mouse, disconnect, error and timeout restore normal
+      reporting. Static scene replay cannot validate real taps or scrolling.
+
 menuconfig LISM_RESISTIVE_JOYSTICK
     bool "LisM resistive joystick kscan driver"
     default y if DT_HAS_LINUS_RESISTIVE_JOYSTICK_ENABLED

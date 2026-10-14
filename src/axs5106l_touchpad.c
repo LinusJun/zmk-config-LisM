@@ -27,6 +27,9 @@
 #include <zephyr/sys/atomic.h>
 #include "xiao147_raw_capture.h"
 #include "xiao147_raw_control.h"
+#ifdef CONFIG_LISM_XIAO147_GESTURE_SHADOW
+#include "xiao147_raw_gestures.h"
+#endif
 #endif
 
 LOG_MODULE_REGISTER(lism_axs5106l, LOG_LEVEL_INF);
@@ -81,6 +84,22 @@ struct axs_touch_data {
     uint8_t info_id[3];
     uint16_t info_fw;
     bool info_valid;
+    bool normal_zero;
+    uint32_t normal_zero_since_ms;
+    uint32_t normal_frame_ms;
+#ifdef CONFIG_LISM_XIAO147_GESTURE_SHADOW
+    struct xiao147_raw_baseline baseline;
+    struct xiao147_shadow_gesture shadow;
+    bool shadow_active;
+    bool shadow_abort_pending;
+    bool shadow_armed_logged;
+    uint32_t shadow_last_log_ms;
+    enum xiao147_raw_hypothesis shadow_last_hypothesis;
+    uint32_t shadow_histogram[4];
+    uint32_t shadow_taps;
+    uint32_t shadow_scrolls;
+    uint32_t shadow_last_rate_ms;
+#endif
 #endif
 };
 
@@ -227,15 +246,32 @@ static void axs_raw_event(void *context, enum xiao147_raw_event event, int detai
         LOG_INF("AXS_RAW_LAYOUT bytes=%02x,%02x,%02x n=%d",
                 data->capture.channel_layout[0], data->capture.channel_layout[1],
                 data->capture.channel_layout[2], detail);
+#ifdef CONFIG_LISM_XIAO147_GESTURE_SHADOW
+        if (data->shadow_active && (data->capture.channels != 12 ||
+            data->capture.channel_layout[0] != 6 || data->capture.channel_layout[1] != 2 ||
+            data->capture.channel_layout[2] != 0)) {
+            data->shadow_abort_pending = true;
+            LOG_ERR("AXS_SHADOW wrong layout; cancel without inferred mouse input");
+        }
+#endif
     } else if (event == XIAO147_RAW_FAULT) {
         LOG_ERR("AXS_RAW_FAULT: touch/air-mouse isolated; disconnect ALL power to recover");
     }
+#ifdef CONFIG_LISM_XIAO147_GESTURE_SHADOW
+    if (data->shadow_active && (event == XIAO147_RAW_ERROR ||
+        event == XIAO147_RAW_RESTORING || event == XIAO147_RAW_FAULT)) {
+        xiao147_shadow_gesture_cancel(&data->shadow);
+    }
+#endif
 }
 
 static void axs_raw_sample(void *context, enum xiao147_raw_type type, uint8_t channels,
                            const int32_t *values, uint32_t elapsed_ms)
 {
-    (void)context;
+    struct axs_touch_data *data = context;
+#ifndef CONFIG_LISM_XIAO147_GESTURE_SHADOW
+    (void)data;
+#endif
     char line[156];
     size_t used = 0;
     for (uint8_t i = 0; i < channels; i++) {
@@ -245,6 +281,45 @@ static void axs_raw_sample(void *context, enum xiao147_raw_type type, uint8_t ch
         used += (size_t)written;
     }
     LOG_INF("AXS_SENSOR t=%u type=%u n=%u values=%s", elapsed_ms, type, channels, line);
+#ifdef CONFIG_LISM_XIAO147_GESTURE_SHADOW
+    if (data->shadow_active) {
+        uint32_t now = k_uptime_get_32();
+        bool valid = type == XIAO147_RAW_DIFF && channels == 12;
+        bool armed = xiao147_raw_baseline_observe(&data->baseline, values, channels, valid, now);
+        struct xiao147_raw_profile profile = {.hypothesis = XIAO147_RAW_UNKNOWN};
+        valid = valid && armed && xiao147_raw_profile_evaluate(values, channels,
+                                                              data->baseline.values, &profile);
+        if (armed && !data->shadow_armed_logged) {
+            data->shadow_armed_logged = true;
+            LOG_INF("AXS_SHADOW_ARMED quiet baseline verified; inferred HID disabled");
+        }
+        enum xiao147_orientation pose = xiao147_rotation_get();
+        struct xiao147_xy p = xiao147_touch_to_logical(pose, profile.native_short_x,
+                                                      profile.native_long_y);
+        struct xiao147_shadow_result result = xiao147_shadow_gesture_observe(&data->shadow,
+            profile.hypothesis, valid, p.x, p.y, pose, now);
+        data->shadow_histogram[profile.hypothesis]++;
+        if (result.candidate_right_tap) { data->shadow_taps++; }
+        if (result.candidate_wheel || result.candidate_hwheel) { data->shadow_scrolls++; }
+        if (profile.hypothesis != data->shadow_last_hypothesis || result.candidate_right_tap ||
+            result.candidate_wheel || result.candidate_hwheel ||
+            now - data->shadow_last_log_ms >= 1000) {
+            LOG_INF("AXS_SHADOW t=%u armed=%d shape=%u xy=%d,%d peaks=%u valley=%u ratio=%u tap=%d wheel=%d pan=%d cancel=%d HID=0",
+                    elapsed_ms, armed, profile.hypothesis, p.x, p.y, profile.significant_peaks,
+                    profile.valley_permille, profile.lesser_peak_permille,
+                    result.candidate_right_tap, result.candidate_wheel,
+                    result.candidate_hwheel, result.cancelled);
+            data->shadow_last_hypothesis = profile.hypothesis;
+            data->shadow_last_log_ms = now;
+        }
+        if (!data->baseline.normal_lift_confirmed || type != XIAO147_RAW_DIFF || channels != 12) {
+            data->shadow_abort_pending = true;
+        }
+        /* Deliberately no report_button/report_pointer/report_scroll here:
+         * candidate morphology and provisional short-axis features have not
+         * passed independent dynamic/negative hardware validation. */
+    }
+#endif
 }
 
 static void axs_raw_command(struct axs_touch_data *data, enum xiao147_raw_command command)
@@ -254,6 +329,30 @@ static void axs_raw_command(struct axs_touch_data *data, enum xiao147_raw_comman
         data->info_stage = 0;
         xiao147_raw_capture_stop(&data->capture, k_uptime_get_32());
         LOG_INF("AXS_RAW_STOP requested");
+#ifdef CONFIG_LISM_XIAO147_GESTURE_SHADOW
+    } else if (command == XIAO147_RAW_COMMAND_SHADOW_START && !active && !data->info_stage &&
+               data->info_valid && data->info_fw == data->control.expected_fw &&
+               data->normal_zero && k_uptime_get_32() - data->normal_zero_since_ms >= 100 &&
+               k_uptime_get_32() - data->normal_frame_ms <= 100 &&
+               xiao147_ui_page() == XIAO147_PAGE_STATUS && !xiao147_ui_imu_enabled()) {
+        cancel_contact(data);
+        data->swallow_until_release = true;
+        data->info_valid = false;
+        xiao147_raw_baseline_begin(&data->baseline, true);
+        xiao147_shadow_gesture_init(&data->shadow);
+        memset(data->shadow_histogram, 0, sizeof(data->shadow_histogram));
+        data->shadow_taps = data->shadow_scrolls = 0;
+        data->shadow_active = true;
+        data->shadow_abort_pending = data->shadow_armed_logged = false;
+        data->shadow_last_hypothesis = XIAO147_RAW_UNKNOWN;
+        data->shadow_last_log_ms = data->shadow_last_rate_ms = k_uptime_get_32();
+        if (xiao147_raw_capture_start_mode(&data->capture, k_uptime_get_32(),
+                                         data->control.expected_fw, XIAO147_RAW_MODE_FAST_DIFF)) {
+            atomic_set(&capture_gate, 1);
+            LOG_INF("AXS_SHADOW_START expected_fw=%04x; FAST DIFF target20ms, actual rate measured; HID=0",
+                    data->control.expected_fw);
+        } else { data->shadow_active = false; }
+#endif
     } else if (command == XIAO147_RAW_COMMAND_INFO && !active && !data->info_stage) {
         cancel_contact(data);
         data->swallow_until_release = true;
@@ -300,14 +399,38 @@ static bool axs_raw_poll(struct axs_touch_data *data)
         }
     }
     if (xiao147_raw_capture_active(&data->capture)) {
+#ifdef CONFIG_LISM_XIAO147_GESTURE_SHADOW
+        if (data->shadow_active && (xiao147_ui_page() != XIAO147_PAGE_STATUS ||
+            xiao147_ui_imu_enabled() || data->shadow_abort_pending)) {
+            xiao147_shadow_gesture_cancel(&data->shadow);
+            xiao147_raw_capture_stop(&data->capture, k_uptime_get_32());
+        }
+#endif
         /* Sole 0x63 owner: no ordinary touch reads while on the factory page,
          * including cleanup and sticky recovery faults. */
         xiao147_raw_capture_tick(&data->capture, k_uptime_get_32());
+#ifdef CONFIG_LISM_XIAO147_GESTURE_SHADOW
+        if (data->shadow_abort_pending) {
+            xiao147_raw_capture_stop(&data->capture, k_uptime_get_32());
+        }
+        if (data->shadow_active && k_uptime_get_32() - data->shadow_last_rate_ms >= 2000) {
+            LOG_INF("AXS_SHADOW_RATE samples=%u scans=%u interval=%u min=%u max=%u shapes=%u,%u,%u,%u taps=%u scrolls=%u HID=0",
+                    data->capture.samples_received, data->capture.scan_requests,
+                    data->capture.last_interval_ms, data->capture.min_interval_ms,
+                    data->capture.max_interval_ms, data->shadow_histogram[0],
+                    data->shadow_histogram[1], data->shadow_histogram[2], data->shadow_histogram[3],
+                    data->shadow_taps, data->shadow_scrolls);
+            data->shadow_last_rate_ms = k_uptime_get_32();
+        }
+#endif
         bool active = xiao147_raw_capture_active(&data->capture);
         atomic_set(&capture_gate, active);
         if (!active) {
             data->swallow_until_release = true;
             LOG_INF("AXS_RAW_INPUT restored; waiting for a real touch release");
+#ifdef CONFIG_LISM_XIAO147_GESTURE_SHADOW
+            data->shadow_active = false;
+#endif
         }
         return true;
     }
@@ -371,6 +494,9 @@ static void axs_poll(struct k_work *work)
         ret = axs_read_register(&cfg->bus, reg, report, report_len);
     }
     if (ret < 0) {
+#ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
+        data->normal_zero = false;
+#endif
         if (data->read_errors++ % 200 == 0) {
             LOG_WRN("Touch I2C error %d, failures %u", ret, data->read_errors);
         }
@@ -404,6 +530,9 @@ static void axs_poll(struct k_work *work)
         }
     }
     if (invalid) {
+#ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
+        data->normal_zero = false;
+#endif
         if (data->bad_reports++ % 200 == 0) {
             LOG_WRN("Touch invalid count %u, xy bytes %02x %02x %02x %02x", fingers,
                     report[2], report[3], report[4], report[5]);
@@ -414,6 +543,13 @@ static void axs_poll(struct k_work *work)
         if (fingers != 0) { data->swallow_until_release = true; }
         goto next;
     }
+#ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
+    data->normal_frame_ms = k_uptime_get_32();
+    if (fingers == 0) {
+        if (!data->normal_zero) { data->normal_zero_since_ms = data->normal_frame_ms; }
+        data->normal_zero = true;
+    } else { data->normal_zero = false; }
+#endif
     if (fingers != data->reported_fingers) {
         data->reported_fingers = fingers;
         /* Upper nibbles are retained for diagnosis rather than assuming an
@@ -494,7 +630,13 @@ next:
                 data->bad_reports, data->read_errors, data->wheel_events);
         data->last_summary_ms = k_uptime_get_32();
     }
-    k_work_reschedule(&data->poll_work, K_MSEC(TOUCH_POLL_MS));
+    uint32_t poll_ms = TOUCH_POLL_MS;
+#ifdef CONFIG_LISM_XIAO147_GESTURE_SHADOW
+    if (data->shadow_active && xiao147_raw_capture_active(&data->capture) &&
+        data->capture.mode == XIAO147_RAW_MODE_FAST_DIFF &&
+        data->capture.phase < XIAO147_RAW_RESTORE_WRITE) { poll_ms = 4; }
+#endif
+    k_work_reschedule(&data->poll_work, K_MSEC(poll_ms));
 }
 
 static int axs_touch_init(const struct device *dev)
@@ -512,7 +654,10 @@ static int axs_touch_init(const struct device *dev)
         .event = axs_raw_event, .sample = axs_raw_sample,
     };
     xiao147_raw_capture_init(&data->capture, &ops, data);
-    LOG_INF("AXS_RAW_READY v1: INFO then START <FWhex>, STOP; 60s limit, failure requires power cycle");
+    LOG_INF("AXS_RAW_READY v2: INFO then START <FWhex>, STOP; 60s limit, failure requires power cycle");
+#ifdef CONFIG_LISM_XIAO147_GESTURE_SHADOW
+    LOG_INF("AXS_SHADOW_READY: SHADOW_START <FWhex> requires hands off/status/IMU off; morphology only, HID=0");
+#endif
 #endif
     LOG_INF("Touch reader: reg01 extended32 probe, settle100us; single failure locks legacy14; no controller reprogramming");
     k_work_init_delayable(&data->poll_work, axs_poll);

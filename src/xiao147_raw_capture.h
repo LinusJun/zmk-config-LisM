@@ -13,6 +13,12 @@
 #define XIAO147_RAW_MAX_CHANNELS 13U
 #define XIAO147_RAW_SESSION_MS 60000U
 #define XIAO147_RAW_CLEANUP_MS 2000U
+#define XIAO147_RAW_FAST_FRAME_MS 20U
+
+enum xiao147_raw_mode {
+    XIAO147_RAW_MODE_ALTERNATE = 0,
+    XIAO147_RAW_MODE_FAST_DIFF = 1,
+};
 
 enum xiao147_raw_type {
     XIAO147_RAW_DATA = 1,
@@ -80,6 +86,7 @@ struct xiao147_raw_capture {
     struct xiao147_raw_ops ops;
     void *context;
     enum xiao147_raw_phase phase;
+    enum xiao147_raw_mode mode;
     enum xiao147_raw_type type;
     enum xiao147_raw_error last_error;
     int io_error;
@@ -90,10 +97,23 @@ struct xiao147_raw_capture {
     uint32_t pair_ms;
     uint32_t cleanup_ms;
     uint32_t last_io_ms;
+    /* Observed tick/acquisition timestamps, not an assumed sample rate.
+     * Counters include attempted transfers/scans, even when they fail.
+     * Sample statistics advance only after a successful, fresh read.
+     */
+    uint32_t frame_started_ms;
+    uint32_t io_calls;
+    uint32_t scan_requests;
+    uint32_t samples_received;
+    uint32_t last_sample_ms;
+    uint32_t last_interval_ms;
+    uint32_t min_interval_ms;
+    uint32_t max_interval_ms;
     uint8_t channels;
     uint8_t channel_layout[3];
     uint8_t restore_attempts;
     bool page_write_attempted;
+    bool sample_valid;
     int32_t values[XIAO147_RAW_MAX_CHANNELS];
 };
 
@@ -105,9 +125,18 @@ void xiao147_raw_capture_init(struct xiao147_raw_capture *capture,
  */
 bool xiao147_raw_capture_start(struct xiao147_raw_capture *capture, uint32_t now_ms,
                               uint16_t expected_version);
+/* FAST_DIFF uses exactly the same verified factory interface, selects DIFF
+ * once, and triggers a fresh scan for every frame. A 20ms minimum between
+ * scan starts is a ceiling of 50Hz, NOT a claim about achieved hardware rate.
+ * Caller must independently verify no contacts before starting. This engine
+ * does not generate HID or perform calibration/controller-firmware writes.
+ */
+bool xiao147_raw_capture_start_mode(struct xiao147_raw_capture *capture, uint32_t now_ms,
+                                   uint16_t expected_version, enum xiao147_raw_mode mode);
 void xiao147_raw_capture_stop(struct xiao147_raw_capture *capture, uint32_t now_ms);
 /* At most one I2C callback per tick. Unsigned elapsed time handles uptime wrap.
- * Calling at 5-16 ms intervals yields a bounded, deliberately slow capture.
+ * Alternate mode remains deliberately slow. FAST_DIFF may be polled every
+ * 4ms; status reads still wait >=5ms and scan starts are spaced >=20ms.
  */
 void xiao147_raw_capture_tick(struct xiao147_raw_capture *capture, uint32_t now_ms);
 /* active remains true throughout restoration, including a sticky failure.

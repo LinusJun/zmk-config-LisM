@@ -30,13 +30,15 @@ struct mock {
     struct xiao147_raw_capture capture;
     uint32_t now;
     unsigned calls_this_tick, calls, writes, page_entries, page_returns;
-    unsigned normal_reports, raw_samples, diff_samples, scans;
+    unsigned normal_reports, raw_samples, diff_samples, scans, type_writes;
     unsigned events[8];
     uint32_t sample_times[64];
+    uint32_t scan_times[64];
     enum xiao147_raw_phase fail_phase;
     bool fail_once, fail_always, failed, uncertain_write;
     bool bad_identity, bad_restore_identity, bad_report;
     bool enter_busy, restore_busy, scan_busy, returned_report_ok;
+    bool stop_on_sample;
     uint16_t version;
     uint8_t layout[3], normal_report[14], page, selected_type;
 };
@@ -97,14 +99,19 @@ static int read_register(void *context, uint8_t reg, uint8_t *buffer, size_t len
     case 0x03:
         assert(mock->page == 0x20 && length == 1 &&
                mock->capture.phase == XIAO147_RAW_SCAN_POLL);
+        assert(mock->now - mock->capture.phase_ms >= 5);
         buffer[0] = mock->scan_busy;
         break;
     case 0x02:
         assert(mock->page == 0x20 &&
                length == 2U * mock->capture.channels && length <= 26);
         for (size_t index = 0; index < length / 2; index++) {
-            buffer[2 * index] = words[index] >> 8;
-            buffer[2 * index + 1] = words[index] & 0xff;
+            uint16_t value = words[index];
+            if (mock->capture.mode == XIAO147_RAW_MODE_FAST_DIFF) {
+                value = (uint16_t)(value + mock->scans); /* every frame is fresh */
+            }
+            buffer[2 * index] = value >> 8;
+            buffer[2 * index + 1] = value & 0xff;
         }
         break;
     case 0x01:
@@ -152,10 +159,19 @@ static int write_register(void *context, uint8_t reg, const uint8_t *payload,
                (payload[0] == 1 || payload[0] == 2) &&
                mock->capture.phase == XIAO147_RAW_SELECT_TYPE);
         mock->selected_type = payload[0];
+        mock->type_writes++;
+        if (mock->capture.mode == XIAO147_RAW_MODE_FAST_DIFF) {
+            assert(payload[0] == XIAO147_RAW_DIFF && mock->type_writes == 1);
+        }
         break;
     case 0x03:
         assert(mock->page == 0x20 && length == 1 && payload[0] == 1 &&
                mock->capture.phase == XIAO147_RAW_SCAN_START);
+        if (mock->capture.mode == XIAO147_RAW_MODE_FAST_DIFF && mock->scans != 0) {
+            unsigned previous = mock->scans - 1;
+            if (previous < 64) { assert(mock->now - mock->scan_times[previous] >= 20); }
+        }
+        if (mock->scans < 64) { mock->scan_times[mock->scans] = mock->now; }
         mock->scans++;
         break;
     default:
@@ -188,9 +204,19 @@ static void sample(void *context, enum xiao147_raw_type type, uint8_t channels,
     assert(channels > 0 && channels <= 13 && mock->page == 0x20 &&
            xiao147_raw_capture_active(&mock->capture) && type == mock->selected_type);
     assert(elapsed_ms == mock->now - mock->capture.started_ms);
+    assert(mock->capture.sample_valid && mock->capture.last_sample_ms == mock->now &&
+           mock->capture.samples_received == mock->raw_samples + mock->diff_samples + 1);
     unsigned index = mock->raw_samples + mock->diff_samples;
     if (index < 64) { mock->sample_times[index] = mock->now; }
-    if (type == XIAO147_RAW_DATA) {
+    if (mock->capture.mode == XIAO147_RAW_MODE_FAST_DIFF) {
+        assert(type == XIAO147_RAW_DIFF && mock->raw_samples == 0);
+        mock->diff_samples++;
+        for (unsigned i = 0; i < channels; i++) {
+            uint16_t bits = (uint16_t)(words[i] + mock->scans);
+            int32_t expected = bits >= 0x8000 ? (int32_t)bits - 65536 : (int32_t)bits;
+            assert(values[i] == expected);
+        }
+    } else if (type == XIAO147_RAW_DATA) {
         assert(mock->raw_samples == mock->diff_samples);
         mock->raw_samples++;
         for (unsigned i = 0; i < channels; i++) { assert(values[i] == words[i]); }
@@ -199,6 +225,7 @@ static void sample(void *context, enum xiao147_raw_type type, uint8_t channels,
         mock->diff_samples++;
         for (unsigned i = 0; i < channels; i++) { assert(values[i] == signed_words[i]); }
     }
+    if (mock->stop_on_sample) { xiao147_raw_capture_stop(&mock->capture, mock->now); }
 }
 
 static void init(struct mock *mock, uint32_t now)
@@ -221,6 +248,7 @@ static void step(struct mock *mock, uint32_t delta)
     bool had_page_write = mock->capture.page_write_attempted;
     xiao147_raw_capture_tick(&mock->capture, mock->now);
     assert(mock->calls_this_tick <= 1);
+    assert(mock->capture.io_calls == mock->calls);
     /* Leaving active state after page modification requires valid restore. */
     if (had_page_write && !xiao147_raw_capture_active(&mock->capture)) {
         assert(mock->events[XIAO147_RAW_RESTORED] == 1 && mock->returned_report_ok);
@@ -267,6 +295,123 @@ static void start(struct mock *mock)
     assert(xiao147_raw_capture_start(&mock->capture, mock->now, 0x0101));
     assert(mock->calls == calls && mock->events[XIAO147_RAW_STARTED] == 1);
     assert(!xiao147_raw_capture_start(&mock->capture, mock->now, 0x0101));
+    assert(mock->capture.mode == XIAO147_RAW_MODE_ALTERNATE);
+}
+
+static void start_fast(struct mock *mock)
+{
+    unsigned calls = mock->calls;
+    assert(xiao147_raw_capture_start_mode(&mock->capture, mock->now, 0x0101,
+                                          XIAO147_RAW_MODE_FAST_DIFF));
+    assert(mock->calls == calls && mock->events[XIAO147_RAW_STARTED] == 1 &&
+           mock->capture.mode == XIAO147_RAW_MODE_FAST_DIFF);
+    assert(!xiao147_raw_capture_start_mode(&mock->capture, mock->now, 0x0101,
+                                           XIAO147_RAW_MODE_FAST_DIFF));
+}
+
+static void fast_tests(void)
+{
+    struct mock mock;
+    init(&mock, 0);
+    assert(!xiao147_raw_capture_start_mode(&mock.capture, 0, 0x0101,
+                                           (enum xiao147_raw_mode)99));
+    assert(!mock.calls && !mock.writes && !xiao147_raw_capture_active(&mock.capture));
+    start_fast(&mock);
+    reach(&mock, XIAO147_RAW_SCAN_START);
+    unsigned prefix_calls = mock.calls;
+    assert(mock.type_writes == 1 && mock.selected_type == XIAO147_RAW_DIFF);
+    for (unsigned ticks = 0; mock.diff_samples < 10; ticks++) {
+        assert(ticks < 200);
+        step(&mock, 4);
+    }
+    assert(mock.raw_samples == 0 && mock.scans == 10 && mock.type_writes == 1 &&
+           mock.calls == prefix_calls + 30 && mock.capture.scan_requests == 10 &&
+           mock.capture.samples_received == 10 && mock.capture.sample_valid);
+    for (unsigned i = 1; i < 10; i++) {
+        assert(mock.sample_times[i] - mock.sample_times[i - 1] == 20 &&
+               mock.scan_times[i] - mock.scan_times[i - 1] == 20);
+    }
+    assert(mock.capture.last_interval_ms == 20 && mock.capture.min_interval_ms == 20 &&
+           mock.capture.max_interval_ms == 20);
+    unsigned calls = mock.calls;
+    step(&mock, 0); assert(mock.calls == calls); /* no re-trigger at same timestamp */
+    step(&mock, 7); assert(mock.calls == calls);
+    step(&mock, 1); assert(mock.calls == calls + 1 && !mock.capture.sample_valid &&
+                         mock.capture.phase == XIAO147_RAW_SCAN_POLL);
+    for (unsigned i = 0; i < 13; i++) { assert(mock.capture.values[i] == 0); }
+    reach(&mock, XIAO147_RAW_READ_SAMPLE);
+    unsigned previous_samples = mock.capture.samples_received;
+    mock.fail_phase = XIAO147_RAW_READ_SAMPLE; mock.fail_once = true;
+    step(&mock, 5);
+    assert(mock.capture.samples_received == previous_samples && mock.diff_samples == 10 &&
+           !mock.capture.sample_valid && mock.capture.last_error == XIAO147_RAW_IO_ERROR);
+    finish_restore(&mock);
+
+    /* Stop before/after every FAST phase; no scan/selection happens in cleanup. */
+    for (enum xiao147_raw_phase phase = XIAO147_RAW_CHECK_ID;
+         phase <= XIAO147_RAW_READ_SAMPLE; phase++) {
+        init(&mock, 0); start_fast(&mock); reach(&mock, phase);
+        bool modified = mock.capture.page_write_attempted;
+        unsigned scans = mock.scans, types = mock.type_writes;
+        xiao147_raw_capture_stop(&mock.capture, mock.now);
+        assert(!mock.capture.sample_valid);
+        if (modified) { finish_restore(&mock); }
+        else { assert(!mock.writes && !xiao147_raw_capture_active(&mock.capture)); }
+        assert(mock.scans == scans && mock.type_writes == types);
+    }
+    init(&mock, 0); start_fast(&mock); reach(&mock, XIAO147_RAW_READ_SAMPLE);
+    step(&mock, 4); assert(mock.diff_samples == 1 && mock.capture.sample_valid);
+    xiao147_raw_capture_stop(&mock.capture, mock.now);assert(!mock.capture.sample_valid);
+    finish_restore(&mock);assert(mock.diff_samples == 1 && mock.scans == 1);
+    init(&mock, 0);start_fast(&mock);mock.stop_on_sample = true;
+    reach(&mock, XIAO147_RAW_READ_SAMPLE);step(&mock, 4);
+    assert(mock.capture.phase == XIAO147_RAW_RESTORE_WRITE && !mock.capture.sample_valid);
+    finish_restore(&mock);assert(mock.diff_samples == 1 && mock.scans == 1);
+
+    const enum xiao147_raw_phase phases[] = {
+        XIAO147_RAW_CHECK_ID, XIAO147_RAW_CHECK_VERSION, XIAO147_RAW_ENTER_WRITE,
+        XIAO147_RAW_ENTER_ACK, XIAO147_RAW_READ_CHANNELS, XIAO147_RAW_SELECT_TYPE,
+        XIAO147_RAW_SCAN_START, XIAO147_RAW_SCAN_POLL, XIAO147_RAW_READ_SAMPLE,
+    };
+    for (unsigned i = 0; i < sizeof(phases) / sizeof(phases[0]); i++) {
+        init(&mock, 0); start_fast(&mock); reach(&mock, phases[i]);
+        mock.fail_phase = phases[i];mock.fail_once = true;mock.uncertain_write = true;
+        step(&mock, 10);assert(mock.failed && !mock.capture.sample_valid && !mock.diff_samples);
+        if (phases[i] <= XIAO147_RAW_CHECK_VERSION) { assert(!mock.writes); }
+        else { finish_restore(&mock); }
+    }
+
+    /* Ready polling and post-ready acquisition both enforce the scan deadline. */
+    init(&mock, 0);mock.scan_busy = true;start_fast(&mock);
+    reach(&mock, XIAO147_RAW_SCAN_POLL);
+    while (mock.capture.phase == XIAO147_RAW_SCAN_POLL) { step(&mock, 4); }
+    assert(mock.capture.last_error == XIAO147_RAW_SCAN_TIMEOUT && mock.scans == 1 &&
+           !mock.diff_samples && !mock.capture.sample_valid);finish_restore(&mock);
+    init(&mock, 0);start_fast(&mock);reach(&mock, XIAO147_RAW_READ_SAMPLE);
+    calls = mock.calls;step(&mock, 100U - (mock.now - mock.capture.phase_ms));
+    assert(mock.calls == calls && mock.capture.last_error == XIAO147_RAW_SCAN_TIMEOUT &&
+           !mock.diff_samples && !mock.capture.sample_valid);finish_restore(&mock);
+
+    /* Late servicing records observed cadence, never fabricates catch-up frames. */
+    init(&mock, 0);start_fast(&mock);reach(&mock, XIAO147_RAW_READ_SAMPLE);step(&mock, 4);
+    uint32_t first_sample = mock.capture.last_sample_ms;
+    step(&mock, 50);assert(mock.scans == 2 && !mock.capture.sample_valid);
+    reach(&mock, XIAO147_RAW_READ_SAMPLE);step(&mock, 4);
+    uint32_t observed = mock.capture.last_sample_ms - first_sample;
+    assert(mock.diff_samples == 2 && observed > 50 && mock.capture.last_interval_ms == observed &&
+           mock.capture.min_interval_ms == observed && mock.capture.max_interval_ms == observed);
+    xiao147_raw_capture_stop(&mock.capture, mock.now);finish_restore(&mock);
+
+    init(&mock, UINT32_MAX - 40U);start_fast(&mock);reach(&mock, XIAO147_RAW_SCAN_START);
+    while (mock.diff_samples < 4) { step(&mock, 4); }
+    assert(mock.now < 200 && mock.capture.min_interval_ms == 20 && mock.capture.max_interval_ms == 20);
+    step(&mock, XIAO147_RAW_SESSION_MS - (mock.now - mock.capture.started_ms));
+    assert(mock.capture.last_error == XIAO147_RAW_SESSION_TIMEOUT && !mock.capture.sample_valid);
+    finish_restore(&mock);
+    init(&mock, 0);start_fast(&mock);reach(&mock, XIAO147_RAW_SCAN_START);
+    xiao147_raw_capture_stop(&mock.capture, mock.now);calls = mock.calls;
+    step(&mock, XIAO147_RAW_CLEANUP_MS);assert(mock.calls == calls);
+    finish_fault(&mock);
 }
 
 static void contact(uint8_t *report, unsigned index, uint8_t id, uint8_t event_code,
@@ -281,6 +426,7 @@ static void contact(uint8_t *report, unsigned index, uint8_t id, uint8_t event_c
 
 int main(void)
 {
+    fast_tests();
     struct mock mock;
     init(&mock, 0); start(&mock);
     reach(&mock, XIAO147_RAW_PAIR_WAIT);

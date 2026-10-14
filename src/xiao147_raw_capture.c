@@ -22,6 +22,20 @@ static bool elapsed(uint32_t now_ms, uint32_t then_ms, uint32_t duration_ms)
     return now_ms - then_ms >= duration_ms;
 }
 
+static int read_data(struct xiao147_raw_capture *capture, uint8_t reg,
+                     uint8_t *buffer, size_t length)
+{
+    capture->io_calls++;
+    return capture->ops.read(capture->context, reg, buffer, length);
+}
+
+static int write_data(struct xiao147_raw_capture *capture, uint8_t reg,
+                      const uint8_t *payload, size_t length)
+{
+    capture->io_calls++;
+    return capture->ops.write(capture->context, reg, payload, length);
+}
+
 static bool restoring(const struct xiao147_raw_capture *capture)
 {
     return capture->phase >= XIAO147_RAW_RESTORE_WRITE &&
@@ -51,6 +65,7 @@ static void fault(struct xiao147_raw_capture *capture,
                   enum xiao147_raw_error reason)
 {
     capture->last_error = reason;
+    capture->sample_valid = false;
     capture->phase = XIAO147_RAW_STICKY_FAULT;
     notify(capture, XIAO147_RAW_FAULT, reason);
 }
@@ -60,6 +75,7 @@ static void begin_restore(struct xiao147_raw_capture *capture, uint32_t now_ms,
 {
     if (restoring(capture) || capture->phase == XIAO147_RAW_STICKY_FAULT) { return; }
     capture->last_error = reason;
+    capture->sample_valid = false;
     if (reason != XIAO147_RAW_CANCELLED && reason != XIAO147_RAW_SESSION_TIMEOUT) {
         notify(capture, XIAO147_RAW_ERROR, reason);
     }
@@ -101,10 +117,19 @@ void xiao147_raw_capture_init(struct xiao147_raw_capture *capture,
 bool xiao147_raw_capture_start(struct xiao147_raw_capture *capture, uint32_t now_ms,
                               uint16_t expected_version)
 {
+    return xiao147_raw_capture_start_mode(capture, now_ms, expected_version,
+                                         XIAO147_RAW_MODE_ALTERNATE);
+}
+
+bool xiao147_raw_capture_start_mode(struct xiao147_raw_capture *capture, uint32_t now_ms,
+                                   uint16_t expected_version, enum xiao147_raw_mode mode)
+{
     if (capture->phase != XIAO147_RAW_IDLE || capture->ops.read == NULL ||
-        capture->ops.write == NULL) { return false; }
+        capture->ops.write == NULL ||
+        (mode != XIAO147_RAW_MODE_ALTERNATE && mode != XIAO147_RAW_MODE_FAST_DIFF)) { return false; }
     capture->phase = XIAO147_RAW_CHECK_ID;
-    capture->type = XIAO147_RAW_DATA;
+    capture->mode = mode;
+    capture->type = mode == XIAO147_RAW_MODE_FAST_DIFF ? XIAO147_RAW_DIFF : XIAO147_RAW_DATA;
     capture->last_error = XIAO147_RAW_OK;
     capture->io_error = 0;
     capture->expected_version = expected_version;
@@ -112,9 +137,18 @@ bool xiao147_raw_capture_start(struct xiao147_raw_capture *capture, uint32_t now
     capture->started_ms = now_ms;
     capture->phase_ms = now_ms;
     capture->pair_ms = now_ms;
+    capture->frame_started_ms = now_ms;
+    capture->io_calls = 0;
+    capture->scan_requests = 0;
+    capture->samples_received = 0;
+    capture->last_sample_ms = 0;
+    capture->last_interval_ms = 0;
+    capture->min_interval_ms = 0;
+    capture->max_interval_ms = 0;
     capture->channels = 0;
     capture->restore_attempts = 0;
     capture->page_write_attempted = false;
+    capture->sample_valid = false;
     memset(capture->channel_layout, 0, sizeof(capture->channel_layout));
     memset(capture->values, 0, sizeof(capture->values));
     notify(capture, XIAO147_RAW_STARTED, expected_version);
@@ -156,7 +190,7 @@ void xiao147_raw_capture_tick(struct xiao147_raw_capture *capture, uint32_t now_
 
     switch (capture->phase) {
     case XIAO147_RAW_CHECK_ID:
-        result = capture->ops.read(capture->context, 0x08, buffer, 3);
+        result = read_data(capture, 0x08, buffer, 3);
         if (result != 0) { goto io_failed; }
         if (!identity_valid(buffer)) {
             begin_restore(capture, now_ms, XIAO147_RAW_ID_MISMATCH);
@@ -165,7 +199,7 @@ void xiao147_raw_capture_tick(struct xiao147_raw_capture *capture, uint32_t now_
         capture->phase = XIAO147_RAW_CHECK_VERSION;
         return;
     case XIAO147_RAW_CHECK_VERSION:
-        result = capture->ops.read(capture->context, 0x05, buffer, 2);
+        result = read_data(capture, 0x05, buffer, 2);
         if (result != 0) { goto io_failed; }
         capture->firmware_version = ((uint16_t)buffer[0] << 8) | buffer[1];
         notify(capture, XIAO147_RAW_VERSION, capture->firmware_version);
@@ -179,7 +213,7 @@ void xiao147_raw_capture_tick(struct xiao147_raw_capture *capture, uint32_t now_
         /* Even an unsuccessful write can have switched the device page. */
         capture->page_write_attempted = true;
         buffer[0] = 0x5a; buffer[1] = 0xa5; buffer[2] = 0x20;
-        result = capture->ops.write(capture->context, 0xfe, buffer, 3);
+        result = write_data(capture, 0xfe, buffer, 3);
         if (result != 0) { goto io_failed; }
         capture->phase_ms = now_ms;
         capture->last_io_ms = now_ms;
@@ -191,13 +225,13 @@ void xiao147_raw_capture_tick(struct xiao147_raw_capture *capture, uint32_t now_
             return;
         }
         if (!elapsed(now_ms, capture->last_io_ms, PAGE_SETTLE_MS)) { return; }
-        result = capture->ops.read(capture->context, 0xfe, buffer, 2);
+        result = read_data(capture, 0xfe, buffer, 2);
         if (result != 0) { goto io_failed; }
         capture->last_io_ms = now_ms;
         if (buffer[0] == 0) { capture->phase = XIAO147_RAW_READ_CHANNELS; }
         return;
     case XIAO147_RAW_READ_CHANNELS: {
-        result = capture->ops.read(capture->context, 0x0b, buffer, 3);
+        result = read_data(capture, 0x0b, buffer, 3);
         if (result != 0) { goto io_failed; }
         memcpy(capture->channel_layout, buffer, 3);
         uint16_t channels = buffer[2] >= 0xf0 ? (uint16_t)buffer[0] + buffer[1] :
@@ -207,7 +241,8 @@ void xiao147_raw_capture_tick(struct xiao147_raw_capture *capture, uint32_t now_
             return;
         }
         capture->channels = (uint8_t)channels;
-        capture->type = XIAO147_RAW_DATA;
+        capture->type = capture->mode == XIAO147_RAW_MODE_FAST_DIFF ?
+                            XIAO147_RAW_DIFF : XIAO147_RAW_DATA;
         capture->pair_ms = now_ms;
         capture->phase = XIAO147_RAW_SELECT_TYPE;
         notify(capture, XIAO147_RAW_CHANNELS, capture->channels);
@@ -215,13 +250,19 @@ void xiao147_raw_capture_tick(struct xiao147_raw_capture *capture, uint32_t now_
     }
     case XIAO147_RAW_SELECT_TYPE:
         buffer[0] = (uint8_t)capture->type;
-        result = capture->ops.write(capture->context, 0x00, buffer, 1);
+        result = write_data(capture, 0x00, buffer, 1);
         if (result != 0) { goto io_failed; }
         capture->phase = XIAO147_RAW_SCAN_START;
         return;
     case XIAO147_RAW_SCAN_START:
+        if (capture->mode == XIAO147_RAW_MODE_FAST_DIFF && capture->scan_requests != 0 &&
+            !elapsed(now_ms, capture->frame_started_ms, XIAO147_RAW_FAST_FRAME_MS)) { return; }
+        capture->frame_started_ms = now_ms;
+        capture->scan_requests++;
+        capture->sample_valid = false;
+        memset(capture->values, 0, sizeof(capture->values));
         buffer[0] = 0x01;
-        result = capture->ops.write(capture->context, 0x03, buffer, 1);
+        result = write_data(capture, 0x03, buffer, 1);
         if (result != 0) { goto io_failed; }
         capture->phase_ms = now_ms;
         capture->last_io_ms = now_ms;
@@ -233,25 +274,45 @@ void xiao147_raw_capture_tick(struct xiao147_raw_capture *capture, uint32_t now_
             return;
         }
         if (!elapsed(now_ms, capture->last_io_ms, SCAN_SETTLE_MS)) { return; }
-        result = capture->ops.read(capture->context, 0x03, buffer, 1);
+        result = read_data(capture, 0x03, buffer, 1);
         if (result != 0) { goto io_failed; }
         capture->last_io_ms = now_ms;
         if (buffer[0] == 0) { capture->phase = XIAO147_RAW_READ_SAMPLE; }
         return;
     case XIAO147_RAW_READ_SAMPLE:
-        result = capture->ops.read(capture->context, 0x02, buffer,
-                                   (size_t)capture->channels * 2U);
+        if (capture->mode == XIAO147_RAW_MODE_FAST_DIFF &&
+            elapsed(now_ms, capture->phase_ms, SCAN_TIMEOUT_MS)) {
+            begin_restore(capture, now_ms, XIAO147_RAW_SCAN_TIMEOUT);
+            return;
+        }
+        result = read_data(capture, 0x02, buffer, (size_t)capture->channels * 2U);
         if (result != 0) { goto io_failed; }
         for (uint8_t channel = 0; channel < capture->channels; channel++) {
             uint16_t bits = ((uint16_t)buffer[2U * channel] << 8) | buffer[2U * channel + 1U];
             capture->values[channel] = capture->type == XIAO147_RAW_DIFF && bits >= 0x8000 ?
                                            (int32_t)bits - 65536 : (int32_t)bits;
         }
+        if (capture->samples_received != 0) {
+            uint32_t interval = now_ms - capture->last_sample_ms;
+            capture->last_interval_ms = interval;
+            if (capture->samples_received == 1 || interval < capture->min_interval_ms) {
+                capture->min_interval_ms = interval;
+            }
+            if (interval > capture->max_interval_ms) { capture->max_interval_ms = interval; }
+        }
+        capture->last_sample_ms = now_ms;
+        capture->samples_received++;
+        capture->sample_valid = true;
         if (capture->ops.sample != NULL) {
             capture->ops.sample(capture->context, capture->type, capture->channels,
                                  capture->values, now_ms - capture->started_ms);
         }
-        if (capture->type == XIAO147_RAW_DATA) {
+        /* A sample consumer may request a stop; never overwrite its cleanup
+         * phase with the next scan/selection after returning from callback. */
+        if (capture->phase != XIAO147_RAW_READ_SAMPLE) { return; }
+        if (capture->mode == XIAO147_RAW_MODE_FAST_DIFF) {
+            capture->phase = XIAO147_RAW_SCAN_START;
+        } else if (capture->type == XIAO147_RAW_DATA) {
             capture->type = XIAO147_RAW_DIFF;
             capture->phase = XIAO147_RAW_SELECT_TYPE;
         } else {
@@ -269,7 +330,7 @@ void xiao147_raw_capture_tick(struct xiao147_raw_capture *capture, uint32_t now_
         if (!elapsed(now_ms, capture->last_io_ms, PAGE_SETTLE_MS)) { return; }
         capture->restore_attempts++;
         buffer[0] = 0x5a; buffer[1] = 0xa5; buffer[2] = 0x00;
-        result = capture->ops.write(capture->context, 0xfe, buffer, 3);
+        result = write_data(capture, 0xfe, buffer, 3);
         if (result != 0) {
             capture->io_error = result;
             retry_restore(capture, now_ms, XIAO147_RAW_IO_ERROR);
@@ -285,7 +346,7 @@ void xiao147_raw_capture_tick(struct xiao147_raw_capture *capture, uint32_t now_
             return;
         }
         if (!elapsed(now_ms, capture->last_io_ms, PAGE_SETTLE_MS)) { return; }
-        result = capture->ops.read(capture->context, 0xfe, buffer, 2);
+        result = read_data(capture, 0xfe, buffer, 2);
         if (result != 0) {
             capture->io_error = result;
             retry_restore(capture, now_ms, XIAO147_RAW_IO_ERROR);
@@ -295,7 +356,7 @@ void xiao147_raw_capture_tick(struct xiao147_raw_capture *capture, uint32_t now_
         if (buffer[0] == 0) { capture->phase = XIAO147_RAW_RESTORE_ID; }
         return;
     case XIAO147_RAW_RESTORE_ID:
-        result = capture->ops.read(capture->context, 0x08, buffer, 3);
+        result = read_data(capture, 0x08, buffer, 3);
         if (result != 0) {
             capture->io_error = result;
             retry_restore(capture, now_ms, XIAO147_RAW_IO_ERROR);
@@ -308,7 +369,7 @@ void xiao147_raw_capture_tick(struct xiao147_raw_capture *capture, uint32_t now_
         capture->phase = XIAO147_RAW_RESTORE_REPORT;
         return;
     case XIAO147_RAW_RESTORE_REPORT:
-        result = capture->ops.read(capture->context, 0x01, buffer, 14);
+        result = read_data(capture, 0x01, buffer, 14);
         if (result != 0) {
             capture->io_error = result;
             retry_restore(capture, now_ms, XIAO147_RAW_IO_ERROR);

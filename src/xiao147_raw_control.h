@@ -11,6 +11,7 @@ enum xiao147_raw_command {
     XIAO147_RAW_COMMAND_NONE,
     XIAO147_RAW_COMMAND_INFO,
     XIAO147_RAW_COMMAND_START,
+    XIAO147_RAW_COMMAND_SHADOW_START,
     XIAO147_RAW_COMMAND_STOP,
     XIAO147_RAW_COMMAND_INVALID,
 };
@@ -47,15 +48,20 @@ xiao147_raw_control_byte(struct xiao147_raw_control *control, uint8_t byte)
         control->line[length] = 0;
         if (!strcmp(control->line, "AXS_RAW_INFO")) { command = XIAO147_RAW_COMMAND_INFO; }
         else if (!strcmp(control->line, "AXS_RAW_STOP")) { command = XIAO147_RAW_COMMAND_STOP; }
-        else if (length == 18 && !memcmp(control->line, "AXS_RAW_START ", 14)) {
+        else if ((length == 18 && !memcmp(control->line, "AXS_RAW_START ", 14)) ||
+                 (length == 21 && !memcmp(control->line, "AXS_SHADOW_START ", 17))) {
             uint16_t version = 0;
             bool valid = true;
-            for (size_t i = 14; i < 18; i++) {
+            size_t offset = length - 4;
+            for (size_t i = offset; i < length; i++) {
                 int digit = xiao147_raw_hex((uint8_t)control->line[i]);
                 if (digit < 0) { valid = false; break; }
                 version = (uint16_t)((version << 4) | (uint16_t)digit);
             }
-            if (valid) { control->expected_fw = version; command = XIAO147_RAW_COMMAND_START; }
+            if (valid) {
+                control->expected_fw = version;
+                command = length == 18 ? XIAO147_RAW_COMMAND_START : XIAO147_RAW_COMMAND_SHADOW_START;
+            }
         } else if (length == 0) { command = XIAO147_RAW_COMMAND_NONE; }
     }
     control->length = 0;
