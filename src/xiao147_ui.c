@@ -500,7 +500,7 @@ static void periodic(struct k_work *work)
     static int previous_level = -2;
     static int previous_raw = -2;
     /* This pinned gpio_nrfx backend has no pin_get_config implementation.
-     * Read the known P1.03 PIN_CNF register only; never reconfigure or scan. */
+     * Read the corrected D19/P1.07 register only; never reconfigure or scan. */
     static uint32_t previous_config = UINT32_MAX;
     uint32_t raw_config = NRF_P1->PIN_CNF[usr1.pin];
     int raw = gpio_is_ready_dt(&usr1) ? gpio_pin_get_raw(usr1.port, usr1.pin) : -ENODEV;

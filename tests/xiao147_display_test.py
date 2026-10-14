@@ -13,8 +13,8 @@ for setting in ("CONFIG_LV_Z_VDB_SIZE=10", "CONFIG_LV_Z_DOUBLE_VDB=n",
 assert 320 * 172 * 2 * .1 + 65536 < 320 * 172 * 2 * .5 * 2 + 20000
 overlay = read("boards/shields/xiao_plus_147_touch/xiao_plus_147_touch.overlay")
 assert "mipi-max-frequency = <8000000>" in overlay
-assert "reset-gpios = <&gpio1 7 GPIO_ACTIVE_LOW>" in overlay
-assert "gpios = <&gpio1 3 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>" in overlay
+assert "reset-gpios = <&gpio1 3 GPIO_ACTIVE_LOW>" in overlay
+assert "gpios = <&gpio1 7 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>" in overlay
 assert "/delete-property/ nordic,invert" in overlay
 assert "mdac = <0x28>" in overlay and "y-offset = <34>" in overlay
 driver = read("src/display_jd9853a.c")
@@ -43,7 +43,7 @@ rotation = read("src/xiao147_rotation.c")
 assert "result = display_write" in rotation and "report_write(result)" in rotation
 assert "write_errors % 100" in rotation and "xiao147_display_hold_flush()" in rotation
 test_matrix = read("build-display-test.yaml")
-assert re.findall(r"artifact-name:\s*(\S+)", test_matrix) == ["lism_dongle_xiao147_normal_start_test"]
+assert re.findall(r"artifact-name:\s*(\S+)", test_matrix) == ["lism_dongle_xiao147_usr1_fix_test"]
 assert "raw_refresh_gate" in diag and "LV_EVENT_REFR_REQUEST" in diag
 assert "lv_timer_pause" in diag and "lv_timer_resume" in diag
 assert "CONFIG_LISM_XIAO147_DISPLAY_SELFTEST=n" in test_matrix

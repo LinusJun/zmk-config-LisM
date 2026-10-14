@@ -1,0 +1,19 @@
+{
+  "scope": "USR1/LCD reset routing only, not an electrical design review",
+  "seeed_bsp_commit": "5948eafd5a6f93dbb0fe100b0c697f9f27c95a33",
+  "seeed_bsp_url": "https://github.com/Seeed-Studio/Adafruit_nRF52_Arduino/commit/5948eafd5a6f93dbb0fe100b0c697f9f27c95a33",
+  "aliases": {"D17": 38, "D18": 37, "D19": 36},
+  "g_ADigitalPinMap": {"36": 39, "37": 37, "38": 35},
+  "resolved_nrf_gpio": {"LCD_CTP_RESET_D17": "P1.03", "BACKLIGHT_D18": "P1.05", "USR1_D19": "P1.07"},
+  "pitfall": "variant.cpp comments mislabel D17/D19 after the variant.h alias correction. Resolve header constants through actual array indices, not comments.",
+  "expansion_schematic": {
+    "url": "https://github.com/Seeed-Projects/Display-Gadgets/tree/main/schematics/1.47_Inch_Touch_Display_Powered_by_XIAO_nRF52840_Plus",
+    "sheet": "03 Main, PDF page 4, v1.0, 2026-06-10",
+    "BTN_USR1": ["SW2 -> R5 1k -> U1 pin23/D19", "TP18"],
+    "LCD_RST": ["U1 pin21/D17 -> J2 pin4", "R9 0ohm -> CTP_RST/J2 pin13"]
+  },
+  "zephyr_fixture_revision": "10ba6d0cb38b",
+  "zephyr_fixture_url": "https://github.com/zmkfirmware/zephyr/blob/10ba6d0cb38b/drivers/input/input_gpio_keys.c",
+  "confidence": "deterministic software alias resolution; schematic connectivity consistency",
+  "hardware_test": "pending: real USR1 press/release/repress, LCD/CTP cold boot after correcting both pins"
+}

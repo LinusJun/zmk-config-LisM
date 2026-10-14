@@ -11,7 +11,10 @@
 
 &{/mipi_dbi} {
     dc-gpios = <&xiao_d 3 GPIO_ACTIVE_HIGH>; /* D3: LCD_DC */
-    reset-gpios = <&gpio1 7 GPIO_ACTIVE_LOW>; /* D17: LCD/CTP reset (Seeed Plus BSP) */
+    /* Seeed BSP 5948eafd: D17=38, g_ADigitalPinMap[38]=35 -> P1.03.
+     * Resolve variant.h aliases through the array; its D17/D19 comments are
+     * stale. D17 is LCD_RST, joined to CTP_RST by R9 on the expansion board. */
+    reset-gpios = <&gpio1 3 GPIO_ACTIVE_LOW>;
 };
 
 &st7789 {
@@ -61,13 +64,14 @@
 / {
     xiao_touch_left_button: xiao_touch_left_button {
         compatible = "gpio-keys";
-        /* USR1 produced no IRQ events in the real-panel capture. Poll only
-         * this key; the working USR2 interrupt path remains unchanged. */
+        /* Sole USR1 input path. Keep existing 20ms polling; USR2's working
+         * interrupt path is unchanged. Neither key owns LCD/CTP reset. */
         polling-mode;
         debounce-interval-ms = <20>;
 
         button_left {
-            gpios = <&gpio1 3 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; /* D19/USR1 */
+            /* Corrected Seeed BSP: D19=36 -> array[36]=39 -> P1.07. */
+            gpios = <&gpio1 7 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; /* D19/USR1 */
             zephyr,code = <INPUT_BTN_0>;
         };
 
