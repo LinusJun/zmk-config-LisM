@@ -14,6 +14,11 @@
 #include "xiao147_rotation.h"
 #include "xiao147_air_motion.h"
 
+#ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
+/* Only the explicit diagnostic may isolate this device's mouse reports. */
+extern bool xiao147_touch_capture_active(void);
+#endif
+
 LOG_MODULE_REGISTER(lism_air_mouse, LOG_LEVEL_INF);
 
 #define IMU_WHO_AM_I 0x0f
@@ -51,6 +56,9 @@ static void imu_poll(struct k_work *work)
                                          struct imu_data, poll_work);
     const struct imu_config *cfg = data->dev->config;
     bool enabled = xiao147_ui_imu_enabled();
+#ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
+    enabled = enabled && !xiao147_touch_capture_active();
+#endif
     if (data->ready && enabled != data->gyro_on) {
         if (imu_write(&cfg->bus, IMU_CTRL2_G, enabled ? 0x40 : 0x00) == 0) {
             data->gyro_on = enabled;

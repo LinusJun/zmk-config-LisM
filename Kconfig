@@ -25,6 +25,19 @@ config LISM_XIAO147_DISPLAY_SELFTEST
       minimal LVGL screen, then the complete existing status interface.
       Does not reset settings, change key bindings or enable ADC diagnostics.
 
+config LISM_XIAO147_RAW_CAPTURE
+    bool "Opt-in AXS5106L RAW/DIFF sensor capture (not a multitouch fix)"
+    depends on LISM_XIAO147_TOUCH && ZMK_USB_LOGGING && UART_LINE_CTRL
+    depends on !SHELL && !CONSOLE_HANDLER && !UART_CONSOLE_MCUMGR
+    default n
+    help
+      A separate test build only. Exact serial commands first read the L chip
+      ID and firmware version, then explicitly request temporary factory-page
+      sampling. No MTP upgrade, erase, calibration, sleep or GPIO reset commands
+      are present. Touch/air-mouse input is isolated until bounded restoration
+      verifies normal reporting. A restoration fault requires a power cycle.
+      The normal firmware contains no factory-page switch or serial commands.
+
 menuconfig LISM_RESISTIVE_JOYSTICK
     bool "LisM resistive joystick kscan driver"
     default y if DT_HAS_LINUS_RESISTIVE_JOYSTICK_ENABLED
