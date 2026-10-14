@@ -115,7 +115,7 @@ static void run_poll(struct gpio_keys_pin_data *d) {
 int main(void) {
     struct device port={.name="gpio1"};
     const struct gpio_keys_pin_config pin={.spec={&port,7,GPIO_ACTIVE_LOW|GPIO_PULL_UP},.zephyr_code=INPUT_BTN_0};
-    struct gpio_keys_pin_data state={0};struct gpio_keys_data runtime={0};
+    struct gpio_keys_pin_data state={0};struct gpio_keys_data runtime={};
     const struct gpio_keys_config cfg={.debounce_interval_ms=20,.num_keys=1,.pin_cfg=&pin,
         .pin_data=&state,.handler=gpio_keys_poll_pins,.polling_mode=true};
     struct device key={"xiao_touch_left_button",&cfg,&runtime};
