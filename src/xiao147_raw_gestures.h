@@ -13,6 +13,7 @@
 #define XIAO147_PROFILE_STATIONS 6U
 #define XIAO147_PROFILE_FLOOR 20
 #define XIAO147_SHADOW_MAX_GAP_MS 100U
+#define XIAO147_SHADOW_PENDING_MS 100U
 
 enum xiao147_raw_hypothesis {
     XIAO147_RAW_NONE,
@@ -20,6 +21,17 @@ enum xiao147_raw_hypothesis {
     XIAO147_RAW_ONE_LOBE,
     XIAO147_RAW_TWO_SEPARATED_LOBES,
     XIAO147_RAW_UNKNOWN,
+    /* Weak, simple positive onset: not a contact count, release or motion. */
+    XIAO147_RAW_PENDING,
+};
+
+struct xiao147_raw_lobe {
+    uint32_t amplitude;
+    uint16_t native_short_x;
+    uint16_t native_long_y;
+    uint8_t peak_station;
+    uint8_t first_station;
+    uint8_t last_station;
 };
 
 struct xiao147_raw_profile {
@@ -28,6 +40,14 @@ struct xiao147_raw_profile {
     uint16_t valley_permille;
     uint16_t lesser_peak_permille;
     uint8_t significant_peaks;
+    uint8_t valley_station;
+    bool partition_valid;
+    /* Ordered by long-axis position, not relative amplitude. The weakest
+     * valley station is excluded from both support regions. Each significant
+     * lobe is normalised independently, then the two coordinates are averaged
+     * equally: unequal contact strength must not drag the pair centroid.
+     */
+    struct xiao147_raw_lobe lobes[2];
     /* Provisional relative-motion features only. Native x=short axis,
      * y=long axis. Neither is a calibrated absolute physical coordinate.
      * Caller applies its existing native-to-logical four-pose transform.
@@ -74,8 +94,11 @@ struct xiao147_shadow_result {
     bool candidate_right_tap;
     bool cancelled;
     /* Candidate wheel values only. Negated finger delta is the existing
-     * macOS natural-scroll convention; NEVER hand this struct to HID until
-     * count, both-axis mapping and rate have independent hardware validation.
+     * macOS natural-scroll convention. Callers must not emit these hypotheses
+     * in default/daily firmware: count and both-axis coordinates are not
+     * independently validated. Only a separate, explicit and bounded opt-in
+     * experiment may emit them while preserving its fail-closed safeguards.
+     * This portable module itself never calls input/HID interfaces.
      */
     int16_t candidate_wheel;
     int16_t candidate_hwheel;
@@ -86,6 +109,7 @@ struct xiao147_shadow_gesture {
     uint32_t started_ms;
     uint32_t first_release_ms;
     uint32_t one_since_ms;
+    uint32_t pending_since_ms;
     int16_t previous_x;
     int16_t previous_y;
     int16_t start_x;
@@ -101,6 +125,10 @@ struct xiao147_shadow_gesture {
     bool qualified_two;
     bool moving;
     bool tail_one;
+    bool pending;
+    bool association_valid;
+    uint8_t previous_valley;
+    struct xiao147_raw_lobe previous_lobes[2];
 };
 
 void xiao147_shadow_gesture_init(struct xiao147_shadow_gesture *gesture);
@@ -111,14 +139,28 @@ void xiao147_shadow_gesture_cancel(struct xiao147_shadow_gesture *gesture);
  * centroid jumps cancel the WHOLE gesture until two confirmed NONE frames.
  * Two consecutive TWO hypotheses qualify a shadow candidate. An intervening
  * ONE_LOBE before qualification cancels the whole gesture until full lift.
- * A right-tap
- * candidate requires a <=240 ms stationary gesture and real full release.
+ * PENDING is allowed only before any trusted contact, after two real NONE
+ * frames already unblocked the tracker. It emits nothing, starts no tap clock
+ * and is bounded to 100 ms. PENDING after ONE/TWO cancels until full release.
+ * A right-tap candidate requires a <=240 ms stationary gesture and full lift.
  * A short <=60 ms ONE_LOBE lift tail never becomes a left click; longer or
  * rejoined tails cancel. No left-click candidate exists in this interface.
  */
 struct xiao147_shadow_result xiao147_shadow_gesture_observe(
     struct xiao147_shadow_gesture *gesture,
     enum xiao147_raw_hypothesis hypothesis, bool valid,
+    int16_t logical_x, int16_t logical_y, uint8_t orientation, uint32_t now_ms);
+
+/* Production shadow wrapper must use the full-profile API. It validates
+ * disjoint lobe supports, ordered/strong peaks, valley geometry and bounded
+ * per-frame association changes before the legacy shadow transition logic.
+ * Merged, invalid or abruptly swapped partitions cancel the whole gesture.
+ * logical_x/y are the caller's four-pose transform of the equal-weight pair.
+ * The old observe() remains for isolated synthetic state/sign tests only.
+ */
+struct xiao147_shadow_result xiao147_shadow_gesture_observe_profile(
+    struct xiao147_shadow_gesture *gesture,
+    const struct xiao147_raw_profile *profile, bool valid,
     int16_t logical_x, int16_t logical_y, uint8_t orientation, uint32_t now_ms);
 
 #endif

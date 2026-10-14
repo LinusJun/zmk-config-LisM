@@ -1,7 +1,8 @@
 """Actual AXS UART/driver + FAST DIFF engine + shadow morphology integration.
 
-Only Zephyr and physical I/O boundaries are mocked. Experimental morphology
-must remain incapable of HID, even when it produces a candidate tap/scroll.
+Only Zephyr and physical I/O boundaries are mocked. Default shadow morphology
+must remain incapable of HID, even when it produces a candidate tap/scroll;
+the separate opt-in functional experiment is disabled in all cases here.
 These synthetic tests establish safety boundaries, NOT real multi-touch.
 """
 import ast
@@ -182,10 +183,12 @@ static void samples(unsigned count) {
     assert(ordinary_reads==normal&&hid_events==hid&&scheduled_ms==4);
 }
 static void quiet(void) {memset(diff_values,0,sizeof(diff_values));}
-static void two(int ae,int ao,int be,int bo) {
-    quiet();diff_values[2]=(int16_t)ae;diff_values[3]=(int16_t)ao;
-    diff_values[8]=(int16_t)be;diff_values[9]=(int16_t)bo;
+static void two_stations(unsigned a,unsigned b,int ae,int ao,int be,int bo) {
+    assert(a<b&&b<6);quiet();
+    diff_values[2*a]=(int16_t)ae;diff_values[2*a+1]=(int16_t)ao;
+    diff_values[2*b]=(int16_t)be;diff_values[2*b+1]=(int16_t)bo;
 }
+static void two(int ae,int ao,int be,int bo) {two_stations(1,4,ae,ao,be,bo);}
 static void arm(void) {
     quiet();
     for(unsigned i=0;!state.baseline.armed&&i<20;i++)samples(1);
@@ -252,9 +255,17 @@ static void baseline_and_candidates(void) {
     assert(strstr(latest_shadow,"tap=1")&&strstr(latest_shadow,"HID=0"));
 
     two(280,280,280,280);samples(2);
-    two(240,240,320,320);samples(1); /* Long-axis centroid movement. */
+    unsigned scrolls=state.shadow_scrolls;
+    two(240,240,320,320);samples(1); /* Same sites, unequal strength, NOT movement. */
+    assert(state.shadow_scrolls==scrolls&&!state.shadow.moving&&!hid_events);
+    /* Both actual synthetic lobe sites move +1 station. Metadata preserves
+     * ordered association (peak/valley shift <=1); equal strength is not used
+     * as a substitute for spatial movement. USB-left +X -> negative pan. */
+    two_stations(2,5,280,280,280,280);samples(1);
     assert(state.shadow_scrolls>=1&&strstr(latest_shadow,"pan=-")&&!hid_events);
-    two(200,360,200,360);samples(1); /* Short-axis column-ratio movement. */
+    /* Both lobes keep their sites and coherently shift their column ratio.
+     * This synthetic +Y feature -> negative wheel, not hardware calibration. */
+    two_stations(2,5,200,360,200,360);samples(1);
     assert(state.shadow_scrolls>=2&&strstr(latest_shadow,"wheel=-")&&!hid_events);
     quiet();samples(2);assert(state.shadow_taps==1); /* Scroll cancels tap. */
 

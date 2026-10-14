@@ -32,6 +32,52 @@ static bool frame_valid(const int32_t *diff, uint8_t channels)
     return true;
 }
 
+static bool weak_simple_profile(const uint32_t *stations)
+{
+    unsigned peaks = 0;
+    for (unsigned left = 0; left < XIAO147_PROFILE_STATIONS;) {
+        unsigned right = left;
+        uint32_t height = stations[left];
+        while (right + 1U < XIAO147_PROFILE_STATIONS &&
+               stations[right + 1U] == height) {
+            right++;
+        }
+        bool above_left = left == 0 || height > stations[left - 1U];
+        bool above_right = right + 1U == XIAO147_PROFILE_STATIONS ||
+                           height > stations[right + 1U];
+        if (height > 0 && above_left && above_right) {
+            if (right - left + 1U > 3U || ++peaks > 2U) { return false; }
+        }
+        left = right + 1U;
+    }
+    return peaks > 0;
+}
+
+static bool calculate_lobe(const uint32_t *positive,
+                           const uint32_t *stations,
+                           uint8_t first, uint8_t last, uint8_t peak,
+                           struct xiao147_raw_lobe *lobe)
+{
+    if (first > last || last >= XIAO147_PROFILE_STATIONS || peak < first ||
+        peak > last || stations[peak] < PROFILE_MIN_PEAK) {
+        return false; /* Never normalise an unqualified weak peak. */
+    }
+    uint64_t amplitude = 0, weighted = 0, odd_column = 0;
+    for (unsigned i = first; i <= last; i++) {
+        amplitude += stations[i];
+        weighted += (uint64_t)stations[i] * i;
+        odd_column += positive[2U * i + 1U];
+    }
+    if (amplitude < PROFILE_MIN_PEAK || amplitude > UINT32_MAX) { return false; }
+    lobe->amplitude = (uint32_t)amplitude;
+    lobe->native_long_y = (uint16_t)((weighted * 319U) / (amplitude * 5U));
+    lobe->native_short_x = (uint16_t)((odd_column * 171U) / amplitude);
+    lobe->peak_station = peak;
+    lobe->first_station = first;
+    lobe->last_station = last;
+    return true;
+}
+
 bool xiao147_raw_profile_evaluate(const int32_t *diff, uint8_t channels,
                                  const int16_t *baseline,
                                  struct xiao147_raw_profile *profile)
@@ -75,7 +121,10 @@ bool xiao147_raw_profile_evaluate(const int32_t *diff, uint8_t channels,
         return true;
     }
     if (maximum < PROFILE_MIN_PEAK) {
-        return true; /* Weak/near-threshold contact: UNKNOWN, not release. */
+        if (weak_simple_profile(profile->stations)) {
+            profile->hypothesis = XIAO147_RAW_PENDING;
+        }
+        return true; /* Not NONE; no normalised coordinates for weak onset. */
     }
     profile->native_long_y = (uint16_t)((weighted * 319U) / (total * 5U));
     profile->native_short_x = (uint16_t)((odd_column * 171U) / total);
@@ -114,14 +163,36 @@ bool xiao147_raw_profile_evaluate(const int32_t *diff, uint8_t channels,
     uint32_t lesser = a < b ? a : b;
     uint32_t greater = a > b ? a : b;
     uint32_t valley = lesser;
+    unsigned valley_first = peaks[0] + 1U, valley_last = valley_first;
     for (unsigned i = peaks[0] + 1U; i < peaks[1]; i++) {
         if (profile->stations[i] < valley) {
             valley = profile->stations[i];
+            valley_first = valley_last = i;
+        } else if (profile->stations[i] == valley) {
+            valley_last = i;
         }
     }
     profile->valley_permille = (uint16_t)(((uint64_t)valley * 1000U) / lesser);
     profile->lesser_peak_permille = (uint16_t)(((uint64_t)lesser * 1000U) / greater);
     if ((uint64_t)valley * 100U <= (uint64_t)lesser * PROFILE_VALLEY_PERCENT) {
+        /* Select the middle of an equally deep valley plateau. Split supports
+         * stay ordered by physical long axis, never by relative peak strength.
+         */
+        unsigned boundary = (valley_first + valley_last) / 2U;
+        if (profile->stations[boundary] != valley || boundary == 0 ||
+            boundary + 1U >= XIAO147_PROFILE_STATIONS) { return true; }
+        profile->valley_station = (uint8_t)boundary;
+        if (!calculate_lobe(positive, profile->stations, 0, (uint8_t)(boundary - 1U),
+                            peaks[0], &profile->lobes[0]) ||
+            !calculate_lobe(positive, profile->stations, (uint8_t)(boundary + 1U),
+                            XIAO147_PROFILE_STATIONS - 1U, peaks[1], &profile->lobes[1])) {
+            return true;
+        }
+        profile->partition_valid = true;
+        profile->native_long_y = (uint16_t)((profile->lobes[0].native_long_y +
+                                            profile->lobes[1].native_long_y) / 2U);
+        profile->native_short_x = (uint16_t)((profile->lobes[0].native_short_x +
+                                             profile->lobes[1].native_short_x) / 2U);
         profile->hypothesis = XIAO147_RAW_TWO_SEPARATED_LOBES;
     }
     return true;
@@ -210,6 +281,8 @@ void xiao147_shadow_gesture_cancel(struct xiao147_shadow_gesture *gesture)
         gesture->qualified_two = false;
         gesture->moving = false;
         gesture->tail_one = false;
+        gesture->pending = false;
+        gesture->association_valid = false;
         gesture->two_frames = 0;
         gesture->release_frames = 0;
         gesture->remainder_x = gesture->remainder_y = 0;
@@ -243,14 +316,35 @@ struct xiao147_shadow_result xiao147_shadow_gesture_observe(
     gesture->orientation = orientation;
     gesture->have_time = true;
     if (!valid || orientation > 3U ||
-        (unsigned)hypothesis > (unsigned)XIAO147_RAW_UNKNOWN ||
+        (unsigned)hypothesis > (unsigned)XIAO147_RAW_PENDING ||
         hypothesis == XIAO147_RAW_UNKNOWN ||
         time_or_pose_fault || (hypothesis != XIAO147_RAW_NONE &&
+        hypothesis != XIAO147_RAW_PENDING &&
         (logical_x < 0 || logical_x > 319 || logical_y < 0 || logical_y > 319))) {
         xiao147_shadow_gesture_cancel(gesture);
         result.cancelled = true;
         /* Time/pose faults must not drop this frame and then create a click. */
         return result;
+    }
+
+    if (gesture->pending && now_ms - gesture->pending_since_ms >
+        XIAO147_SHADOW_PENDING_MS) {
+        xiao147_shadow_gesture_cancel(gesture);
+        result.cancelled = true;
+        return result;
+    }
+    if (hypothesis == XIAO147_RAW_PENDING) {
+        if (gesture->blocked || gesture->active || gesture->two_frames != 0) {
+            xiao147_shadow_gesture_cancel(gesture);
+            result.cancelled = true;
+            return result;
+        }
+        if (!gesture->pending) {
+            gesture->pending = true;
+            gesture->pending_since_ms = now_ms;
+        }
+        gesture->release_frames = 0;
+        return result; /* No contact count, release, tap clock or motion. */
     }
 
     if (hypothesis == XIAO147_RAW_NONE) {
@@ -270,6 +364,8 @@ struct xiao147_shadow_result xiao147_shadow_gesture_observe(
         gesture->qualified_two = false;
         gesture->moving = false;
         gesture->tail_one = false;
+        gesture->pending = false;
+        gesture->association_valid = false;
         gesture->two_frames = 0;
         gesture->remainder_x = gesture->remainder_y = 0;
         return result;
@@ -282,6 +378,7 @@ struct xiao147_shadow_result xiao147_shadow_gesture_observe(
     }
     gesture->release_frames = 0;
     if (gesture->blocked) { return result; }
+    gesture->pending = false;
     if (!gesture->active) {
         gesture->active = true;
         gesture->started_ms = now_ms;
@@ -343,6 +440,77 @@ struct xiao147_shadow_result xiao147_shadow_gesture_observe(
     gesture->remainder_y = (int16_t)ry;
     if (result.candidate_hwheel != 0 || result.candidate_wheel != 0) {
         gesture->moving = true; /* Any scrolling cancels subsequent tap. */
+    }
+    return result;
+}
+
+static bool partition_valid(const struct xiao147_raw_profile *profile)
+{
+    if (!profile->partition_valid || profile->significant_peaks != 2 ||
+        profile->valley_station == 0 ||
+        profile->valley_station + 1U >= XIAO147_PROFILE_STATIONS ||
+        profile->valley_permille > 400 || profile->lesser_peak_permille < 350) {
+        return false;
+    }
+    for (unsigned i = 0; i < 2; i++) {
+        const struct xiao147_raw_lobe *lobe = &profile->lobes[i];
+        if (lobe->first_station > lobe->last_station ||
+            lobe->last_station >= XIAO147_PROFILE_STATIONS ||
+            lobe->peak_station < lobe->first_station ||
+            lobe->peak_station > lobe->last_station ||
+            profile->stations[lobe->peak_station] < PROFILE_MIN_PEAK ||
+            lobe->amplitude < PROFILE_MIN_PEAK || lobe->native_short_x > 171 ||
+            lobe->native_long_y > 319) { return false; }
+        uint64_t sum = 0;
+        for (unsigned station = lobe->first_station; station <= lobe->last_station; station++) {
+            sum += profile->stations[station];
+        }
+        if (sum != lobe->amplitude) { return false; }
+    }
+    return profile->lobes[0].first_station == 0 &&
+           profile->lobes[0].last_station + 1U == profile->valley_station &&
+           profile->lobes[1].first_station == profile->valley_station + 1U &&
+           profile->lobes[1].last_station == XIAO147_PROFILE_STATIONS - 1U &&
+           profile->lobes[0].peak_station < profile->valley_station &&
+           profile->lobes[1].peak_station > profile->valley_station &&
+           profile->lobes[0].native_long_y < profile->lobes[1].native_long_y;
+}
+
+struct xiao147_shadow_result xiao147_shadow_gesture_observe_profile(
+    struct xiao147_shadow_gesture *gesture,
+    const struct xiao147_raw_profile *profile, bool valid,
+    int16_t logical_x, int16_t logical_y, uint8_t orientation, uint32_t now_ms)
+{
+    enum xiao147_raw_hypothesis hypothesis = profile == NULL ?
+        XIAO147_RAW_UNKNOWN : profile->hypothesis;
+    bool associated = true;
+    if (valid && hypothesis == XIAO147_RAW_TWO_SEPARATED_LOBES) {
+        associated = partition_valid(profile);
+        if (associated && gesture != NULL && gesture->association_valid) {
+            if (magnitude((int)profile->valley_station - gesture->previous_valley) > 1) {
+                associated = false;
+            }
+            for (unsigned i = 0; associated && i < 2; i++) {
+                const struct xiao147_raw_lobe *lobe = &profile->lobes[i];
+                const struct xiao147_raw_lobe *old = &gesture->previous_lobes[i];
+                if (magnitude((int)lobe->peak_station - old->peak_station) > 1 ||
+                    magnitude((int)lobe->native_short_x - old->native_short_x) > JUMP_LIMIT ||
+                    magnitude((int)lobe->native_long_y - old->native_long_y) > JUMP_LIMIT) {
+                    associated = false;
+                }
+            }
+        }
+    }
+    struct xiao147_shadow_result result = xiao147_shadow_gesture_observe(
+        gesture, associated ? hypothesis : XIAO147_RAW_UNKNOWN,
+        valid && profile != NULL && associated, logical_x, logical_y, orientation, now_ms);
+    if (gesture != NULL && !gesture->blocked &&
+        hypothesis == XIAO147_RAW_TWO_SEPARATED_LOBES && associated &&
+        gesture->two_frames != 0) {
+        gesture->association_valid = true;
+        gesture->previous_valley = profile->valley_station;
+        gesture->previous_lobes[0] = profile->lobes[0];
+        gesture->previous_lobes[1] = profile->lobes[1];
     }
     return result;
 }

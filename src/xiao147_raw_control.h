@@ -12,6 +12,7 @@ enum xiao147_raw_command {
     XIAO147_RAW_COMMAND_INFO,
     XIAO147_RAW_COMMAND_START,
     XIAO147_RAW_COMMAND_SHADOW_START,
+    XIAO147_RAW_COMMAND_GESTURE_START,
     XIAO147_RAW_COMMAND_STOP,
     XIAO147_RAW_COMMAND_INVALID,
 };
@@ -49,7 +50,8 @@ xiao147_raw_control_byte(struct xiao147_raw_control *control, uint8_t byte)
         if (!strcmp(control->line, "AXS_RAW_INFO")) { command = XIAO147_RAW_COMMAND_INFO; }
         else if (!strcmp(control->line, "AXS_RAW_STOP")) { command = XIAO147_RAW_COMMAND_STOP; }
         else if ((length == 18 && !memcmp(control->line, "AXS_RAW_START ", 14)) ||
-                 (length == 21 && !memcmp(control->line, "AXS_SHADOW_START ", 17))) {
+                 (length == 21 && !memcmp(control->line, "AXS_SHADOW_START ", 17)) ||
+                 (length == 22 && !memcmp(control->line, "AXS_GESTURE_START ", 18))) {
             uint16_t version = 0;
             bool valid = true;
             size_t offset = length - 4;
@@ -60,7 +62,8 @@ xiao147_raw_control_byte(struct xiao147_raw_control *control, uint8_t byte)
             }
             if (valid) {
                 control->expected_fw = version;
-                command = length == 18 ? XIAO147_RAW_COMMAND_START : XIAO147_RAW_COMMAND_SHADOW_START;
+                command = length == 18 ? XIAO147_RAW_COMMAND_START :
+                    (length == 21 ? XIAO147_RAW_COMMAND_SHADOW_START : XIAO147_RAW_COMMAND_GESTURE_START);
             }
         } else if (length == 0) { command = XIAO147_RAW_COMMAND_NONE; }
     }

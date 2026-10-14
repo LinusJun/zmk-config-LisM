@@ -62,8 +62,11 @@ static void profile_tests(void)
     assert(xiao147_raw_profile_evaluate(two_lobes, 12, NULL, &p));
     assert(p.hypothesis == XIAO147_RAW_TWO_SEPARATED_LOBES &&
            p.significant_peaks == 2 && p.valley_permille <= 400 &&
-           p.lesser_peak_permille >= 350);
+           p.lesser_peak_permille >= 350 && p.partition_valid);
     assert(p.native_short_x <= 171 && p.native_long_y <= 319);
+    assert(p.lobes[0].peak_station < p.valley_station &&
+           p.lobes[1].peak_station > p.valley_station &&
+           p.lobes[0].last_station < p.lobes[1].first_station);
 
     int32_t data[12];
     for (unsigned i = 0; i < 12; i++) { data[i] = 100; }
@@ -78,7 +81,18 @@ static void profile_tests(void)
     assert(p.hypothesis == XIAO147_RAW_UNKNOWN); /* Negative anomaly != release. */
     memset(data, 0, sizeof(data)); data[3] = 21;
     assert(xiao147_raw_profile_evaluate(data, 12, NULL, &p));
-    assert(p.hypothesis == XIAO147_RAW_UNKNOWN); /* Weak signal != release. */
+    assert(p.hypothesis == XIAO147_RAW_PENDING && !p.partition_valid &&
+           p.native_short_x == 0 && p.native_long_y == 0); /* Weak != release. */
+    memset(data, 0, sizeof(data));
+    data[0] = data[4] = data[8] = 21;
+    assert(xiao147_raw_profile_evaluate(data, 12, NULL, &p));
+    assert(p.hypothesis == XIAO147_RAW_UNKNOWN); /* Weak complex three peaks. */
+    for (unsigned i = 0; i < 12; i++) { data[i] = 21; }
+    assert(xiao147_raw_profile_evaluate(data, 12, NULL, &p));
+    assert(p.hypothesis == XIAO147_RAW_UNKNOWN); /* Weak full-width plateau. */
+    memset(data, 0, sizeof(data)); data[3] = 21; data[11] = -81;
+    assert(xiao147_raw_profile_evaluate(data, 12, NULL, &p));
+    assert(p.hypothesis == XIAO147_RAW_UNKNOWN); /* Negative anomaly != PENDING. */
     data[3] = INT32_MAX;
     assert(!xiao147_raw_profile_evaluate(data, 12, NULL, &p) &&
            p.hypothesis == XIAO147_RAW_UNKNOWN);
@@ -165,6 +179,140 @@ static void qualify(struct xiao147_shadow_gesture *g, uint32_t t)
     no_output(step(g, XIAO147_RAW_TWO_SEPARATED_LOBES, 100, 100, 0, t));
     no_output(step(g, XIAO147_RAW_TWO_SEPARATED_LOBES, 100, 100, 0, t + 20));
     assert(g->qualified_two && !g->blocked);
+}
+
+static void pending_tests(void)
+{
+    struct xiao147_shadow_gesture g;
+    struct xiao147_shadow_result r;
+    xiao147_shadow_gesture_init(&g);
+    r = step(&g, XIAO147_RAW_PENDING, 0, 0, 0, 0);
+    assert(r.cancelled && g.blocked && !g.pending);
+    release(&g, 20);
+    no_output(step(&g, XIAO147_RAW_PENDING, 0, 0, 0, 60));
+    no_output(step(&g, XIAO147_RAW_PENDING, 0, 0, 0, 80));
+    assert(g.pending && !g.active && !g.qualified_two && g.started_ms == 0);
+    qualify(&g, 100);
+    assert(!g.pending && g.started_ms == 100); /* No clock during weak onset. */
+    no_output(step(&g, XIAO147_RAW_NONE, 0, 0, 0, 140));
+    assert(step(&g, XIAO147_RAW_NONE, 0, 0, 0, 160).candidate_right_tap);
+
+    xiao147_shadow_gesture_init(&g); release(&g, 0);
+    for (unsigned t = 40; t <= 140; t += 20) {
+        no_output(step(&g, XIAO147_RAW_PENDING, 0, 0, 0, t));
+        assert(g.pending && !g.active && !g.qualified_two);
+    }
+    r = step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 100, 100, 0, 141);
+    assert(r.cancelled && g.blocked && !g.pending); release(&g, 160);
+
+    /* PENDING cannot count as a NONE frame or finish an incomplete release. */
+    xiao147_shadow_gesture_init(&g); release(&g, 0);
+    no_output(step(&g, XIAO147_RAW_PENDING, 0, 0, 0, 40));
+    no_output(step(&g, XIAO147_RAW_NONE, 0, 0, 0, 60));
+    assert(g.release_frames == 1 && g.pending);
+    no_output(step(&g, XIAO147_RAW_PENDING, 0, 0, 0, 80));
+    assert(g.release_frames == 0 && g.pending && !g.active);
+    release(&g, 100); assert(!g.pending);
+
+    xiao147_shadow_gesture_init(&g); release(&g, 0);
+    no_output(step(&g, XIAO147_RAW_ONE_LOBE, 100, 100, 0, 40));
+    assert(step(&g, XIAO147_RAW_PENDING, 0, 0, 0, 60).cancelled);
+    release(&g, 80);
+    no_output(step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 100, 100, 0, 120));
+    assert(step(&g, XIAO147_RAW_PENDING, 0, 0, 0, 140).cancelled);
+    no_output(step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 100, 100, 0, 160));
+    assert(g.blocked && !g.qualified_two); release(&g, 180);
+
+    no_output(step(&g, XIAO147_RAW_PENDING, 0, 0, 0, 220));
+    assert(step(&g, XIAO147_RAW_UNKNOWN, 0, 0, 0, 240).cancelled);
+    release(&g, 260);
+    no_output(step(&g, XIAO147_RAW_PENDING, 0, 0, 0, 300));
+    assert(step(&g, XIAO147_RAW_PENDING, 0, 0, 1, 320).cancelled);
+    xiao147_shadow_gesture_init(&g); release(&g, 0);
+    no_output(step(&g, XIAO147_RAW_PENDING, 0, 0, 0, 40));
+    assert(step(&g, XIAO147_RAW_PENDING, 0, 0, 0, 141).cancelled);
+    xiao147_shadow_gesture_init(&g); release(&g, 0);
+    no_output(step(&g, XIAO147_RAW_PENDING, 0, 0, 0, 40));
+    r = xiao147_shadow_gesture_observe(&g, XIAO147_RAW_PENDING, false, 0, 0, 0, 60);
+    assert(r.cancelled); release(&g, 80);
+}
+
+static struct xiao147_shadow_result profile_step(struct xiao147_shadow_gesture *g,
+    const struct xiao147_raw_profile *p, uint32_t t)
+{
+    struct xiao147_xy xy = xiao147_touch_to_logical(XIAO147_USB_LEFT,
+                                                 p->native_short_x, p->native_long_y);
+    return xiao147_shadow_gesture_observe_profile(g, p, true, xy.x, xy.y,
+                                                XIAO147_USB_LEFT, t);
+}
+
+static void independent_lobe_tests(void)
+{
+    /* Same two isolated footprints, pressure/gain changed independently.
+     * Positive channels are 140/280 in each lobe, then 70/140 vs 168/336.
+     * Their within-lobe ratios and positions are unchanged. A global weighted
+     * centroid would move ~40 long-axis pixels, but equal lobe weighting must
+     * remain stationary. This is a synthetic mechanism test, not calibration.
+     */
+    const int32_t balanced[12] = {20,20,160,300,20,20,20,20,160,300,20,20};
+    const int32_t unequal[12] = {20,20,90,160,20,20,20,20,188,356,20,20};
+    struct xiao147_raw_profile a, b, lifted;
+    assert(xiao147_raw_profile_evaluate(balanced, 12, NULL, &a));
+    assert(xiao147_raw_profile_evaluate(unequal, 12, NULL, &b));
+    assert(xiao147_raw_profile_evaluate(quiet, 12, NULL, &lifted));
+    assert(a.hypothesis == XIAO147_RAW_TWO_SEPARATED_LOBES &&
+           b.hypothesis == XIAO147_RAW_TWO_SEPARATED_LOBES);
+    assert(a.lobes[0].amplitude == 420 && a.lobes[1].amplitude == 420);
+    assert(b.lobes[0].amplitude == 210 && b.lobes[1].amplitude == 504);
+    assert(a.native_long_y == b.native_long_y && a.native_short_x == b.native_short_x);
+    for (unsigned i = 0; i < 2; i++) {
+        assert(a.lobes[i].native_long_y == b.lobes[i].native_long_y &&
+               a.lobes[i].native_short_x == b.lobes[i].native_short_x);
+    }
+    struct xiao147_shadow_gesture g;
+    xiao147_shadow_gesture_init(&g);
+    no_output(profile_step(&g, &lifted, 0)); no_output(profile_step(&g, &lifted, 20));
+    no_output(profile_step(&g, &a, 40)); no_output(profile_step(&g, &a, 60));
+    assert(g.qualified_two && g.association_valid);
+    no_output(profile_step(&g, &b, 80)); no_output(profile_step(&g, &a, 100));
+    assert(!g.moving);
+    no_output(profile_step(&g, &lifted, 120));
+    assert(profile_step(&g, &lifted, 140).candidate_right_tap);
+    assert(!g.association_valid);
+
+    /* Weak second peak is ONE morphology, not forcibly normalised as two. */
+    int32_t weak[12]; memcpy(weak, balanced, sizeof(weak)); weak[2] = 48; weak[3] = 76;
+    assert(xiao147_raw_profile_evaluate(weak, 12, NULL, &b));
+    assert(b.hypothesis == XIAO147_RAW_ONE_LOBE && !b.partition_valid);
+
+    /* Opaque support/ordering validation rejects forged or stale metadata. */
+    for (unsigned corruption = 0; corruption < 5; corruption++) {
+        xiao147_shadow_gesture_init(&g);
+        no_output(profile_step(&g, &lifted, 0)); no_output(profile_step(&g, &lifted, 20));
+        no_output(profile_step(&g, &a, 40)); no_output(profile_step(&g, &a, 60));
+        b = a;
+        if (corruption == 0) { b.partition_valid = false; }
+        if (corruption == 1) { b.lobes[0].amplitude++; }
+        if (corruption == 2) { b.lobes[1].first_station = b.lobes[0].last_station; }
+        if (corruption == 3) { b.lobes[0].native_long_y = b.lobes[1].native_long_y; }
+        if (corruption == 4) { b.stations[b.lobes[0].peak_station] = 79; }
+        struct xiao147_shadow_result r = profile_step(&g, &b, 80);
+        no_output(r); assert(r.cancelled && g.blocked && !g.association_valid);
+        no_output(profile_step(&g, &a, 100)); assert(g.blocked);
+        no_output(profile_step(&g, &lifted, 120)); no_output(profile_step(&g, &lifted, 140));
+    }
+
+    /* Even unchanged aggregate x/y cannot hide a sudden lobe/valley swap. */
+    const int32_t far_a[12] = {220,220,20,20,20,20,220,220,20,20,20,20};
+    const int32_t far_b[12] = {20,20,20,20,220,220,20,20,20,20,220,220};
+    assert(xiao147_raw_profile_evaluate(far_a, 12, NULL, &a));
+    assert(xiao147_raw_profile_evaluate(far_b, 12, NULL, &b));
+    assert(a.partition_valid && b.partition_valid && b.valley_station - a.valley_station == 2);
+    xiao147_shadow_gesture_init(&g); release(&g, 0);
+    no_output(xiao147_shadow_gesture_observe_profile(&g, &a, true, 100, 100, 0, 40));
+    assert(xiao147_shadow_gesture_observe_profile(&g, &b, true, 100, 100, 0, 60).cancelled);
+    release(&g, 80);
+    assert(xiao147_shadow_gesture_observe_profile(&g, NULL, true, 100, 100, 0, 120).cancelled);
 }
 
 static void gesture_tests(void)
@@ -331,9 +479,12 @@ static void actual_scene_replay(void)
 
 int main(void)
 {
-    profile_tests(); baseline_tests(); gesture_tests(); actual_scene_replay();
+    profile_tests(); baseline_tests(); pending_tests(); independent_lobe_tests();
+    gesture_tests(); actual_scene_replay();
     puts("PASS: actual C signed DIFF morphology (4 in-sample scenes only), "
-         "fresh-lift baseline gate, shadow right-tap/natural-scroll signs, "
+         "fresh-lift baseline gate, independently normalised/equal lobes, "
+         "bounded weak onset PENDING, partition association guards, "
+         "shadow right-tap/natural-scroll signs, "
          "two-to-one release tail, uncertainty/gap/pose cancellation, "
          "no left-click API, no HID calls, integer bounds and uptime wrap. "
          "NOT validated arbitrary finger count or physical both-axis mapping.");
