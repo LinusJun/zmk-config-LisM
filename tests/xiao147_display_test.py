@@ -61,9 +61,11 @@ assert "settings_reset" not in test_matrix
 ui = read("src/xiao147_ui.c")
 assert "xiao147_display_layout_ready();" in ui[ui.index("static void create_ui"):ui.index("static void init_retry")]
 assert "usb_powered ? 100 : zmk_battery_state_of_charge()" not in ui
-assert "DONGLE USB" in ui and 'LV_SYMBOL_CHARGE " %u%%"' in ui
+assert 'portrait ? "%s\\nUSB" : "%s USB"' in ui and 'LV_SYMBOL_CHARGE " %u%%"' in ui
 assert "lism_charge_local()" in ui and "xiao147_battery_rings_refresh_charge()" in ui
-assert '(charge.flags & LISM_CHARGE_USB) ? "USB" : "--%"' in ui
+assert 'usb_display ? "USB 100%" : "--%"' in ui
+assert 'battery_known ? charge.percent : usb_display ? 100 : 0' in ui
+assert 'device_charge_icons[row]' in ui and 'lism_charge_level(charge' in ui
 charge_matrix = read("build-charge-peripherals.yaml")
 for peripheral in ("left_4waystick", "right_trackball", "jp19", "circlepad"):
     assert f"artifact-name: lism_{peripheral}\n" in charge_matrix

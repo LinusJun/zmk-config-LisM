@@ -14,6 +14,14 @@ if(CONFIG_LISM_PROSPECTOR_LOCK_INDICATORS OR CONFIG_LISM_XIAO147_TOUCH OR CONFIG
     string(REPLACE "${_battery_hook}"
       "    extern void lism_charge_begin_battery_sample(void);\n    extern void lism_charge_note_battery_sample(int result);\n    lism_charge_begin_battery_sample();\n${_battery_hook}\n    lism_charge_note_battery_sample(rc);"
       _battery_code "${_battery_code}")
+    set(_battery_work_hook "K_WORK_DEFINE(battery_work, zmk_battery_work);")
+    string(FIND "${_battery_code}" "${_battery_work_hook}" _battery_work_pos)
+    if(_battery_work_pos EQUAL -1)
+      message(FATAL_ERROR "Pinned ZMK battery work owner moved")
+    endif()
+    string(REPLACE "${_battery_work_hook}"
+      "${_battery_work_hook}\nvoid lism_charge_request_battery_sample(void) {\n    k_work_submit_to_queue(zmk_workqueue_lowprio_work_q(), &battery_work);\n}\n"
+      _battery_code "${_battery_code}")
     file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/lism_zmk_battery.c" "${_battery_code}")
     set_source_files_properties("${_battery_src}"
       DIRECTORY "${APPLICATION_SOURCE_DIR}" PROPERTIES HEADER_FILE_ONLY ON)

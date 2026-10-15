@@ -1,10 +1,12 @@
 config LISM_CHARGE_TELEMETRY
-    bool "Verified XIAO charger status telemetry"
+    bool "XIAO read-only power and inferred charger status telemetry"
     depends on BT && ZMK_BATTERY_REPORTING
     select GPIO
     help
       Read-only P0.17 charger monitoring for the configured XIAO nRF52840
-      boards. Adds encrypted peripheral telemetry, not a battery protection BMS.
+      boards. USB battery presence is inferred from fresh voltage transitions,
+      never from static voltage alone. Ambiguous USB starts remain unknown.
+      Adds encrypted peripheral telemetry, not a battery protection BMS.
 
 config LISM_PROSPECTOR_LOCK_INDICATORS
     bool "Compact OPERATOR modifiers with Caps/Num Lock indicators"

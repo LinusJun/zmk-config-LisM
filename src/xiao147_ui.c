@@ -93,6 +93,7 @@ static lv_obj_t *device_names[4];
 static lv_obj_t *device_signals[4];
 static lv_obj_t *device_battery_frames[4];
 static lv_obj_t *device_battery_fills[4];
+static lv_obj_t *device_charge_icons[4];
 static lv_obj_t *dongle_battery_bar;
 static lv_obj_t *dongle_battery_label;
 #define DONGLE_BATTERY_SEGMENTS 25
@@ -252,19 +253,26 @@ static void draw_devices(void)
         bool active = row == 0 || copy.connected[source_slot];
         uint8_t level = 0;
         bool known = false;
+        struct lism_charge_state charge = row == 0 ? lism_charge_local() :
+                                                      lism_charge_peripheral(source_slot);
         if (row == 0) {
-            struct lism_charge_state charge = lism_charge_local();
             level = charge.percent;
             known = (charge.flags & LISM_CHARGE_LEVEL_VALID) != 0;
-        } else if (active && copy.seen[source_slot]) {
-            level = copy.battery[source_slot];
-            known = true;
+        } else if (active) {
+            known = lism_charge_level(charge, copy.seen[source_slot],
+                                       copy.battery[source_slot], &level);
         }
         lv_label_set_text(device_names[row], portrait ? short_names[row] : names[row]);
-        if (row == 0 && (lism_charge_local().flags & LISM_CHARGE_USB)) {
-            lv_label_set_text(device_names[row], portrait ? "DONGLE\nUSB" : "DONGLE USB");
+        if (active && (charge.flags & LISM_CHARGE_USB)) {
+            char name[24];
+            snprintf(name, sizeof(name), portrait ? "%s\nUSB" : "%s USB",
+                     portrait ? short_names[row] : names[row]);
+            lv_label_set_text(device_names[row], name);
             lv_obj_set_y(device_names[row], portrait ? 2 : 7);
         }
+        if (active && lism_charge_show_bolt(charge)) {
+            lv_obj_clear_flag(device_charge_icons[row], LV_OBJ_FLAG_HIDDEN);
+        } else { lv_obj_add_flag(device_charge_icons[row], LV_OBJ_FLAG_HIDDEN); }
         char signal_text[12];
         bool has_signal = signal_valid[signal_index] && active;
         if (has_signal) {
@@ -488,7 +496,9 @@ static void redraw(struct k_work *work)
     }
     struct lism_charge_state charge = lism_charge_local();
     bool battery_known = (charge.flags & LISM_CHARGE_LEVEL_VALID) != 0;
-    uint8_t dongle_level = battery_known ? charge.percent : 0;
+    bool usb_display = lism_charge_usb_display(charge);
+    /* Full USB bar is a source indicator, NEVER a fabricated cell reading. */
+    uint8_t dongle_level = battery_known ? charge.percent : usb_display ? 100 : 0;
     lv_bar_set_value(dongle_battery_bar, dongle_level, LV_ANIM_OFF);
     uint32_t dongle_color = battery_known ? xiao147_battery_color(dongle_level) : 0x8295ae;
     lv_obj_set_style_bg_color(dongle_battery_bar, lv_color_hex(dongle_color),
@@ -506,8 +516,13 @@ static void redraw(struct k_work *work)
         snprintf(text, sizeof(text), lism_charge_show_bolt(charge) ?
                  LV_SYMBOL_CHARGE " %u%%" : "%u%%", dongle_level);
     } else {
-        snprintf(text, sizeof(text), "%s", (charge.flags & LISM_CHARGE_USB) ? "USB" : "--%");
+        snprintf(text, sizeof(text), "%s", usb_display ? "USB 100%" : "--%");
     }
+    const lv_font_t *power_font = usb_display ? &lv_font_montserrat_10 : &lv_font_montserrat_12;
+    lv_obj_set_style_text_font(dongle_battery_label, power_font, LV_PART_MAIN);
+    lv_obj_set_height(dongle_battery_label, power_font->line_height);
+    lv_obj_set_y(dongle_battery_label, xiao147_rotation_is_portrait() ?
+        288 + (16 - power_font->line_height) / 2 : 160 + (6 - power_font->line_height) / 2);
     lv_label_set_text(dongle_battery_label, text);
     xiao147_battery_rings_refresh_charge();
     apply_brightness();
@@ -760,6 +775,12 @@ static void create_ui(struct k_work *work)
         lv_obj_set_style_radius(device_battery_fills[i], 1, LV_PART_MAIN);
         lv_obj_set_style_bg_opa(device_battery_fills[i], LV_OPA_COVER, LV_PART_MAIN);
         lv_obj_set_style_pad_all(device_battery_fills[i], 0, LV_PART_MAIN);
+        device_charge_icons[i] = lv_label_create(device_battery_frames[i]);
+        lv_label_set_text(device_charge_icons[i], LV_SYMBOL_CHARGE);
+        lv_obj_set_style_text_font(device_charge_icons[i], &lv_font_montserrat_10, LV_PART_MAIN);
+        lv_obj_set_style_text_color(device_charge_icons[i], lv_color_hex(0xffffff), LV_PART_MAIN);
+        lv_obj_align(device_charge_icons[i], LV_ALIGN_CENTER, 0, 0);
+        lv_obj_add_flag(device_charge_icons[i], LV_OBJ_FLAG_HIDDEN);
         device_signals[i] = make_label(device_cards[i], 49, 7, 65, "--dBm", COLOR_MUTED);
         device_names[i] = make_label(device_cards[i], 125, 7, 165, "", COLOR_TEXT);
     }

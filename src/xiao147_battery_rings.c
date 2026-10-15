@@ -47,8 +47,10 @@ static void render_ring(uint8_t slot) {
 
     const uint8_t source_slot = slot < 2 ? slot : xiao147_active_joystick_slot(connected);
     const bool active = connected[source_slot];
-    const bool known = active && battery_seen[source_slot];
-    const uint8_t level = battery_level[source_slot];
+    struct lism_charge_state charge = lism_charge_peripheral(source_slot);
+    uint8_t level = 0;
+    const bool known = active && lism_charge_level(charge, battery_seen[source_slot],
+                                                   battery_level[source_slot], &level);
     const uint32_t ring_color = active ? 0x505050 : 0x282c30;
     const uint32_t fill_color = known ? xiao147_battery_color(level) : 0x383c42;
 
@@ -69,7 +71,7 @@ static void render_ring(uint8_t slot) {
     lv_obj_set_style_text_color(ring_badge_text[slot],
                                 lv_color_hex(known ? 0x000000 : 0x999999),
                                 LV_PART_MAIN);
-    bool charging = active && lism_charge_show_bolt(lism_charge_peripheral(source_slot));
+    bool charging = active && lism_charge_show_bolt(charge);
     if (charging) { lv_obj_clear_flag(ring_charge[slot], LV_OBJ_FLAG_HIDDEN); }
     else { lv_obj_add_flag(ring_charge[slot], LV_OBJ_FLAG_HIDDEN); }
 }

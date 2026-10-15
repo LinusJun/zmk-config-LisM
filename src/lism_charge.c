@@ -13,6 +13,7 @@
 #include <zmk/battery.h>
 #include <hal/nrf_power.h>
 #include "lism_charge.h"
+#include "lism_battery_presence.h"
 
 #define CHARGE_SERVICE_UUID BT_UUID_128_ENCODE(0xf4f64a90, 0x712a, 0x4e2e, 0xa275, 0x64809f58e101)
 #define CHARGE_STATE_UUID BT_UUID_128_ENCODE(0xf4f64a91, 0x712a, 0x4e2e, 0xa275, 0x64809f58e101)
@@ -20,6 +21,7 @@ static struct bt_uuid_128 state_uuid = BT_UUID_INIT_128(CHARGE_STATE_UUID);
 static const struct device *const charge_port = DEVICE_DT_GET(DT_NODELABEL(gpio0));
 K_MUTEX_DEFINE(charge_lock);
 static struct lism_charge_filter local_filter;
+static struct lism_battery_presence presence;
 static bool gpio_ready;
 static bool battery_sample_valid;
 static uint8_t battery_sample_percent;
@@ -28,14 +30,18 @@ static bool power_seen, power_usb, power_settling;
 static uint32_t power_changed_at;
 static uint32_t power_epoch, fetch_epoch;
 static bool fetch_pending, fetch_started_settled;
+static uint32_t last_adc_request_at;
+extern void lism_charge_request_battery_sample(void);
 
 /* charge_lock held. A physical source transition invalidates the old ADC
  * result, including an unplug/replug seen before the next battery-worker run.
  * This is telemetry hygiene, NOT battery detection or charger control. */
 static void observe_power_locked(bool usb, uint32_t now) {
-    if (power_seen && power_usb != usb) {
+    lism_presence_source(&presence, usb, now);
+    if (!power_seen || power_usb != usb) {
         battery_sample_valid = false;
-        local_filter.state.flags &= ~(LISM_CHARGE_LEVEL_VALID | LISM_CHARGE_STAT_ACTIVE);
+        local_filter.state = (struct lism_charge_state){
+            .flags = LISM_CHARGE_OBSERVED | (usb ? LISM_CHARGE_USB : 0)};
         local_filter.low_samples = 0;
         power_changed_at = now;
         power_settling = true;
@@ -66,7 +72,7 @@ void lism_charge_note_battery_sample(int result) {
     bool valid = result == 0 && device_is_ready(battery) &&
         sensor_channel_get(battery, SENSOR_CHAN_GAUGE_VOLTAGE, &voltage) == 0;
     int32_t mv = valid ? voltage.val1 * 1000 + voltage.val2 / 1000 : 0;
-    valid = valid && mv >= 2800 && mv <= 4350;
+    valid = valid && mv >= 2800 && mv <= 4300;
     k_mutex_lock(&charge_lock, K_FOREVER);
     uint32_t now = k_uptime_get_32();
     observe_power_locked(nrf_power_usbregstatus_vbusdet_get(NRF_POWER), now);
@@ -75,10 +81,17 @@ void lism_charge_note_battery_sample(int result) {
     valid = valid && fetch_pending && fetch_epoch == power_epoch && fetch_started_settled;
     fetch_pending = false;
     if (valid) { power_settling = false; }
+    /* Never process an epoch-mismatched or unsettled reading as evidence. */
+    if (fetch_started_settled && fetch_epoch == power_epoch) {
+        lism_presence_sample(&presence, now, valid, mv);
+    }
     battery_sample_valid = valid;
     battery_sample_percent = zmk_battery_state_of_charge();
     battery_sample_at = now;
-    if (!valid) { local_filter.state.flags &= ~LISM_CHARGE_LEVEL_VALID; }
+    if (!valid || !presence.present) {
+        local_filter.state.flags &= ~(LISM_CHARGE_LEVEL_VALID |
+            LISM_CHARGE_BATTERY_CONFIRMED | LISM_CHARGE_BATTERY_INFERRED);
+    }
     k_mutex_unlock(&charge_lock);
 }
 
@@ -92,7 +105,13 @@ struct lism_charge_state lism_charge_local(void) {
     if (usb) { s.flags |= LISM_CHARGE_USB; }
     else { s.flags &= ~(LISM_CHARGE_USB | LISM_CHARGE_STAT_ACTIVE); }
     if (!gpio_ready || k_uptime_get_32() - local_filter.sampled_at > 1500) {
-        s = (struct lism_charge_state){.flags = usb ? LISM_CHARGE_USB : 0};
+        s = (struct lism_charge_state){.flags = LISM_CHARGE_OBSERVED |
+            (usb ? LISM_CHARGE_USB : 0)};
+    }
+    uint32_t ttl = usb ? 3500U : CONFIG_ZMK_BATTERY_REPORT_INTERVAL * 1000U + 5000U;
+    if (!battery_sample_valid || k_uptime_get_32() - battery_sample_at > ttl) {
+        s.flags &= ~(LISM_CHARGE_LEVEL_VALID | LISM_CHARGE_BATTERY_CONFIRMED |
+                     LISM_CHARGE_BATTERY_INFERRED);
     }
     k_mutex_unlock(&charge_lock);
     return s;
@@ -104,19 +123,23 @@ static void sample_charge(struct k_work *work) {
     ARG_UNUSED(work);
     /* Physical VBUS also covers wall chargers without USB enumeration and
      * split peripherals without the USB stack. Read-only: no power controls. */
-    /* One image for both sources. VBUS and CHG do not provide independent
-     * battery-switch/contact feedback. Plausible USB-powered BAT voltage is
-     * not presence/current evidence. Never cache an earlier battery session
-     * as a declaration after USB insertion. */
+    /* USB sampling requests go to the existing sole battery work item, not
+     * another ADC reader. This keeps touch/IMU work free of ADC sleeps. */
     k_mutex_lock(&charge_lock, K_FOREVER);
     bool usb = nrf_power_usbregstatus_vbusdet_get(NRF_POWER);
     int stat = gpio_ready ? gpio_pin_get_raw(charge_port, 17) : -ENODEV;
     observe_power_locked(usb, k_uptime_get_32());
-    bool valid = battery_sample_valid && k_uptime_get_32() - battery_sample_at <=
-        CONFIG_ZMK_BATTERY_REPORT_INTERVAL * 1000U + 5000U;
-    lism_charge_observe(&local_filter, k_uptime_get_32(), usb, stat, !usb && valid,
-                        !usb && valid, battery_sample_percent);
+    uint32_t now = k_uptime_get_32();
+    bool valid = battery_sample_valid && now - battery_sample_at <=
+        (usb ? 3500U : CONFIG_ZMK_BATTERY_REPORT_INTERVAL * 1000U + 5000U);
+    if (!valid && !power_settling) { lism_presence_invalidate(&presence); }
+    bool known = valid && presence.present;
+    lism_charge_observe(&local_filter, now, usb, stat, known, known, battery_sample_percent);
+    bool request_adc = (usb || now - power_changed_at < 5000U) &&
+                       now - last_adc_request_at >= 1000U;
+    if (request_adc) { last_adc_request_at = now; }
     k_mutex_unlock(&charge_lock);
+    if (request_adc) { lism_charge_request_battery_sample(); }
     k_work_reschedule(&charge_sample_work, K_MSEC(250));
 }
 
@@ -139,7 +162,7 @@ extern int peripheral_slot_index_for_conn(struct bt_conn *conn);
 struct charge_peer {
     struct bt_conn *conn; /* Own one reference until no request is pending. */
     struct bt_gatt_read_params read;
-    bool pending, valid;
+    bool pending, valid, observed;
     struct lism_charge_state state;
     uint32_t sampled_at, next_at, requested_at;
 };
@@ -161,8 +184,12 @@ struct lism_charge_state lism_charge_peripheral(uint8_t slot) {
     if (slot >= ARRAY_SIZE(peers)) { return s; }
     k_mutex_lock(&peers_lock, K_FOREVER);
     struct charge_peer *p = &peers[slot];
-    if (p->valid && k_uptime_get_32() - p->sampled_at < LISM_CHARGE_STALE_MS &&
-        matching_peer(p->conn, slot)) { s = p->state; }
+    if (matching_peer(p->conn, slot)) {
+        if (p->observed) { s.flags = LISM_CHARGE_OBSERVED; }
+        if (p->valid && k_uptime_get_32() - p->sampled_at < LISM_CHARGE_STALE_MS) {
+            s = p->state;
+        }
+    }
     k_mutex_unlock(&peers_lock);
     return s;
 }
@@ -177,7 +204,7 @@ static uint8_t charge_read_done(struct bt_conn *conn, uint8_t err,
     p->valid = !err && k_uptime_get_32() - p->requested_at <= 5000 &&
         p->conn == conn && matching_peer(conn, slot) &&
         lism_charge_decode(data, len, &s);
-    if (p->valid) { p->state = s; p->sampled_at = k_uptime_get_32(); }
+    if (p->valid) { p->observed = true; p->state = s; p->sampled_at = k_uptime_get_32(); }
     /* Old firmware/no service is not an error loop. Retry after one minute. */
     p->next_at = k_uptime_get_32() + (p->valid ? 3000 : 60000);
     p->pending = false;

@@ -16,10 +16,10 @@ prelude = r'''
 #include <errno.h>
 #include <sys/types.h>
 #include "lism_charge.h"
+#include "lism_battery_presence.h"
 #define IS_ENABLED(x) (x)
 #define CONFIG_ZMK_SPLIT_ROLE_CENTRAL CENTRAL
 #define CONFIG_LISM_XIAO147_TOUCH CENTRAL
-#define INSTALLED 0 /* unified firmware cannot prove USB battery presence */
 #define CONFIG_APPLICATION_INIT_PRIORITY 90
 #define CONFIG_ZMK_BATTERY_REPORT_INTERVAL 60
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
@@ -57,6 +57,8 @@ static int k_work_schedule_for_queue(struct k_work_q*q,struct k_work_delayable*w
 static int k_work_reschedule(struct k_work_delayable *w,int t) {(void)w;(void)t;return 0;}
 static int k_work_schedule(struct k_work_delayable *w,int t) {(void)w;(void)t;return 0;}
 static uint32_t now;
+static unsigned adc_requests;
+void lism_charge_request_battery_sample(void) { adc_requests++; }
 static uint32_t k_uptime_get_32(void) {return now;}
 static bool usb=true,ready=true;
 static int stat=1,config_calls,voltage_mv=3800,voltage_error,battery_percent=80;
@@ -128,59 +130,134 @@ tests = r'''
 static void battery_fetch(int result) {
  lism_charge_begin_battery_sample();lism_charge_note_battery_sample(result);
 }
+/* Distinct 1s ADC completions; STAT/UI samples cannot manufacture evidence. */
+static void sample_mv(int mv) {
+ for(int i=0;i<3;i++){now+=250;sample_charge(NULL);}
+ now+=250;voltage_mv=mv;battery_fetch(0);sample_charge(NULL);
+}
+static void reset_local(bool source) {
+ local_filter=(struct lism_charge_filter){0};
+ presence=(struct lism_battery_presence){0};
+ battery_sample_valid=false;power_seen=false;power_settling=false;
+ fetch_pending=false;power_epoch=0;last_adc_request_at=0;
+ usb=source;stat=0;voltage_error=0;now=1000;
+ sample_charge(NULL);
+}
+static void establish_usb_step(void) {
+ for(int i=0;i<5;i++)sample_mv(4150);
+ for(int i=0;i<4;i++)sample_mv(3850);
+ for(int i=0;i<4;i++){now+=250;sample_charge(NULL);}
+ assert(lism_charge_show_bolt(lism_charge_local()));
+ assert(lism_charge_local().flags&LISM_CHARGE_BATTERY_INFERRED);
+ assert(!(lism_charge_local().flags&LISM_CHARGE_BATTERY_CONFIRMED));
+}
 static void power_transition_tests(void) {
- now=20000;usb=true;stat=0;voltage_error=0;voltage_mv=3800;
- battery_fetch(0);
- for(unsigned i=0;i<4;i++){sample_charge(NULL);now+=250;}
- assert((bool)lism_charge_show_bolt(lism_charge_local())==(bool)INSTALLED);
- /* A read must suppress stale charging before the sampler gets CPU time. */
+ reset_local(true);
+ /* Static 3.8V/CHG LOW is ambiguous, not 80% or charging. */
+ for(int i=0;i<8;i++)sample_mv(3800);
+ assert(lism_charge_usb_display(lism_charge_local()));
+ assert(!lism_charge_show_bolt(lism_charge_local()));
+ reset_local(true);establish_usb_step();
+ assert(adc_requests);
+ stat=1;sample_charge(NULL);assert(!lism_charge_show_bolt(lism_charge_local()));
+ stat=-EIO;sample_charge(NULL);assert(!lism_charge_show_bolt(lism_charge_local()));
+ stat=0;
+ for(int i=0;i<4;i++){now+=250;sample_charge(NULL);}
+ assert(lism_charge_show_bolt(lism_charge_local()));
+ /* Voltage-derived 100% is NOT charge termination. */
+ battery_percent=100;sample_mv(3900);
+ assert(lism_charge_show_bolt(lism_charge_local()));
+ stat=1;sample_charge(NULL);assert(!lism_charge_show_bolt(lism_charge_local()));
+ assert(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID);
+ /* OFF/removal jump invalidates even with STAT stuck LOW. */
+ stat=0;sample_mv(4150);
+ assert(lism_charge_usb_display(lism_charge_local()));
+ assert(!lism_charge_show_bolt(lism_charge_local()));
+ reset_local(true);establish_usb_step();
+ /* An extra timer-driven ADC completion must veto, even within 500 ms. */
+ sample_mv(3850);now+=250;voltage_mv=4000;battery_fetch(0);sample_charge(NULL);
+ assert(!lism_charge_show_bolt(lism_charge_local()));
+ assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
+ reset_local(true);establish_usb_step();
+ battery_fetch(-EIO);
+ assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
+ sample_mv(3850);assert(!lism_charge_show_bolt(lism_charge_local()));
+ reset_local(true);establish_usb_step();
+ now+=3501;sample_charge(NULL);
+ assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
+ assert(!lism_charge_show_bolt(lism_charge_local()));
+ reset_local(true);establish_usb_step();
+ /* USB loss is immediately visible before the sampling worker executes. */
  usb=false;struct lism_charge_state s=lism_charge_local();
  assert(!(s.flags&(LISM_CHARGE_USB|LISM_CHARGE_STAT_ACTIVE|LISM_CHARGE_LEVEL_VALID)));
- sample_charge(NULL);battery_fetch(0);sample_charge(NULL);
- assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
  now+=999;battery_fetch(0);sample_charge(NULL);
  assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
  now++;battery_fetch(0);sample_charge(NULL);
- assert(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID);
+ assert(lism_charge_local().flags&LISM_CHARGE_BATTERY_CONFIRMED);
  assert(!lism_charge_show_bolt(lism_charge_local()));
- /* The battery-only ADC result must not be reused after USB insertion. */
- usb=true;s=lism_charge_local();
- assert((s.flags&LISM_CHARGE_USB)&&!(s.flags&LISM_CHARGE_LEVEL_VALID));
- now+=1001;sample_charge(NULL);
+ /* Handoff is INFERRED only after fresh, settled USB voltage, not cached %. */
+ usb=true;(void)lism_charge_local();
  assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
- battery_fetch(0);
- for(unsigned i=0;i<4;i++){sample_charge(NULL);now+=250;}
- assert((bool)lism_charge_show_bolt(lism_charge_local())==(bool)INSTALLED);
- /* Unplug/replug observed entirely between ADC fetches still invalidates. */
- usb=false;(void)lism_charge_local();usb=true;(void)lism_charge_local();
- now+=1001;sample_charge(NULL);
- assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
- /* 100% is only an estimate: it neither changes pins nor overrides STAT. */
- battery_percent=100;battery_fetch(0);
- for(unsigned i=0;i<4;i++){sample_charge(NULL);now+=250;}
- assert((bool)lism_charge_show_bolt(lism_charge_local())==(bool)INSTALLED);
- stat=1;sample_charge(NULL);assert(!lism_charge_show_bolt(lism_charge_local()));
- assert(config_calls==CENTRAL); /* no runtime charger-control writes */
- /* Bad voltage is unknown, not an automatic 'full' or 'battery inserted'. */
- stat=0;voltage_mv=4351;battery_fetch(0);sample_charge(NULL);
- assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
- voltage_mv=1600;battery_fetch(0);sample_charge(NULL);
- assert(!lism_charge_show_bolt(lism_charge_local()));
- voltage_mv=3800;battery_percent=80;
- /* Old-source fetch completes after a long preemption and must stay invalid. */
+ for(int i=0;i<4;i++)sample_mv(3870);
+ assert(lism_charge_show_bolt(lism_charge_local()));
+ assert(lism_charge_local().flags&LISM_CHARGE_BATTERY_INFERRED);
+ /* A source transition during fetch and settling-started fetch are rejected. */
  lism_charge_begin_battery_sample();usb=false;(void)lism_charge_local();
  now+=2000;lism_charge_note_battery_sample(0);sample_charge(NULL);
  assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
  battery_fetch(0);sample_charge(NULL);
  assert(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID);
- /* A fetch started during settling cannot become valid just by completing late. */
  usb=true;lism_charge_begin_battery_sample();now+=2000;
  lism_charge_note_battery_sample(0);sample_charge(NULL);
  assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
- battery_fetch(0);sample_charge(NULL);
- assert((bool)(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID)==(bool)INSTALLED);
- now+=2000;
- assert(lism_charge_local().flags == (usb ? LISM_CHARGE_USB : 0));
+ reset_local(true);establish_usb_step();
+ voltage_error=-EIO;battery_fetch(0);
+ assert(!lism_charge_show_bolt(lism_charge_local()));
+ voltage_error=0;sample_mv(4301);
+ assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
+ sample_mv(1600);assert(!lism_charge_show_bolt(lism_charge_local()));
+ assert(config_calls==CENTRAL); /* no charger-control writes */
+}
+static void presence_tests(void) {
+ struct lism_battery_presence p={0};
+ lism_presence_source(&p,true,0);
+ /* Cached/too-fast repeated readings cannot qualify. */
+ for(int i=0;i<10;i++)lism_presence_sample(&p,1000,true,4150);
+ assert(p.stable_count==1&&!p.reference_valid);
+ for(unsigned t=2000;t<=4000;t+=1000)lism_presence_sample(&p,t,true,4150);
+ assert(p.reference_valid&&!p.present);
+ lism_presence_sample(&p,5000,true,4001);assert(!p.candidate);
+ /* 149mV or a slow ramp is not an insertion step. */
+ for(unsigned t=6000;t<=12000;t+=1000)lism_presence_sample(&p,t,true,4001-(t-6000)/100);
+ assert(!p.present);
+ p=(struct lism_battery_presence){0};lism_presence_source(&p,true,0);
+ for(unsigned t=1000;t<=4000;t+=1000)lism_presence_sample(&p,t,true,4150);
+ for(unsigned t=5000;t<=8000;t+=1000)lism_presence_sample(&p,t,true,4000);
+ assert(p.present&&p.inferred); /* 150mV exactly: inference, not proof */
+ for(unsigned t=9000;t<=15000;t+=1000)lism_presence_sample(&p,t,true,4000+(t-8000)/100);
+ assert(p.present);
+ lism_presence_sample(&p,16000,true,4200);assert(!p.present);
+ /* No noisy candidate hold, invalid ADC, no low-voltage recovery shortcut. */
+ lism_presence_sample(&p,17000,true,1600);
+ for(unsigned t=18000;t<=25000;t+=1000)lism_presence_sample(&p,t,true,3800);
+ assert(!p.present);
+ lism_presence_sample(&p,26000,false,3800);assert(!p.have_sample);
+ p=(struct lism_battery_presence){0};lism_presence_source(&p,true,0);
+ for(unsigned t=1000;t<=4000;t+=1000)lism_presence_sample(&p,t,true,4150);
+ lism_presence_sample(&p,5000,true,3850);assert(p.candidate);
+ lism_presence_sample(&p,5250,true,3950);assert(!p.candidate&&!p.present);
+ p=(struct lism_battery_presence){0};lism_presence_source(&p,false,0);
+ lism_presence_sample(&p,1000,true,3900);assert(p.present);
+ lism_presence_source(&p,true,1100);
+ lism_presence_sample(&p,2100,true,3979);assert(p.candidate_handoff);
+ lism_presence_sample(&p,3100,true,4008);assert(!p.present&&!p.candidate);
+ /* Same logic across uptime wrap. */
+ p=(struct lism_battery_presence){0};
+ uint32_t base=UINT32_MAX-2500;lism_presence_source(&p,true,base);
+ for(unsigned i=1;i<=4;i++)lism_presence_sample(&p,base+i*1000U,true,4150);
+ for(unsigned i=5;i<=8;i++)lism_presence_sample(&p,base+i*1000U,true,3850);
+ assert(p.present&&p.inferred);
+ lism_presence_sample(&p,base+12000U,true,3850);assert(!p.present);
 }
 static void policy_tests(void) {
  struct lism_charge_filter f={0};struct lism_charge_state s;
@@ -193,12 +270,19 @@ static void policy_tests(void) {
  assert(lism_charge_show_bolt(f.state));
  lism_charge_observe(&f,4000,true,0,true,true,80);assert(!lism_charge_show_bolt(f.state));
  lism_charge_observe(&f,4250,false,0,true,true,80);assert(!(f.state.flags&LISM_CHARGE_STAT_ACTIVE));
- uint8_t wire[]={1,31,80,0};assert(lism_charge_decode(wire,4,&s)&&lism_charge_show_bolt(s));
+ uint8_t wire[]={2,111,80,0};assert(lism_charge_decode(wire,4,&s)&&lism_charge_show_bolt(s));
  for(unsigned n=0;n<4;n++)assert(!lism_charge_decode(wire,n,&s)&&!s.flags);
- assert(!lism_charge_decode(wire,5,&s));wire[0]=2;assert(!lism_charge_decode(wire,4,&s));
- wire[0]=1;wire[1]=128;assert(!lism_charge_decode(wire,4,&s));
- wire[1]=4;assert(!lism_charge_decode(wire,4,&s));wire[1]=31;wire[2]=101;
+ assert(!lism_charge_decode(wire,5,&s));wire[0]=1;assert(!lism_charge_decode(wire,4,&s));
+ wire[0]=2;wire[1]=128;assert(!lism_charge_decode(wire,4,&s));
+ wire[1]=4;assert(!lism_charge_decode(wire,4,&s));wire[1]=111;wire[2]=101;
  assert(!lism_charge_decode(wire,4,&s));wire[2]=80;wire[3]=1;assert(!lism_charge_decode(wire,4,&s));
+ wire[3]=0;wire[1]=95;assert(!lism_charge_decode(wire,4,&s)); /* USB cannot be confirmed */
+ wire[1]=104;assert(!lism_charge_decode(wire,4,&s)); /* inference requires USB */
+ uint8_t level=0;
+ assert(lism_charge_level((struct lism_charge_state){0},true,55,&level)&&level==55);
+ assert(!lism_charge_level((struct lism_charge_state){.flags=65},true,55,&level));
+ assert(lism_charge_usb_display((struct lism_charge_state){.flags=65}));
+ assert(!lism_charge_usb_display((struct lism_charge_state){.flags=111,.percent=80}));
 }
 #if CENTRAL
 static void reply(unsigned index,uint8_t err,const void *wire,unsigned len) {
@@ -212,11 +296,11 @@ static void client_tests(void) {
  connections[2]=(struct bt_conn){.slot=2,.role=1,.security=2,.connected=true};
  connections[3]=(struct bt_conn){.slot=3,.security=2,.connected=true};
  now=5000;poll_charges(NULL);assert(read_calls==2&&pending[0]&&pending[3]);
- uint8_t wire[]={1,31,80,0};reply(0,0,wire,4);reply(3,10,NULL,0); /* old firmware */
+ uint8_t wire[]={2,111,80,0};reply(0,0,wire,4);reply(3,10,NULL,0); /* old firmware */
  assert(lism_charge_show_bolt(lism_charge_peripheral(0))&&!lism_charge_peripheral(3).flags);
  now+=3000;poll_charges(NULL);assert(read_calls==3&&pending[0]&&!pending[3]);
  /* Timeout expires UI but never recycles an active parameter structure. */
- now+=11000;poll_charges(NULL);assert(read_calls==3&&!lism_charge_peripheral(0).flags);
+ now+=11000;poll_charges(NULL);assert(read_calls==3&&!(lism_charge_peripheral(0).flags&LISM_CHARGE_LEVEL_VALID));
  connections[0].connected=false;lism_charge_connections.disconnected(&connections[0],1);
  connections[4]=(struct bt_conn){.slot=0,.security=2,.connected=true};
  poll_charges(NULL);assert(!pending[4]&&connections[0].refs==1);
@@ -226,7 +310,7 @@ static void client_tests(void) {
  /* Wrong slot after request, malformed data, query failure all fail closed. */
  now+=3000;poll_charges(NULL);connections[4].slot=1;reply(4,0,wire,4);
  assert(!lism_charge_peripheral(0).flags);poll_charges(NULL);reply(4,0,wire,3);
- assert(!lism_charge_peripheral(1).flags);
+ assert(!(lism_charge_peripheral(1).flags&LISM_CHARGE_LEVEL_VALID));
  now+=60001;read_error=-ENOMEM;poll_charges(NULL);assert(!peers[1].pending&&!peers[1].valid);
  read_error=0;now+=3000;poll_charges(NULL);reply(4,0,wire,4);
  assert(lism_charge_show_bolt(lism_charge_peripheral(1)));
@@ -236,29 +320,18 @@ static void client_tests(void) {
 }
 #endif
 int main(void) {
- policy_tests();assert(charge_init()==0);assert(config_calls==CENTRAL);
- stat=0;now=5000;battery_fetch(0);
- for(unsigned i=0;i<4;i++){sample_charge(NULL);now+=250;}
- struct lism_charge_state s=lism_charge_local();
- assert((bool)lism_charge_show_bolt(s)==(bool)INSTALLED);
- /* Real upstream failure leaves cached voltage intact: observer still clears it. */
- battery_fetch(-EIO);sample_charge(NULL);
- assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
- battery_fetch(0);sample_charge(NULL);
- assert((bool)lism_charge_show_bolt(lism_charge_local())==(bool)INSTALLED);
- now+=65001;sample_charge(NULL);assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
- voltage_error=-EIO;battery_fetch(0);sample_charge(NULL);
- assert(!lism_charge_show_bolt(lism_charge_local()));
- voltage_error=0;now+=2000;assert(lism_charge_local().flags == (usb ? LISM_CHARGE_USB : 0));
+ policy_tests();presence_tests();assert(charge_init()==0);
  power_transition_tests();
 #if CENTRAL
  client_tests();
 #else
+ reset_local(true);establish_usb_step();
  uint8_t wire[4];assert(lism_charge_service[1]==BT_GATT_PERM_READ_ENCRYPT);
- assert(read_charge(NULL,NULL,wire,4,0)==4&&wire[0]==1&&wire[1]==LISM_CHARGE_USB);
+ assert(read_charge(NULL,NULL,wire,4,0)==4&&wire[0]==2);
+ struct lism_charge_state s;assert(lism_charge_decode(wire,4,&s)&&lism_charge_show_bolt(s));
  assert(read_charge(NULL,NULL,wire,4,5)<0);
 #endif
- puts("PASS: charge filtering, no-battery policy, stale server, encrypted service and asynchronous peer lifecycle");
+ puts("PASS: fresh dynamic inference, unknown USB, removal/errors/stale, v2 encrypted peer lifecycle");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='lism-charge-') as tmp:
