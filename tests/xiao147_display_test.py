@@ -73,7 +73,11 @@ assert "BATTERY_CONNECTED" not in charge_matrix + test_matrix + read("Kconfig")
 assert "battery_connected" not in charge_matrix + test_matrix
 assert charge_matrix.count("artifact-name:") == 4
 combined = read("build-xiao147-charge.yaml").split("include:\n", 1)[1]
-assert combined == test_matrix.split("include:\n", 1)[1] + charge_matrix.split("include:\n", 1)[1]
+reset_target = ("  - board: xiao_ble//zmk\n"
+                "    shield: settings_reset\n"
+                "    artifact-name: settings_reset-xiao_ble-zmk\n")
+assert combined == test_matrix.split("include:\n", 1)[1] + charge_matrix.split("include:\n", 1)[1] + reset_target
+assert combined.count("artifact-name:") == 6
 workflow = read(".github/workflows/display-test.yml")
 assert workflow.count("uses: zmkfirmware/zmk/.github/workflows/build-user-config.yml@") == 1
 assert "build_matrix_path: build-xiao147-charge.yaml" in workflow
