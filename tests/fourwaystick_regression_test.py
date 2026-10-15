@@ -21,10 +21,10 @@ keymap = read("config/lism.keymap")
 for m in re.finditer(r"(default_layer|layer_\d+)\s*\{.*?bindings\s*=\s*<(.*?)>;", keymap, re.S):
     layers[m[1]] = [" ".join(x.split()) for x in re.findall(r"&[A-Za-z_]\w*[^&]*", m[2])]
 expected = [
+    ["&kp UP", "&kp RIGHT", "&kp DOWN", "&kp LEFT"],
+    ["&kp LEFT_SHIFT", "&kp LEFT_GUI", "&kp LEFT_CONTROL", "&kp LEFT_ALT"],
     ["&stick_scroll MOVE_Y(-LISM_4WAY_SCROLL_SPEED)", "&stick_scroll MOVE_X(-LISM_4WAY_SCROLL_SPEED)",
      "&stick_scroll MOVE_Y(LISM_4WAY_SCROLL_SPEED)", "&stick_scroll MOVE_X(LISM_4WAY_SCROLL_SPEED)"],
-    ["&kp LEFT_SHIFT", "&kp LEFT_GUI", "&kp LEFT_CONTROL", "&kp LEFT_ALT"],
-    ["&kp UP", "&kp RIGHT", "&kp DOWN", "&kp LEFT"],
     ["&kp LEFT_SHIFT", "&kp LEFT_GUI", "&kp LEFT_CONTROL", "&kp LEFT_ALT"],
     ["&trans"] * 4,
     ["&kp W", "&kp D", "&kp S", "&kp A"],
@@ -113,4 +113,16 @@ assert "lism_right_peripheral_trackball" in build
 assert not re.search(r"artifact-name:.*(?:adc_logging|diagnostic)", build)
 dongle = read("boards/shields/lism/lism_dongle.overlay")
 assert '&trackball_split_listener { status = "disabled"; };' in dongle
-print(f"PASS: {count} unique positions, validated four-way mappings on layers 0/1/2/3/5, stock GPIO order, right trackball and previous devices unchanged")
+right = dongle.split('&trackball_split_listener_right {', 1)[1]
+nav = re.search(r'\bscroller\s*\{(.*?)\};', right, re.S)[1]
+device = re.search(r'\bdevice_scroll\s*\{(.*?)\};', right, re.S)[1]
+mark = re.search(r'\bscrolloriginal\s*\{(.*?)\};', right, re.S)[1]
+assert re.search(r'layers\s*=\s*<2>', nav)
+assert '<&zip_scroll_x_scaler 0 1>' in nav
+assert re.search(r'layers\s*=\s*<4>', device)
+assert re.findall(r'<&([^>]+)>', device) == [
+    'zip_zxy', 'zip_xy_to_scroll_mapper',
+    'zip_scroll_transform INPUT_TRANSFORM_Y_INVERT',
+    'zip_xy_scaler 1 16', 'zip_scroll_scaler 1 16']
+assert re.search(r'layers\s*=\s*<3>', mark) and '<&zip_scroll_y_scaler 0 1>' in mark
+print(f"PASS: {count} unique positions; Base arrows, NAV held natural scroll; DEVICE right trackball both axes; NAV/Mark trackball locks and remaining bindings preserved")

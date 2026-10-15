@@ -21,6 +21,11 @@
 #include "xiao147_ui.h"
 #include "xiao147_rotation.h"
 
+#ifdef CONFIG_LISM_XIAO147_AUTO_TOUCH
+#include <string.h>
+#include "xiao147_auto_touch.h"
+#endif
+
 #ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
 #include <stdio.h>
 #include <string.h>
@@ -84,6 +89,10 @@ struct axs_touch_data {
     uint32_t extended_failures;
     uint32_t last_summary_ms;
     bool legacy_only;
+#ifdef CONFIG_LISM_XIAO147_AUTO_TOUCH
+    struct xiao147_auto_touch automatic;
+    int automatic_endpoint;
+#endif
 #ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
     struct xiao147_raw_capture capture;
     struct xiao147_raw_control control;
@@ -295,9 +304,8 @@ static int axs_read_register(const struct i2c_dt_spec *bus, uint8_t reg,
     return i2c_read_dt(bus, report, len);
 }
 
-#ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
+#if defined(CONFIG_LISM_XIAO147_RAW_CAPTURE) || defined(CONFIG_LISM_XIAO147_AUTO_TOUCH)
 static atomic_t capture_gate;
-static const struct device *const capture_console = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 
 bool xiao147_touch_capture_active(void)
 {
@@ -331,6 +339,10 @@ static int axs_raw_write(void *context, uint8_t reg, const uint8_t *payload, siz
     memcpy(command + 1, payload, length);
     return i2c_write_dt(&cfg->bus, command, length + 1);
 }
+#endif
+
+#ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
+static const struct device *const capture_console = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
 
 #ifdef CONFIG_LISM_XIAO147_RAW_GESTURE_HID_TEST
 /* Only the separate, explicitly activated experiment reaches these helpers.
@@ -774,6 +786,40 @@ static bool axs_raw_poll(struct axs_touch_data *data)
 }
 #endif
 
+#ifdef CONFIG_LISM_XIAO147_AUTO_TOUCH
+static bool axs_auto_output(void *context, struct xiao147_auto_output out)
+{
+    struct axs_touch_data *data = context;
+    if (xiao147_ui_page() != XIAO147_PAGE_STATUS || xiao147_ui_imu_enabled() ||
+        xiao147_ui_is_sleeping() || data->pending_button || data->automatic_endpoint < 0 ||
+        data->automatic_endpoint != xiao147_pointer_endpoint()) { return false; }
+    if (out.activity && xiao147_ui_wake_on_touch()) { return false; }
+    uint32_t errors = data->input_errors;
+    if (!report_pointer(data, out.dx, out.dy)) { return false; }
+    int ret = out.wheel == 0 ? 0 : input_report_rel(data->dev, INPUT_REL_WHEEL,
+                                                   out.wheel, true, K_NO_WAIT);
+    if (!ret && out.pan) { ret = input_report_rel(data->dev, INPUT_REL_HWHEEL,
+                                                 out.pan, true, K_NO_WAIT); }
+    if (ret) { data->input_errors++; return false; }
+    if (out.left || out.right) { report_button(data, out.right ? INPUT_BTN_1 : INPUT_BTN_0); }
+    return errors == data->input_errors && !data->pending_button;
+}
+
+static bool axs_auto_poll(struct axs_touch_data *data, bool permit)
+{
+    int endpoint = xiao147_pointer_endpoint();
+    if (endpoint != data->automatic_endpoint) { permit = false; data->automatic_endpoint = endpoint; }
+    bool active = xiao147_raw_capture_active(&data->automatic.capture);
+    bool consumed = xiao147_auto_tick(&data->automatic, k_uptime_get_32(), permit &&
+        xiao147_ui_page() == XIAO147_PAGE_STATUS && !xiao147_ui_imu_enabled() &&
+        !xiao147_ui_is_sleeping() && !data->pending_button && endpoint >= 0, xiao147_rotation_get());
+    bool still_active = xiao147_raw_capture_active(&data->automatic.capture);
+    atomic_set(&capture_gate, still_active || data->pending_button);
+    if (consumed || active) { cancel_contact(data); data->swallow_until_release = true; }
+    return consumed;
+}
+#endif
+
 static void axs_poll(struct k_work *work)
 {
     struct k_work_delayable *dwork = k_work_delayable_from_work(work);
@@ -785,6 +831,10 @@ static void axs_poll(struct k_work *work)
         release_button(data);
         cancel_contact(data);
         data->swallow_until_release = true;
+#ifdef CONFIG_LISM_XIAO147_AUTO_TOUCH
+        /* Failed HID releases must not starve the bounded factory cleanup. */
+        axs_auto_poll(data, false);
+#endif
 #ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
         data->normal_zero = false;
         data->info_valid = false;
@@ -800,6 +850,9 @@ static void axs_poll(struct k_work *work)
     }
 #ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
     if (axs_raw_poll(data)) { goto next; }
+#endif
+#ifdef CONFIG_LISM_XIAO147_AUTO_TOUCH
+    if (axs_auto_poll(data, true)) { goto next; }
 #endif
     if (!data->id_logged) {
         uint8_t id_reg = 0x08, id[3] = {0};
@@ -827,6 +880,9 @@ static void axs_poll(struct k_work *work)
         ret = axs_read_register(&cfg->bus, reg, report, report_len);
     }
     if (ret < 0) {
+#ifdef CONFIG_LISM_XIAO147_AUTO_TOUCH
+        xiao147_auto_normal(&data->automatic, false, 0, k_uptime_get_32());
+#endif
 #ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
         data->normal_zero = false;
 #endif
@@ -863,6 +919,9 @@ static void axs_poll(struct k_work *work)
         }
     }
     if (invalid) {
+#ifdef CONFIG_LISM_XIAO147_AUTO_TOUCH
+        xiao147_auto_normal(&data->automatic, false, fingers, k_uptime_get_32());
+#endif
 #ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
         data->normal_zero = false;
 #endif
@@ -883,6 +942,9 @@ static void axs_poll(struct k_work *work)
         cancel_contact(data);
     }
     data->last_valid_frame_ms = frame_ms;
+#ifdef CONFIG_LISM_XIAO147_AUTO_TOUCH
+    xiao147_auto_normal(&data->automatic, true, fingers, frame_ms);
+#endif
 #ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
     data->normal_frame_ms = k_uptime_get_32();
     if (fingers == 0) {
@@ -912,7 +974,11 @@ static void axs_poll(struct k_work *work)
         if (page != XIAO147_PAGE_STATUS && data->fingers != 0 && !data->swallow_until_release) {
             xiao147_ui_touch(0, 0, 0, orientation);
         }
-        end_contact(data, page == XIAO147_PAGE_STATUS);
+        end_contact(data, page == XIAO147_PAGE_STATUS
+#ifdef CONFIG_LISM_XIAO147_AUTO_TOUCH
+                    && false /* no native-count left click while AUTO waits */
+#endif
+                    );
         goto next;
     }
     if (fingers > 2) {
@@ -943,6 +1009,11 @@ static void axs_poll(struct k_work *work)
         data->fingers = fingers;
         goto next;
     }
+#ifdef CONFIG_LISM_XIAO147_AUTO_TOUCH
+    /* Native coordinates remain available to menus and to wake the display.
+     * Status mouse output belongs exclusively to the automatic classifier. */
+    goto next;
+#endif
 
     if (data->fingers == 0 || data->fingers != fingers) {
         if (data->fingers == 0) {
@@ -984,6 +1055,9 @@ next:
         data->last_summary_ms = k_uptime_get_32();
     }
     uint32_t poll_ms = TOUCH_POLL_MS;
+#ifdef CONFIG_LISM_XIAO147_AUTO_TOUCH
+    if (xiao147_raw_capture_active(&data->automatic.capture)) { poll_ms = 4; }
+#endif
 #ifdef CONFIG_LISM_XIAO147_GESTURE_SHADOW
     if (data->shadow_active && xiao147_raw_capture_active(&data->capture) &&
         data->capture.mode == XIAO147_RAW_MODE_FAST_DIFF &&
@@ -999,6 +1073,15 @@ static int axs_touch_init(const struct device *dev)
     if (!i2c_is_ready_dt(&cfg->bus)) { return -ENODEV; }
     data->dev = dev;
     data->last_page = XIAO147_PAGE_STATUS;
+#ifdef CONFIG_LISM_XIAO147_AUTO_TOUCH
+    BUILD_ASSERT(CONFIG_I2C_NRFX_TRANSFER_TIMEOUT > 0 && CONFIG_I2C_NRFX_TRANSFER_TIMEOUT <= 100,
+                 "Automatic touch requires bounded I2C transfers");
+    static const struct xiao147_auto_ops automatic_ops = {
+        .read = axs_raw_read, .write = axs_raw_write, .output = axs_auto_output,
+    };
+    xiao147_auto_init(&data->automatic, &automatic_ops, data);
+    LOG_INF("AXS_AUTO_READY: automatic DIFF owner, FW0100; quiet entry, native menus, bounded recovery");
+#endif
 #ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
     BUILD_ASSERT(CONFIG_I2C_NRFX_TRANSFER_TIMEOUT > 0 && CONFIG_I2C_NRFX_TRANSFER_TIMEOUT <= 100,
                  "RAW diagnostic requires a bounded <=100ms I2C transfer timeout");

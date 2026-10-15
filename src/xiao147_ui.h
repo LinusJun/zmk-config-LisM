@@ -27,3 +27,5 @@ bool xiao147_ui_wake_on_touch(void);
 bool xiao147_ui_is_sleeping(void);
 /* A queued touch press still needs its matching release; suppress air motion. */
 bool xiao147_touch_button_pending(void);
+/* Connected HID destination identity, or -1. A change cancels pointer anchors. */
+int xiao147_pointer_endpoint(void);

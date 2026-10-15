@@ -43,17 +43,12 @@ rotation = read("src/xiao147_rotation.c")
 assert "result = display_write" in rotation and "report_write(result)" in rotation
 assert "write_errors % 100" in rotation and "xiao147_display_hold_flush()" in rotation
 test_matrix = read("build-display-test.yaml")
-assert re.findall(r"artifact-name:\s*(\S+)", test_matrix) == [
-    "lism_dongle_xiao147_battery_connected",
-    "lism_dongle_xiao147_release_candidate",
-    "lism_dongle_xiao147_stability_shadow_test", "lism_dongle_xiao147_stability_test"]
-release_matrix = test_matrix.split("artifact-name: lism_dongle_xiao147_release_candidate", 1)[1].split("  - board:", 1)[0]
+assert re.findall(r"artifact-name:\s*(\S+)", test_matrix) == ["lism_dongle_xiao147"]
+release_matrix = test_matrix
 for option in ("RAW_CAPTURE", "GESTURE_SHADOW", "RAW_GESTURE_HID_TEST"):
     assert f"CONFIG_LISM_XIAO147_{option}=n" in release_matrix
+assert "CONFIG_LISM_XIAO147_AUTO_TOUCH=y" in release_matrix
 assert "CONFIG_I2C_NRFX_TRANSFER_TIMEOUT=100" in config
-assert test_matrix.count("CONFIG_LISM_XIAO147_RAW_GESTURE_HID_TEST=y") == 1
-assert "CONFIG_LISM_XIAO147_GESTURE_SHADOW=y" in test_matrix
-assert "CONFIG_LISM_XIAO147_RAW_CAPTURE=y" in test_matrix
 assert "CONFIG_I2C_NRFX_TRANSFER_TIMEOUT=100" in test_matrix
 assert "CONFIG_LISM_XIAO147_RAW_CAPTURE=y" not in config
 assert "CONFIG_LISM_XIAO147_RAW_CAPTURE=y" not in read("build.yaml")
@@ -71,10 +66,10 @@ assert "lism_charge_local()" in ui and "xiao147_battery_rings_refresh_charge()" 
 assert '(charge.flags & LISM_CHARGE_USB) ? "USB" : "--%"' in ui
 charge_matrix = read("build-charge-peripherals.yaml")
 for peripheral in ("left_4waystick", "right_trackball", "jp19", "circlepad"):
-    assert f"lism_{peripheral}_charge_status" in charge_matrix
-    assert f"lism_{peripheral}_battery_connected" in charge_matrix
-assert charge_matrix.count("CONFIG_LISM_CHARGE_BATTERY_CONNECTED=n") == 4
-assert charge_matrix.count("CONFIG_LISM_CHARGE_BATTERY_CONNECTED=y") == 4
+    assert f"artifact-name: lism_{peripheral}\n" in charge_matrix
+assert "BATTERY_CONNECTED" not in charge_matrix + test_matrix + read("Kconfig")
+assert "battery_connected" not in charge_matrix + test_matrix
+assert charge_matrix.count("artifact-name:") == 4
 combined = read("build-xiao147-charge.yaml").split("include:\n", 1)[1]
 assert combined == test_matrix.split("include:\n", 1)[1] + charge_matrix.split("include:\n", 1)[1]
 workflow = read(".github/workflows/display-test.yml")

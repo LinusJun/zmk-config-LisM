@@ -6,20 +6,6 @@ config LISM_CHARGE_TELEMETRY
       Read-only P0.17 charger monitoring for the configured XIAO nRF52840
       boards. Adds encrypted peripheral telemetry, not a battery protection BMS.
 
-config LISM_CHARGE_BATTERY_CONNECTED
-    bool "Battery physically connected and battery switch ON"
-    depends on LISM_CHARGE_TELEMETRY
-    default n
-    help
-      Installation declaration, not automatic battery detection. Enable only
-      for a device with a connected battery and closed battery switch. USB
-      plus CHG LOW cannot distinguish an absent cell on this hardware. When
-      disabled USB operation shows USB/unknown and no charging lightning.
-      This declaration cannot detect opening the switch or removing the cell
-      while USB remains attached. Do not use this variant in those conditions.
-      Neither this option nor a displayed 100 percent controls charge cutoff;
-      hardware termination and a compatible protected battery are required.
-
 config LISM_PROSPECTOR_LOCK_INDICATORS
     bool "Compact OPERATOR modifiers with Caps/Num Lock indicators"
     default y
@@ -48,6 +34,19 @@ config LISM_XIAO147_DISPLAY_SELFTEST
       Before constructing OPERATOR and menus, show raw RGB565 bars, then a
       minimal LVGL screen, then the complete existing status interface.
       Does not reset settings, change key bindings or enable ADC diagnostics.
+
+config LISM_XIAO147_AUTO_TOUCH
+    bool "Automatic AXS5106L profile touch owner"
+    depends on LISM_XIAO147_TOUCH && !LISM_XIAO147_RAW_CAPTURE
+    default n
+    help
+      Automatically enters the verified volatile DIFF interface on the status
+      page after genuine release. Single-lobe pointer/left tap and separated
+      two-lobe right tap/natural scroll are heuristic, not native finger count.
+      No serial activation or 60-second window. Native menus, IMU and sleep
+      restore normal reporting with bounded cleanup. Exact ID/FW0100/layout
+      gates, fresh quiet baseline, scan watchdog and bounded error retries.
+      No MTP, calibration, firmware upload or hardware reset writes.
 
 config LISM_XIAO147_RAW_CAPTURE
     bool "Opt-in AXS5106L RAW/DIFF sensor capture (not a multitouch fix)"

@@ -18,6 +18,8 @@
 enum xiao147_raw_mode {
     XIAO147_RAW_MODE_ALTERNATE = 0,
     XIAO147_RAW_MODE_FAST_DIFF = 1,
+    /* Automatic owner: fresh-sample watchdog instead of a diagnostic lease. */
+    XIAO147_RAW_MODE_AUTO_DIFF = 2,
 };
 
 enum xiao147_raw_type {

@@ -4,8 +4,9 @@ Upstream GPIO reference:
 https://github.com/4mplelab/zmk-config-LisM/blob/8e1fd16cc9fcae7dd7a92494dc0d48aa482e3e45/snippets/4waystick.overlay
 
 Only the left module changes hardware role. The left PAW3222/SPI and split-input
-listener are disabled; the right trackball wiring, processors, scroll-lock
-layers, +8 dBm setting, and rate-limit/xyz modules are preserved.
+listener are disabled; the right trackball wiring, +8 dBm setting, and
+rate-limit/xyz modules are preserved. DEVICE (4) now allows both scroll axes;
+NAV (2) retains vertical-only and MARK (3) retains horizontal-only scrolling.
 
 Stock module directions (internal scan order):
 Up=P0.10/NFC2, Right=D6, Down=D5, Left=D4.
@@ -13,14 +14,14 @@ All are active-low switches with internal pull-ups, as in the manufacturer's
 firmware. There is no analog calibration and no assumed center-push switch.
 
 Zero-based layer mappings, in human Up / Down / Left / Right order:
-0 Base: vertical down / vertical up / horizontal right / horizontal left scroll
+0 Base: Up Arrow / Down Arrow / Left Arrow / Right Arrow
 1 Game and 3 Mark: Left Shift / Left Control / Left Alt / Left GUI (Win/Command)
-2 Nav: Up Arrow / Down Arrow / Left Arrow / Right Arrow
+2 Nav: vertical down / vertical up / horizontal right / horizontal left scroll
 5 GameJoystick: W / S / A / D
 6 StickWASD: W / S / A / D (legacy compatibility only)
 4,7: transparent (inherit the currently active lower layer).
 
-The Base stick uses its own standard ZMK two-axis scroll behavior: press and
+The Nav stick uses its own standard ZMK two-axis scroll behavior: press and
 hold scrolls continuously, release stops. It uses a uniform 25 scroll units/s
 without a ramp-up delay. Existing msc/encoder/trackball speeds are not changed.
 Wheel signs follow the user's corrected table, validated on the original
@@ -34,7 +35,7 @@ old return key, but is not the main entry.
 
 Use matching new left, right, and dongle firmware from the same build: the
 shared position map and split-key state payload changed even though right
-trackball operation did not. Reset is a recovery tool, not a required first
+trackball wiring did not. Reset is a recovery tool, not a required first
 step. Existing BLE bonds can usually remain; rebuild pairing only if needed.
 Retest press/release, layer changes while holding, modifier releases and BLE
 disconnect while holding before relying on it in games.

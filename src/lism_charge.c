@@ -92,7 +92,7 @@ struct lism_charge_state lism_charge_local(void) {
     if (usb) { s.flags |= LISM_CHARGE_USB; }
     else { s.flags &= ~(LISM_CHARGE_USB | LISM_CHARGE_STAT_ACTIVE); }
     if (!gpio_ready || k_uptime_get_32() - local_filter.sampled_at > 1500) {
-        s = (struct lism_charge_state){0};
+        s = (struct lism_charge_state){.flags = usb ? LISM_CHARGE_USB : 0};
     }
     k_mutex_unlock(&charge_lock);
     return s;
@@ -104,19 +104,18 @@ static void sample_charge(struct k_work *work) {
     ARG_UNUSED(work);
     /* Physical VBUS also covers wall chargers without USB enumeration and
      * split peripherals without the USB stack. Read-only: no power controls. */
-    /* An explicit installation declaration is necessary under USB: the official
-     * reference notes that an unconnected BAT node can mimic a real battery.
-     * No cached 'once battery powered' guess survives a switch-off/hot removal.
-     */
-    bool installed = IS_ENABLED(CONFIG_LISM_CHARGE_BATTERY_CONNECTED);
+    /* One image for both sources. VBUS and CHG do not provide independent
+     * battery-switch/contact feedback. Plausible USB-powered BAT voltage is
+     * not presence/current evidence. Never cache an earlier battery session
+     * as a declaration after USB insertion. */
     k_mutex_lock(&charge_lock, K_FOREVER);
     bool usb = nrf_power_usbregstatus_vbusdet_get(NRF_POWER);
     int stat = gpio_ready ? gpio_pin_get_raw(charge_port, 17) : -ENODEV;
     observe_power_locked(usb, k_uptime_get_32());
     bool valid = battery_sample_valid && k_uptime_get_32() - battery_sample_at <=
         CONFIG_ZMK_BATTERY_REPORT_INTERVAL * 1000U + 5000U;
-    lism_charge_observe(&local_filter, k_uptime_get_32(), usb, stat, installed,
-                        (!usb || installed) && valid, battery_sample_percent);
+    lism_charge_observe(&local_filter, k_uptime_get_32(), usb, stat, !usb && valid,
+                        !usb && valid, battery_sample_percent);
     k_mutex_unlock(&charge_lock);
     k_work_reschedule(&charge_sample_work, K_MSEC(250));
 }

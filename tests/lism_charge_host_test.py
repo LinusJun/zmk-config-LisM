@@ -19,7 +19,7 @@ prelude = r'''
 #define IS_ENABLED(x) (x)
 #define CONFIG_ZMK_SPLIT_ROLE_CENTRAL CENTRAL
 #define CONFIG_LISM_XIAO147_TOUCH CENTRAL
-#define CONFIG_LISM_CHARGE_BATTERY_CONNECTED INSTALLED
+#define INSTALLED 0 /* unified firmware cannot prove USB battery presence */
 #define CONFIG_APPLICATION_INIT_PRIORITY 90
 #define CONFIG_ZMK_BATTERY_REPORT_INTERVAL 60
 #define ARRAY_SIZE(a) (sizeof(a)/sizeof((a)[0]))
@@ -180,7 +180,7 @@ static void power_transition_tests(void) {
  battery_fetch(0);sample_charge(NULL);
  assert((bool)(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID)==(bool)INSTALLED);
  now+=2000;
- assert(!lism_charge_local().flags);
+ assert(lism_charge_local().flags == (usb ? LISM_CHARGE_USB : 0));
 }
 static void policy_tests(void) {
  struct lism_charge_filter f={0};struct lism_charge_state s;
@@ -249,13 +249,13 @@ int main(void) {
  now+=65001;sample_charge(NULL);assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
  voltage_error=-EIO;battery_fetch(0);sample_charge(NULL);
  assert(!lism_charge_show_bolt(lism_charge_local()));
- voltage_error=0;now+=2000;assert(!lism_charge_local().flags);
+ voltage_error=0;now+=2000;assert(lism_charge_local().flags == (usb ? LISM_CHARGE_USB : 0));
  power_transition_tests();
 #if CENTRAL
  client_tests();
 #else
  uint8_t wire[4];assert(lism_charge_service[1]==BT_GATT_PERM_READ_ENCRYPT);
- assert(read_charge(NULL,NULL,wire,4,0)==4&&wire[0]==1&&!wire[1]);
+ assert(read_charge(NULL,NULL,wire,4,0)==4&&wire[0]==1&&wire[1]==LISM_CHARGE_USB);
  assert(read_charge(NULL,NULL,wire,4,5)<0);
 #endif
  puts("PASS: charge filtering, no-battery policy, stale server, encrypted service and asynchronous peer lifecycle");
@@ -263,12 +263,12 @@ int main(void) {
 '''
 with tempfile.TemporaryDirectory(prefix='lism-charge-') as tmp:
     for central in (0, 1):
-        for installed in (0, 1):
+        for installed in (0,):
             c=Path(tmp)/f'test-{central}-{installed}.c'; exe=c.with_suffix('')
             c.write_text(prelude+source+tests)
             subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror',
                             '-Wno-unused-function','-Wno-unused-variable','-Wno-sign-compare',
                             '-fsanitize=address,undefined','-fno-omit-frame-pointer','-g',
-                            f'-DCENTRAL={central}',f'-DINSTALLED={installed}',
+                            f'-DCENTRAL={central}',
                             '-I'+str(root/'src'),str(c),'-o',str(exe)],check=True)
             subprocess.run([str(exe)],check=True)

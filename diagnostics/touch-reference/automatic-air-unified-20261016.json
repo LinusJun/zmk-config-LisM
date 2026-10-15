@@ -1,0 +1,48 @@
+{
+  "date": "2026-10-16",
+  "scope": "Automatic status-page touch, rate-based air mouse, one USB/battery image per device",
+  "references": [
+    {
+      "url": "https://github.com/techiesms/Air-Mouse/blob/4e8ca61e951c9caeb7f734e173534f42a4373e9c/Code/Code.ino",
+      "observed": "LSM6DS3 angular-rate to BLE relative mouse, fixed gain and loop delay; no stationary bias learning or elapsed-time integration",
+      "use": "Concept comparison only; no source copied. Existing board axis mapping retained."
+    },
+    {
+      "url": "https://github.com/CoreCometIndustries/COMET-AIR-MOUSE/blob/main/src/ESP32-C3-AIR-MOUSE/ESP32-C3-AIR-MOUSE.ino",
+      "observed": "Stationary calibration, exponential smoothing and deadband, with fixed-loop timing",
+      "use": "Independent implementation of fresh-gravity-assisted calibration, time-aware smoothing, subpixel integration and bounded output"
+    },
+    {
+      "url": "https://wiki.seeedstudio.com/function_1.47_inch_touch_display_nrf52840/#battery-status",
+      "observed": "USB-only BAT node may resemble a connected cell. The example uses learned USB-only voltage history and insertion/removal heuristics.",
+      "use": "Do not treat a static voltage, USB presence, switch position or old battery history as proof of active charging. No charge-current/termination hardware changed."
+    }
+  ],
+  "automatic_touch": {
+    "native_multi_touch": false,
+    "method": "Existing validated 6x2 DIFF lobe classifier and centroid estimate; heuristic, not native two-contact coordinates",
+    "entry": "Status page, awake, air mouse off, connected HID endpoint, no pending button release; real native zero-contact quiet interval then verified chip/FW0100/layout and DIFF quiet baseline",
+    "lifetime": "No host command, DTR or 60-second deadline. Fresh-frame watchdog, bounded restore and retry cooldown remain mandatory.",
+    "ownership": "Native absolute touch for menus/wake. DIFF owner for status pointer/taps/scroll. No simultaneous native mouse output.",
+    "limits": "Close/overlapping contacts may not produce separable lobes. Old labelled recordings do not establish arbitrary-hand or long-term accuracy. A held startup contact or ambiguous/noisy baseline intentionally withholds mouse events.",
+    "writes": "Existing allowlisted volatile diagnostic page/DIFF scan commands only; no touch firmware, MTP or calibration-data programming"
+  },
+  "air_mouse": {
+    "behavior": "Relative angular-rate mouse; existing buttons-bottom portrait and USR1 behavior retained",
+    "zero": "Fresh accelerometer stability plus bounded gyro spread over at least 980ms; never emit with no valid bias; automatic calibration retry",
+    "motion": "Actual elapsed time, soft deadband, time-aware Q8 low-pass, fractional movement carry, gap reset and 250 pixels/sec per-axis ceiling",
+    "limits": "No claim of drift-free operation; slow constant rotation can resemble stationary bias. Existing physical axes retained, not newly hardware-verified."
+  },
+  "power": {
+    "variants": "Exactly one image per dongle/peripheral; battery_connected build option removed",
+    "usb": "Physical VBUS retained independently of enumeration or charge-status validity",
+    "battery_only": "Fresh plausible ADC without USB supplies battery percentage after source settling",
+    "usb_battery_uncertain": "Unknown percentage/charging rather than false 100% or a fabricated charge bolt",
+    "safety": "Hardware charge termination is not implemented or guaranteed by this UI firmware. The 230mAh cell maximum permitted charge current remains unverified. This narrow telemetry review is not a circuit safety certification."
+  },
+  "verification": {
+    "method": "Portable C tests under sanitizers, actual driver mocked-bus tests, existing trace replay, then five-target GitHub firmware build",
+    "manual_device_actions": "None in this change; no new sampling window or device flashing",
+    "release_grade": "Unified automatic-use candidate; not claimed physically long-term validated"
+  }
+}

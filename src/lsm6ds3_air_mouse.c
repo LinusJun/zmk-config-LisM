@@ -14,8 +14,7 @@
 #include "xiao147_rotation.h"
 #include "xiao147_air_motion.h"
 
-#ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
-/* Only the explicit diagnostic may isolate this device's mouse reports. */
+#if defined(CONFIG_LISM_XIAO147_RAW_CAPTURE) || defined(CONFIG_LISM_XIAO147_AUTO_TOUCH)
 extern bool xiao147_touch_capture_active(void);
 #endif
 
@@ -43,6 +42,8 @@ struct imu_data {
     enum xiao147_orientation last_pose;
     uint32_t last_gyro_trace;
     uint32_t input_errors;
+    bool output_allowed;
+    int endpoint;
 };
 
 static int imu_write(const struct i2c_dt_spec *bus, uint8_t reg, uint8_t value)
@@ -51,15 +52,37 @@ static int imu_write(const struct i2c_dt_spec *bus, uint8_t reg, uint8_t value)
     return i2c_write_dt(bus, data, sizeof(data));
 }
 
+static bool imu_output_permitted(int endpoint)
+{
+    if (endpoint < 0 || xiao147_pointer_endpoint() != endpoint ||
+        !xiao147_ui_imu_enabled() || xiao147_touch_button_pending() ||
+        xiao147_ui_is_sleeping() || xiao147_ui_page() != XIAO147_PAGE_STATUS) {
+        return false;
+    }
+#if defined(CONFIG_LISM_XIAO147_RAW_CAPTURE) || defined(CONFIG_LISM_XIAO147_AUTO_TOUCH)
+    if (xiao147_touch_capture_active()) { return false; }
+#endif
+    return true;
+}
+
 static void imu_poll(struct k_work *work)
 {
     struct imu_data *data = CONTAINER_OF(k_work_delayable_from_work(work),
                                          struct imu_data, poll_work);
     const struct imu_config *cfg = data->dev->config;
     bool enabled = xiao147_ui_imu_enabled() && !xiao147_touch_button_pending();
-#ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
+#if defined(CONFIG_LISM_XIAO147_RAW_CAPTURE) || defined(CONFIG_LISM_XIAO147_AUTO_TOUCH)
     enabled = enabled && !xiao147_touch_capture_active();
 #endif
+    int endpoint = xiao147_pointer_endpoint();
+    bool output_allowed = enabled && endpoint >= 0 && !xiao147_ui_is_sleeping() &&
+                          xiao147_ui_page() == XIAO147_PAGE_STATUS;
+    if (data->output_allowed != output_allowed || data->endpoint != endpoint) {
+        xiao147_air_clear(&data->motion);
+        data->motion.samples = 0;
+        data->output_allowed = output_allowed;
+        data->endpoint = endpoint;
+    }
     if (data->ready && enabled != data->gyro_on) {
         if (imu_write(&cfg->bus, IMU_CTRL2_G, enabled ? 0x40 : 0x00) == 0) {
             data->gyro_on = enabled;
@@ -94,13 +117,28 @@ static void imu_poll(struct k_work *work)
         data->auto_rotate_active = false;
     }
     if (data->ready && data->gyro_on && enabled) {
+        uint8_t accel_reg = IMU_OUTX_L_XL;
+        uint8_t accel_bytes[6];
+        if (i2c_write_read_dt(&cfg->bus, &accel_reg, 1, accel_bytes, sizeof(accel_bytes)) == 0) {
+            int16_t accel[3];
+            for (int i = 0; i < 3; ++i) { accel[i] = (int16_t)((uint16_t)accel_bytes[2*i+1] << 8 | accel_bytes[2*i]); }
+            xiao147_air_gravity(&data->motion, k_uptime_get_32(), accel);
+        } else {
+            data->motion.have_gravity = false;
+            data->motion.samples = 0;
+            xiao147_air_clear(&data->motion);
+        }
         uint8_t reg = IMU_OUTX_L_G;
         uint8_t axes[6];
         if (i2c_write_read_dt(&cfg->bus, &reg, 1, axes, sizeof(axes)) == 0) {
             int16_t raw[3];
             for (int i = 0; i < 3; i++) { raw[i] = (int16_t)((uint16_t)axes[i*2+1] << 8 | axes[i*2]); }
             enum xiao147_orientation pose = xiao147_rotation_get();
-            if (pose != data->last_pose) { xiao147_air_clear(&data->motion); data->last_pose = pose; }
+            if (pose != data->last_pose) {
+                xiao147_air_clear(&data->motion);
+                data->motion.samples = 0;
+                data->last_pose = pose;
+            }
             struct xiao147_xy motion = xiao147_air_sample(&data->motion, k_uptime_get_32(), pose, raw);
             int dx = motion.x, dy = motion.y;
             if (k_uptime_get_32() - data->last_gyro_trace >= 2000) {
@@ -112,9 +150,17 @@ static void imu_poll(struct k_work *work)
             }
             if (dx || dy) {
                 bool woke = xiao147_ui_wake_on_motion();
-                if (!woke && xiao147_ui_page() == XIAO147_PAGE_STATUS) {
+                if (!woke && output_allowed && imu_output_permitted(endpoint) &&
+                    xiao147_rotation_get() == pose) {
                     int ret = dx == 0 ? 0 : input_report_rel(data->dev, INPUT_REL_X, dx, true, K_NO_WAIT);
-                    if (ret == 0 && dy) { ret = input_report_rel(data->dev, INPUT_REL_Y, dy, true, K_NO_WAIT); }
+                    if (ret == 0 && dy) {
+                        if (imu_output_permitted(endpoint) && xiao147_rotation_get() == pose) {
+                            ret = input_report_rel(data->dev, INPUT_REL_Y, dy, true, K_NO_WAIT);
+                        } else {
+                            xiao147_air_clear(&data->motion);
+                            data->motion.samples = 0;
+                        }
+                    }
                     if (ret != 0) {
                         data->input_errors++;
                         xiao147_air_clear(&data->motion);
@@ -124,7 +170,7 @@ static void imu_poll(struct k_work *work)
                         }
                     }
                 }
-                else { xiao147_air_clear(&data->motion); }
+                else { xiao147_air_clear(&data->motion); data->motion.samples = 0; }
             }
         } else {
             xiao147_air_clear(&data->motion);

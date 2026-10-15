@@ -4,6 +4,21 @@
 #include <zephyr/logging/log.h>
 #include <zmk/hid.h>
 #include <zmk/endpoints.h>
+#include <zmk/usb.h>
+#include <zmk/ble.h>
+
+int xiao147_pointer_endpoint(void)
+{
+    struct zmk_endpoint_instance ep = zmk_endpoint_get_selected();
+    if (ep.transport == ZMK_TRANSPORT_NONE) { return -1; }
+#if IS_ENABLED(CONFIG_ZMK_USB)
+    if (ep.transport == ZMK_TRANSPORT_USB && !zmk_usb_is_hid_ready()) { return -1; }
+#endif
+#if IS_ENABLED(CONFIG_ZMK_BLE)
+    if (ep.transport == ZMK_TRANSPORT_BLE && !zmk_ble_profile_is_connected(ep.ble.profile_index)) { return -1; }
+#endif
+    return zmk_endpoint_instance_to_index(ep);
+}
 
 LOG_MODULE_REGISTER(xiao147_hid_trace, LOG_LEVEL_INF);
 int __real_zmk_endpoint_send_mouse_report(void);

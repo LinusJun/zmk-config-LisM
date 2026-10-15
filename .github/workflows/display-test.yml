@@ -26,6 +26,9 @@ jobs:
       - run: python3 tests/xiao147_widgets_host_test.py
       - run: python3 tests/xiao147_rotation_host_test.py
       - run: python3 tests/xiao147_input_host_test.py
+      - run: python3 tests/xiao147_air_motion_host_test.py
+      - run: python3 tests/xiao147_auto_touch_host_test.py
+      - run: python3 tests/xiao147_auto_replay_test.py
       - run: python3 tests/xiao147_slider_host_test.py
       - run: python3 tests/xiao147_panel_host_test.py
       - run: python3 tests/xiao147_usr1_host_test.py

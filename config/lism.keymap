@@ -223,7 +223,7 @@
 &lt 4 DELETE    &kp F1      &kp BACKSPACE  &kp LS(LG(N4))    &lt 2 SPACE  &lt 3 ESC    &lt 3 BACKSPACE  &lt 2 ENTER  &kp LS(LG(N4))  &kp F1       &kp F2      &lt 4 ESC
 &kp W  &kp S  &kp A  &kp D  &kp SPACE  &kp LEFT_SHIFT  /* JP19 42..47 */
 &kp W  &kp S  &kp A  &kp D  &none      &kp LEFT_SHIFT  /* Circle Pad 48..53 */
-&stick_scroll MOVE_Y(-LISM_4WAY_SCROLL_SPEED)  &stick_scroll MOVE_X(-LISM_4WAY_SCROLL_SPEED)  &stick_scroll MOVE_Y(LISM_4WAY_SCROLL_SPEED)  &stick_scroll MOVE_X(LISM_4WAY_SCROLL_SPEED)  /* Validated U/R/D/L: scroll Down/Left/Up/Right, continuous while held. */
+&kp UP  &kp RIGHT  &kp DOWN  &kp LEFT  /* Base: Up Right Down Left. */
             >;
 
             sensor-bindings = <&encoder_msc SCRL_DOWN SCRL_UP>;
@@ -249,7 +249,7 @@
 &kp LEFT_SHIFT    &kp PAGE_UP   &kp C_AC_HOME  &kp PAGE_DOWN  &kp LC(LS(C_AC_BACK))                                 &kp KP_MULTIPLY  &kp KP_N1  &kp KP_N2  &kp KP_N3   &kp KP_DIVIDE
 &kp LCTRL         &kp LEFT_WIN  &kp LEFT_ALT   &trans         &kp K_BACK             &kp C_AC_BACK    &kp KP_ENTER  &kp KP_N0        &trans     &kp KP_N0  &kp KP_DOT  &kp KP_DOT
 &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans
-&kp UP  &kp RIGHT  &kp DOWN  &kp LEFT  /* Nav: Up Right Down Left. */
+&stick_scroll MOVE_Y(-LISM_4WAY_SCROLL_SPEED)  &stick_scroll MOVE_X(-LISM_4WAY_SCROLL_SPEED)  &stick_scroll MOVE_Y(LISM_4WAY_SCROLL_SPEED)  &stick_scroll MOVE_X(LISM_4WAY_SCROLL_SPEED)  /* Nav U/R/D/L: scroll Down/Left/Up/Right, continuous while held. */
             >;
 
             #sensor-bindings = <&encoder_kp C_VOL_UP C_VOL_DN>;

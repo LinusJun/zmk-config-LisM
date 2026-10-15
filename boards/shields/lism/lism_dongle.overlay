@@ -112,7 +112,7 @@
 		<&zip_xy_transform (INPUT_TRANSFORM_X_INVERT | INPUT_TRANSFORM_Y_INVERT)>;
 
 	scroller {
-		layers = <2 4>; // SCROLL
+		layers = <2>; // NAV: retain vertical-only scrolling.
 		input-processors =
             <&zip_zxy>,
 			<&zip_xy_to_scroll_mapper>,
@@ -122,6 +122,16 @@
             <&zip_xy_scaler 1 16>,
 			<&zip_scroll_scaler 1 16>;
 	};
+
+    device_scroll {
+        layers = <4>; // DEVICE: both scroll axes; same signs and speed.
+        input-processors =
+            <&zip_zxy>,
+            <&zip_xy_to_scroll_mapper>,
+            <&zip_scroll_transform INPUT_TRANSFORM_Y_INVERT>,
+            <&zip_xy_scaler 1 16>,
+            <&zip_scroll_scaler 1 16>;
+    };
 
     scrolloriginal {
         layers = <3>;

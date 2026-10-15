@@ -126,10 +126,11 @@ bool xiao147_raw_capture_start_mode(struct xiao147_raw_capture *capture, uint32_
 {
     if (capture->phase != XIAO147_RAW_IDLE || capture->ops.read == NULL ||
         capture->ops.write == NULL ||
-        (mode != XIAO147_RAW_MODE_ALTERNATE && mode != XIAO147_RAW_MODE_FAST_DIFF)) { return false; }
+        (mode != XIAO147_RAW_MODE_ALTERNATE && mode != XIAO147_RAW_MODE_FAST_DIFF &&
+         mode != XIAO147_RAW_MODE_AUTO_DIFF)) { return false; }
     capture->phase = XIAO147_RAW_CHECK_ID;
     capture->mode = mode;
-    capture->type = mode == XIAO147_RAW_MODE_FAST_DIFF ? XIAO147_RAW_DIFF : XIAO147_RAW_DATA;
+    capture->type = mode != XIAO147_RAW_MODE_ALTERNATE ? XIAO147_RAW_DIFF : XIAO147_RAW_DATA;
     capture->last_error = XIAO147_RAW_OK;
     capture->io_error = 0;
     capture->expected_version = expected_version;
@@ -181,6 +182,14 @@ void xiao147_raw_capture_tick(struct xiao147_raw_capture *capture, uint32_t now_
     if (restoring(capture)) {
         if (elapsed(now_ms, capture->cleanup_ms, XIAO147_RAW_CLEANUP_MS)) {
             fault(capture, XIAO147_RAW_CLEANUP_TIMEOUT);
+            return;
+        }
+    } else if (capture->mode == XIAO147_RAW_MODE_AUTO_DIFF) {
+        /* Every successful acquisition renews a short freshness lease. No
+         * startup/scan stall may turn an always-on owner into an infinite wait. */
+        if (capture->samples_received ? elapsed(now_ms, capture->last_sample_ms, 200U) :
+                                       elapsed(now_ms, capture->started_ms, 2000U)) {
+            begin_restore(capture, now_ms, XIAO147_RAW_SCAN_TIMEOUT);
             return;
         }
     } else if (elapsed(now_ms, capture->started_ms, XIAO147_RAW_SESSION_MS)) {
@@ -241,7 +250,7 @@ void xiao147_raw_capture_tick(struct xiao147_raw_capture *capture, uint32_t now_
             return;
         }
         capture->channels = (uint8_t)channels;
-        capture->type = capture->mode == XIAO147_RAW_MODE_FAST_DIFF ?
+        capture->type = capture->mode != XIAO147_RAW_MODE_ALTERNATE ?
                             XIAO147_RAW_DIFF : XIAO147_RAW_DATA;
         capture->pair_ms = now_ms;
         capture->phase = XIAO147_RAW_SELECT_TYPE;
@@ -255,7 +264,7 @@ void xiao147_raw_capture_tick(struct xiao147_raw_capture *capture, uint32_t now_
         capture->phase = XIAO147_RAW_SCAN_START;
         return;
     case XIAO147_RAW_SCAN_START:
-        if (capture->mode == XIAO147_RAW_MODE_FAST_DIFF && capture->scan_requests != 0 &&
+        if (capture->mode != XIAO147_RAW_MODE_ALTERNATE && capture->scan_requests != 0 &&
             !elapsed(now_ms, capture->frame_started_ms, XIAO147_RAW_FAST_FRAME_MS)) { return; }
         capture->frame_started_ms = now_ms;
         capture->scan_requests++;
@@ -280,7 +289,7 @@ void xiao147_raw_capture_tick(struct xiao147_raw_capture *capture, uint32_t now_
         if (buffer[0] == 0) { capture->phase = XIAO147_RAW_READ_SAMPLE; }
         return;
     case XIAO147_RAW_READ_SAMPLE:
-        if (capture->mode == XIAO147_RAW_MODE_FAST_DIFF &&
+        if (capture->mode != XIAO147_RAW_MODE_ALTERNATE &&
             elapsed(now_ms, capture->phase_ms, SCAN_TIMEOUT_MS)) {
             begin_restore(capture, now_ms, XIAO147_RAW_SCAN_TIMEOUT);
             return;
@@ -310,7 +319,7 @@ void xiao147_raw_capture_tick(struct xiao147_raw_capture *capture, uint32_t now_
         /* A sample consumer may request a stop; never overwrite its cleanup
          * phase with the next scan/selection after returning from callback. */
         if (capture->phase != XIAO147_RAW_READ_SAMPLE) { return; }
-        if (capture->mode == XIAO147_RAW_MODE_FAST_DIFF) {
+        if (capture->mode != XIAO147_RAW_MODE_ALTERNATE) {
             capture->phase = XIAO147_RAW_SCAN_START;
         } else if (capture->type == XIAO147_RAW_DATA) {
             capture->type = XIAO147_RAW_DIFF;
