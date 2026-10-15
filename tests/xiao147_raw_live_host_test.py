@@ -39,6 +39,7 @@ int main(void) {
         struct xiao147_xy xy=xiao147_touch_to_logical(XIAO147_USB_LEFT,p.native_short_x,p.native_long_y);
         struct xiao147_shadow_result out=xiao147_shadow_gesture_observe_profile(
             &g,&p,valid&&armed,xy.x,xy.y,0,r[0]);
+        if(out.candidate_right_tap) assert(r[0]==27867 || r[0]==28407);
         taps+=out.candidate_right_tap;
         pan_pos+=out.candidate_hwheel>0; pan_neg+=out.candidate_hwheel<0;
         wheel_pos+=out.candidate_wheel>0; wheel_neg+=out.candidate_wheel<0;
@@ -56,7 +57,11 @@ int main(void) {
     printf("LIVE REPLAY taps=%u pan_positive_frames=%u pan_negative_frames=%u wheel_positive_frames=%u wheel_negative_frames=%u\n",taps,pan_pos,pan_neg,wheel_pos,wheel_neg);
     /* Pinned regression output, NOT physical success rate. Changing these
      * requires explicit evidence review, not automatically rebaselining. */
-    assert(taps==1 && pan_pos==2 && pan_neg==3 && wheel_pos==3 && wheel_neg==6);
+    /* 27811ms is a strongly fading ONE tail: the full centroid moves, but
+     * both surviving fixed-support lobes stay near their original anchors.
+     * 27867ms is the only newly accepted click; the ambiguous first tap stays
+     * rejected and every scrolling count remains unchanged. */
+    assert(taps==2 && pan_pos==2 && pan_neg==3 && wheel_pos==3 && wheel_neg==6);
     return 0;
 }
 '''.replace('__ROWS__', rows)

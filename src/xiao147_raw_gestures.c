@@ -91,7 +91,7 @@ bool xiao147_raw_profile_evaluate(const int32_t *diff, uint8_t channels,
         return false;
     }
 
-    uint32_t positive[XIAO147_PROFILE_CHANNELS];
+    uint32_t *positive = profile->positive;
     uint32_t maximum = 0;
     uint64_t total = 0, weighted = 0, odd_column = 0;
     for (unsigned i = 0; i < XIAO147_PROFILE_CHANNELS; i++) {
@@ -291,6 +291,7 @@ void xiao147_shadow_gesture_cancel(struct xiao147_shadow_gesture *gesture)
         gesture->tap_disqualified = false;
         gesture->tap_anchor_valid = false;
         gesture->tail_one = false;
+        gesture->fading_tail = false;
         gesture->pending = false;
         gesture->weak_release = false;
         gesture->reacquiring = false;
@@ -419,6 +420,7 @@ struct xiao147_shadow_result xiao147_shadow_gesture_observe(
         gesture->tap_disqualified = false;
         gesture->tap_anchor_valid = false;
         gesture->tail_one = false;
+        gesture->fading_tail = false;
         gesture->pending = false;
         gesture->weak_release = false;
         gesture->reacquiring = false;
@@ -561,6 +563,48 @@ static bool partition_valid(const struct xiao147_raw_profile *profile)
            profile->lobes[0].native_long_y < profile->lobes[1].native_long_y;
 }
 
+static bool stationary_fading_tail(const struct xiao147_shadow_gesture *gesture,
+                                   const struct xiao147_raw_profile *profile)
+{
+    if (!gesture->association_valid || gesture->moving || gesture->tap_disqualified ||
+        gesture->reacquiring || gesture->weak_release ||
+        (gesture->tail_one && !gesture->fading_tail)) { return false; }
+    /* Rescue may begin only on the FIRST ONE after TWO. A preceding normal
+     * ONE has no stored envelope, so never compare a later rebound to an old
+     * larger TWO response and mistake it for monotonically fading contact. */
+    uint64_t total = 0, previous = 0;
+    for (unsigned i = 0; i < XIAO147_PROFILE_CHANNELS; i++) {
+        /* No new/growing electrode response: a merge or renewed contact is
+         * not rescued as release. All comparisons use floor-subtracted data. */
+        if (profile->positive[i] > gesture->previous_positive[i]) { return false; }
+        total += profile->positive[i];
+        previous += gesture->previous_positive[i];
+    }
+    if (previous == 0 || total == 0 ||
+        (!gesture->fading_tail && total * 2U > previous)) { return false; }
+    unsigned credible = 0;
+    for (unsigned i = 0; i < 2; i++) {
+        const struct xiao147_raw_lobe *old = &gesture->previous_lobes[i];
+        uint8_t peak = old->first_station;
+        uint32_t amplitude = 0;
+        for (unsigned j = old->first_station; j <= old->last_station; j++) {
+            amplitude += profile->stations[j];
+            if (profile->stations[j] > profile->stations[peak]) { peak = (uint8_t)j; }
+        }
+        if (amplitude < PROFILE_MIN_PEAK) { continue; } /* No weak normalisation. */
+        struct xiao147_raw_lobe tail;
+        if (!calculate_lobe(profile->positive, profile->stations, old->first_station,
+                            old->last_station, peak, &tail) ||
+            peak != old->peak_station ||
+            magnitude((int)tail.native_short_x - gesture->tap_short_anchor[i]) > TAP_MOVE ||
+            magnitude((int)tail.native_long_y - gesture->tap_long_anchor[i]) > TAP_MOVE) {
+            return false;
+        }
+        credible++;
+    }
+    return credible > 0;
+}
+
 struct xiao147_shadow_result xiao147_shadow_gesture_observe_profile(
     struct xiao147_shadow_gesture *gesture,
     const struct xiao147_raw_profile *profile, bool valid,
@@ -615,7 +659,15 @@ struct xiao147_shadow_result xiao147_shadow_gesture_observe_profile(
                 near_anchor = true;
             }
         }
-        if (!near_anchor) { gesture->tap_disqualified = true; }
+        if (!near_anchor || gesture->fading_tail) {
+            if (stationary_fading_tail(gesture, profile)) {
+                gesture->fading_tail = true;
+                memcpy(gesture->previous_positive, profile->positive,
+                       sizeof(gesture->previous_positive));
+            } else {
+                gesture->tap_disqualified = true;
+            }
+        }
     }
     if (valid && hypothesis == XIAO147_RAW_TWO_SEPARATED_LOBES) {
         associated = partition_valid(profile);
@@ -659,6 +711,8 @@ struct xiao147_shadow_result xiao147_shadow_gesture_observe_profile(
         gesture->previous_valley = profile->valley_station;
         gesture->previous_lobes[0] = profile->lobes[0];
         gesture->previous_lobes[1] = profile->lobes[1];
+        memcpy(gesture->previous_positive, profile->positive,
+               sizeof(gesture->previous_positive));
         if (!gesture->tap_anchor_valid) {
             gesture->tap_anchor_valid = true;
             for (unsigned i = 0; i < 2; i++) {

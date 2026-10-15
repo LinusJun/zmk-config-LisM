@@ -1,0 +1,17 @@
+{
+  "baseline_commit": "cc970acbfa1584fcbbf712cdd8447ffee7e8f7cd",
+  "scope": "Offline-only optimisation; no new hardware window, flash, or controller writes",
+  "cause_evidence": "No 3-second cooldown exists. Complete lift is two NONE frames. Some qualified stationary TWO contacts were rejected when their fading ONE whole-profile centroid shifted despite fixed-region lobes remaining stationary.",
+  "change": "Only for a previously qualified, stationary pair: positive electrode envelope must not grow, total response must initially fall to <=50%, and each credible fixed-support lobe must retain its peak station and remain within 12 native units of the FIRST TWO anchor. At least one credible residual lobe required. No normalization of weak supports. Subsequent fading-tail responses must remain non-increasing.",
+  "unchanged_guards": ["two consecutive credible TWO frames", "two real NONE frames", "240ms tap limit", "60ms one-lobe tail limit", "per-lobe motion permanently cancels tap", "merge/bounce/invalid/pose/gap cancellation", "no RAW single-finger pointer inference", "explicit opt-in and 60-second maximum RAW window", "normal input restoration and button release safeguards"],
+  "recorded_replay": {
+    "click_only": {"frames":2227,"old_taps":14,"new_taps":17,"added_timestamps_ms":[21216,22150,27874],"scroll_frames":0},
+    "independent_scroll": {"frames":2226,"taps":0,"wheel_positive_frames":8,"wheel_negative_frames":9,"pan_positive_frames":7,"pan_negative_frames":7,"all_outputs_unchanged":true},
+    "mixed": {"frames":2224,"taps":2,"all_outputs_unchanged":true},
+    "older_1309c8f": {"frames":2224,"old_taps":1,"new_taps":2,"added_timestamp_ms":27867,"scroll_counts_unchanged":true}
+  },
+  "synthetic_regressions": ["ten clicks 130ms apart with complete two-frame lift", "exact 50-percent fading boundary", "60ms versus 61ms tail", "new/growing electrode rejected", "renewed TWO rejected", "prior movement cannot regain tap", "moving/merged tail cannot click"],
+  "limitations": ["Physical tap count unknown; no hit-rate claim", "Some unresolved contacts still rejected", "Recorded data now used for development, not independent validation", "Native second-contact report still unresolved", "RAW two-finger HID remains bounded experiment; not daily single/multi-touch coexistence", "No claim of formal stable or production-ready multi-touch"],
+  "hardware_flashed": false,
+  "charging_control_changed": false
+}

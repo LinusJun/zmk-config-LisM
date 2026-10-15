@@ -35,6 +35,7 @@ jobs:
       - run: python3 tests/xiao147_shadow_integration_host_test.py
       - run: python3 tests/xiao147_raw_dynamic_host_test.py
       - run: python3 tests/xiao147_raw_live_host_test.py
+      - run: python3 tests/xiao147_raw_click_replay_test.py
       - run: python3 tests/xiao147_raw_hid_integration_host_test.py
       - run: python3 tests/lism_charge_host_test.py
   build:

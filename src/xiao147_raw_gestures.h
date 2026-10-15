@@ -37,6 +37,7 @@ struct xiao147_raw_lobe {
 struct xiao147_raw_profile {
     enum xiao147_raw_hypothesis hypothesis;
     uint32_t stations[XIAO147_PROFILE_STATIONS];
+    uint32_t positive[XIAO147_PROFILE_CHANNELS];
     uint16_t valley_permille;
     uint16_t lesser_peak_permille;
     uint8_t significant_peaks;
@@ -156,6 +157,10 @@ struct xiao147_shadow_gesture {
     uint16_t tap_short_anchor[2];
     uint16_t tap_long_anchor[2];
     bool tail_one;
+    /* A strongly decaying lift tail is checked in the LAST TWO's fixed
+     * support regions, not by its misleading whole-profile centroid. */
+    bool fading_tail;
+    uint32_t previous_positive[XIAO147_PROFILE_CHANNELS];
     bool pending;
     bool weak_release;
     bool reacquiring;

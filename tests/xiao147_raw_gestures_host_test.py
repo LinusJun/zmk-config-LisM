@@ -695,6 +695,69 @@ static void moving_lift_tail_tests(void)
     puts("PASS: synthetic RAW lift-tail movement/merging suppresses false right tap; no claim of independent physical negatives");
 }
 
+static void fading_tail_tests(void)
+{
+    const int32_t pair_values[12]={0,0,280,280,0,0,0,0,280,280,0,0};
+    const int32_t tail_values[12]={0,0,60,60,0,0,0,0,180,180,0,0};
+    struct xiao147_raw_profile pair, tail, lifted;
+    assert(xiao147_raw_profile_evaluate(pair_values,12,NULL,&pair));
+    assert(xiao147_raw_profile_evaluate(tail_values,12,NULL,&tail));
+    assert(xiao147_raw_profile_evaluate(quiet,12,NULL,&lifted));
+    assert(tail.hypothesis==XIAO147_RAW_ONE_LOBE);
+    for(unsigned scenario=0;scenario<11;scenario++) {
+        struct xiao147_shadow_gesture g;
+        struct xiao147_raw_profile sample=tail;
+        int32_t v[12]; memcpy(v,tail_values,sizeof(v));
+        xiao147_shadow_gesture_init(&g);
+        no_output(profile_step(&g,&lifted,0));no_output(profile_step(&g,&lifted,20));
+        no_output(profile_step(&g,&pair,40));no_output(profile_step(&g,&pair,60));
+        if(scenario==9) {
+            /* A near-anchor ONE before the candidate tail loses one support.
+             * That support then reappears below the old TWO amplitude: this
+             * is still renewed contact, not a first fading tail. */
+            int32_t near_values[12]={0,0,0,0,0,0,0,0,180,180,0,0};
+            struct xiao147_raw_profile near;
+            assert(xiao147_raw_profile_evaluate(near_values,12,NULL,&near));
+            no_output(profile_step(&g,&near,70));
+            assert(g.tail_one&&!g.fading_tail&&!g.tap_disqualified);
+        }
+        if(scenario==1) { v[2]=v[3]=80;v[8]=v[9]=220; } /* Exactly 50%. */
+        if(scenario==2) { v[2]=v[3]=90;v[8]=v[9]=230; } /* Above 50%. */
+        if(scenario==3) { v[0]=21; } /* New electrode, even tiny. */
+        if(scenario==4) { g.tap_disqualified=true; } /* Never undo prior motion. */
+        if(scenario==5) { g.moving=true; } /* No right click after scroll. */
+        assert(xiao147_raw_profile_evaluate(v,12,NULL,&sample));
+        assert(sample.hypothesis==XIAO147_RAW_ONE_LOBE);
+        no_output(profile_step(&g,&sample,80));
+        if(scenario==6) { /* Renewed contact on any electrode invalidates fading tail. */
+            v[8]++;assert(xiao147_raw_profile_evaluate(v,12,NULL,&sample));
+            no_output(profile_step(&g,&sample,100));
+        }
+        if(scenario==7) { /* TWO return is bounce, not a new click. */
+            no_output(profile_step(&g,&pair,100));
+        }
+        unsigned lift=scenario==8?141:scenario==10?140:120;
+        no_output(profile_step(&g,&lifted,lift));
+        struct xiao147_shadow_result out=profile_step(&g,&lifted,lift+20);
+        assert(out.candidate_right_tap==(scenario<=1||scenario==10));
+        assert(!out.candidate_wheel&&!out.candidate_hwheel);
+        assert(!g.fading_tail);
+    }
+    /* No multi-second cooldown: ten separate taps, only two 26-ms NONE
+     * frames per lift, each reuses the same tracker and fixed-support tail. */
+    struct xiao147_shadow_gesture g;
+    xiao147_shadow_gesture_init(&g);
+    no_output(profile_step(&g,&lifted,0));no_output(profile_step(&g,&lifted,26));
+    for(unsigned i=0;i<10;i++) {
+        unsigned t=52+i*130;
+        no_output(profile_step(&g,&pair,t));no_output(profile_step(&g,&pair,t+26));
+        no_output(profile_step(&g,&tail,t+52));
+        no_output(profile_step(&g,&lifted,t+78));
+        assert(profile_step(&g,&lifted,t+104).candidate_right_tap);
+    }
+    puts("PASS: bounded fixed-support fading tail; exact 50%/60ms; growth/merge/motion/bounce rejected; 130ms successive synthetic clicks");
+}
+
 static void gesture_tests(void)
 {
     struct xiao147_shadow_gesture g;
@@ -862,7 +925,7 @@ int main(void)
 {
     profile_tests(); baseline_tests(); pending_tests(); independent_lobe_tests();
     activation_and_axis_tests(); individual_lobe_tap_tests();
-    moving_lift_tail_tests();
+    moving_lift_tail_tests(); fading_tail_tests();
     weak_release_tests(); requalification_tests();
     gesture_tests(); actual_scene_replay();
     puts("PASS: actual C signed DIFF morphology (4 in-sample scenes only), "
@@ -891,11 +954,11 @@ with tempfile.TemporaryDirectory(prefix="xiao147-raw-gestures-") as directory:
     subprocess.run([str(binary)], check=True)
     # Prove the new counterexamples fail with the previous ignored-tail rule.
     driver = (root / "src/xiao147_raw_gestures.c").read_text()
-    guard = "if (!near_anchor) { gesture->tap_disqualified = true; }"
+    guard = "if (!near_anchor || gesture->fading_tail) {"
     assert driver.count(guard) == 1
     mutant = folder / "mutant.c"
     mutant.write_text(driver.replace(guard,
-        "if (false && !near_anchor) { gesture->tap_disqualified = true; }"))
+        "if (false && (!near_anchor || gesture->fading_tail)) {"))
     subprocess.run([
         "cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
         "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
@@ -904,3 +967,14 @@ with tempfile.TemporaryDirectory(prefix="xiao147-raw-gestures-") as directory:
     result = subprocess.run([str(binary)], capture_output=True, text=True)
     assert result.returncode != 0 and "g.tap_disqualified==(outer==2)" in result.stderr, result.stderr
     print("PASS: removing RAW tail guard reproduces the moving-lift-tail regression")
+    rebound_guard = "(gesture->tail_one && !gesture->fading_tail)"
+    assert driver.count(rebound_guard) == 1
+    mutant.write_text(driver.replace(rebound_guard, "false"))
+    subprocess.run([
+        "cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
+        "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
+        "-I", str(root / "src"), str(mutant), str(source), "-o", str(binary),
+    ], check=True)
+    result = subprocess.run([str(binary)], capture_output=True, text=True)
+    assert result.returncode != 0 and "out.candidate_right_tap==" in result.stderr, result.stderr
+    print("PASS: removing first-ONE guard reproduces the renewed-electrode false-click regression")
