@@ -68,6 +68,13 @@ assert "xiao147_display_layout_ready();" in ui[ui.index("static void create_ui")
 assert "usb_powered ? 100 : zmk_battery_state_of_charge()" not in ui
 assert "DONGLE USB" in ui and 'LV_SYMBOL_CHARGE " %u%%"' in ui
 assert "lism_charge_local()" in ui and "xiao147_battery_rings_refresh_charge()" in ui
+assert '(charge.flags & LISM_CHARGE_USB) ? "USB" : "--%"' in ui
+charge_matrix = read("build-charge-peripherals.yaml")
+for peripheral in ("left_4waystick", "right_trackball", "jp19", "circlepad"):
+    assert f"lism_{peripheral}_charge_status" in charge_matrix
+    assert f"lism_{peripheral}_battery_connected" in charge_matrix
+assert charge_matrix.count("CONFIG_LISM_CHARGE_BATTERY_CONNECTED=n") == 4
+assert charge_matrix.count("CONFIG_LISM_CHARGE_BATTERY_CONNECTED=y") == 4
 assert "gpio_pin_get_raw" in ui and "NRF_P1->PIN_CNF[usr1.pin]" in ui
 native_layout = ui[ui.index("static void layout_status"):ui.index("static void redraw(struct k_work *work)\n{")]
 assert "portrait ? 164 : 300" in native_layout

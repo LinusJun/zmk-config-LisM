@@ -261,7 +261,7 @@ static void draw_devices(void)
             known = true;
         }
         lv_label_set_text(device_names[row], portrait ? short_names[row] : names[row]);
-        if (row == 0 && usb_powered) {
+        if (row == 0 && (lism_charge_local().flags & LISM_CHARGE_USB)) {
             lv_label_set_text(device_names[row], portrait ? "DONGLE\nUSB" : "DONGLE USB");
             lv_obj_set_y(device_names[row], portrait ? 2 : 7);
         }
@@ -476,7 +476,7 @@ static void redraw(struct k_work *work)
         snprintf(text, sizeof(text), lism_charge_show_bolt(charge) ?
                  LV_SYMBOL_CHARGE " %u%%" : "%u%%", dongle_level);
     } else {
-        snprintf(text, sizeof(text), "%s", usb_powered ? "USB" : "--%");
+        snprintf(text, sizeof(text), "%s", (charge.flags & LISM_CHARGE_USB) ? "USB" : "--%");
     }
     lv_label_set_text(dongle_battery_label, text);
     xiao147_battery_rings_refresh_charge();
