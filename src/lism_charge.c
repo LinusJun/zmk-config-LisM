@@ -11,7 +11,7 @@
 #include <zephyr/bluetooth/gatt.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zmk/battery.h>
-#include <zmk/usb.h>
+#include <hal/nrf_power.h>
 #include "lism_charge.h"
 
 #define CHARGE_SERVICE_UUID BT_UUID_128_ENCODE(0xf4f64a90, 0x712a, 0x4e2e, 0xa275, 0x64809f58e101)
@@ -57,7 +57,9 @@ static void sample_charge(struct k_work *work);
 K_WORK_DELAYABLE_DEFINE(charge_sample_work, sample_charge);
 static void sample_charge(struct k_work *work) {
     ARG_UNUSED(work);
-    bool usb = zmk_usb_is_powered();
+    /* Physical VBUS also covers wall chargers without USB enumeration and
+     * split peripherals without the USB stack. Read-only: no power controls. */
+    bool usb = nrf_power_usbregstatus_vbusdet_get(NRF_POWER);
     int stat = gpio_ready ? gpio_pin_get_raw(charge_port, 17) : -ENODEV;
     /* An explicit installation declaration is necessary under USB: the official
      * reference notes that an unconnected BAT node can mimic a real battery.

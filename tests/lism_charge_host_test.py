@@ -65,7 +65,10 @@ static int gpio_pin_get_raw(const struct device*d,int p) {assert(d==&dev&&p==17)
 static int gpio_pin_configure(const struct device*d,int p,int flags) {
  assert(d==&dev&&p==17&&flags==(GPIO_INPUT|GPIO_PULL_UP));config_calls++;return 0;
 }
-static bool zmk_usb_is_powered(void) {return usb;}
+#define NRF_POWER (&dev)
+static bool nrf_power_usbregstatus_vbusdet_get(const struct device*d) {
+ assert(d==&dev);return usb;
+}
 static uint8_t zmk_battery_state_of_charge(void) {return 80;}
 #define SENSOR_CHAN_GAUGE_VOLTAGE 1
 struct sensor_value {int val1,val2;};

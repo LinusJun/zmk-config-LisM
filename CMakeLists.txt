@@ -51,7 +51,9 @@ static void chg_handler(const struct device *port, struct gpio_callback *cb, uin
       endif()
       string(REPLACE "${_charge_old}" "${_charge_new}" _charge_code "${_charge_code}")
       file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/lism_charge_indicator.c" "${_charge_code}")
-      set_source_files_properties("${_charge_src}" DIRECTORY "${_charge_dir}"
+      # This module uses target_sources(app), not a module-local library. Source
+      # properties must be set in the directory where app was created.
+      set_source_files_properties("${_charge_src}" TARGET_DIRECTORY app
         PROPERTIES HEADER_FILE_ONLY ON)
       zephyr_library_sources("${CMAKE_CURRENT_BINARY_DIR}/lism_charge_indicator.c")
     endif()
