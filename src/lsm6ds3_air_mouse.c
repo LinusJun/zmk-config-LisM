@@ -42,6 +42,7 @@ struct imu_data {
     struct xiao147_air_motion motion;
     enum xiao147_orientation last_pose;
     uint32_t last_gyro_trace;
+    uint32_t input_errors;
 };
 
 static int imu_write(const struct i2c_dt_spec *bus, uint8_t reg, uint8_t value)
@@ -55,7 +56,7 @@ static void imu_poll(struct k_work *work)
     struct imu_data *data = CONTAINER_OF(k_work_delayable_from_work(work),
                                          struct imu_data, poll_work);
     const struct imu_config *cfg = data->dev->config;
-    bool enabled = xiao147_ui_imu_enabled();
+    bool enabled = xiao147_ui_imu_enabled() && !xiao147_touch_button_pending();
 #ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
     enabled = enabled && !xiao147_touch_capture_active();
 #endif
@@ -112,8 +113,16 @@ static void imu_poll(struct k_work *work)
             if (dx || dy) {
                 bool woke = xiao147_ui_wake_on_motion();
                 if (!woke && xiao147_ui_page() == XIAO147_PAGE_STATUS) {
-                    if (dx) { input_report_rel(data->dev, INPUT_REL_X, dx, dy == 0, K_NO_WAIT); }
-                    if (dy) { input_report_rel(data->dev, INPUT_REL_Y, dy, true, K_NO_WAIT); }
+                    int ret = dx == 0 ? 0 : input_report_rel(data->dev, INPUT_REL_X, dx, true, K_NO_WAIT);
+                    if (ret == 0 && dy) { ret = input_report_rel(data->dev, INPUT_REL_Y, dy, true, K_NO_WAIT); }
+                    if (ret != 0) {
+                        data->input_errors++;
+                        xiao147_air_clear(&data->motion);
+                        data->motion.samples = 0;
+                        if (data->input_errors % 100 == 1) {
+                            LOG_WRN("IMU mouse queue error %d, failures %u", ret, data->input_errors);
+                        }
+                    }
                 }
                 else { xiao147_air_clear(&data->motion); }
             }

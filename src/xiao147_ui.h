@@ -23,3 +23,5 @@ bool xiao147_ui_wake_on_motion(void);
 void xiao147_ui_touch(uint8_t fingers, uint16_t x, uint16_t y,
                        enum xiao147_orientation orientation);
 bool xiao147_ui_wake_on_touch(void);
+/* A queued touch press still needs its matching release; suppress air motion. */
+bool xiao147_touch_button_pending(void);

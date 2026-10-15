@@ -82,7 +82,9 @@ static int page,read_error,nrel,nkey,nsample,submitted,cancel_samples,extended_c
 static bool reject_extended;
 static unsigned touch_io_phase, settle_calls;
 static enum xiao147_orientation pose;
-static int rel_code[32],rel_value[32],key_code[32],key_value[32];
+static int rel_code[128],rel_value[128],key_code[128],key_value[128];
+static unsigned failed_press,failed_release,failed_relative,key_attempts;
+static int failed_relative_code;
 static uint8_t sensor[32];
 static uint16_t sample_x,sample_y;
 static struct k_work_delayable *k_work_delayable_from_work(struct k_work *w) {return (void *)w;}
@@ -103,13 +105,25 @@ static int i2c_read_dt(const struct i2c_dt_spec *b,void *p,size_t n) {
     if(n==32){extended_calls++;if(reject_extended)return -EIO;}
     if(n==14||n==32){memcpy(p,sensor,n);}return read_error;
 }
-static int input_report_rel(const struct device*d,int c,int v,bool sync,int wait) {(void)wait;rel_code[nrel]=c;rel_value[nrel++]=v;route_event(INPUT_EV_REL,c,v,sync,d);return 0;}
-static void input_report_key(const struct device*d,int c,int v,bool sync,int wait) {(void)wait;key_code[nkey]=c;key_value[nkey++]=v;route_event(INPUT_EV_KEY,c,v,sync,d);}
+static int input_report_rel(const struct device*d,int c,int v,bool sync,int wait) {
+    assert(wait==K_NO_WAIT&&sync);
+    if(failed_relative&&c==failed_relative_code){failed_relative--;return -EIO;}
+    assert(nrel<128);rel_code[nrel]=c;rel_value[nrel++]=v;
+    route_event(INPUT_EV_REL,c,v,sync,d);return 0;
+}
+static int input_report_key(const struct device*d,int c,int v,bool sync,int wait) {
+    assert(wait==K_NO_WAIT&&sync);key_attempts++;
+    if(v&&failed_press){failed_press--;return -EIO;}
+    if(!v&&failed_release){failed_release--;return -EIO;}
+    assert(nkey<128);key_code[nkey]=c;key_value[nkey++]=v;
+    route_event(INPUT_EV_KEY,c,v,sync,d);return 0;
+}
 static enum xiao147_page xiao147_ui_page(void) {return page;}
 static enum xiao147_orientation xiao147_rotation_get(void) {return pose;}
 static bool xiao147_ui_wake_on_touch(void) {return false;}
 static void xiao147_ui_touch(uint8_t f,uint16_t x,uint16_t y,enum xiao147_orientation o) {assert(o==pose);if(f==XIAO147_TOUCH_CANCEL){cancel_samples++;}else if(f){sample_x=x;sample_y=y;nsample++;}}
 typedef int atomic_val_t;
+typedef int atomic_t;
 static int imu_mode,auto_rotate_mode,restore_landscape,sleeping;
 static int auto_updates,last_auto_pose;
 static uint8_t imu_axes[6];
@@ -137,7 +151,14 @@ static void zmk_hid_mouse_scroll_set(int x,int y) {hid_pan=x;hid_wheel=y;}
 static void zmk_hid_mouse_movement_set(int x,int y) {hid_x=x;hid_y=y;}
 static void zmk_hid_mouse_button_press(int b) {hid_buttons|=BIT(b);}
 static void zmk_hid_mouse_button_release(int b) {hid_buttons&=~BIT(b);}
-static int zmk_endpoint_send_mouse_report(void) {hid_reports++;last_wheel=hid_wheel;last_pan=hid_pan;return 0;}
+struct host_report {int x,y,wheel,pan,buttons;};
+static struct host_report host_reports[512];
+static int zmk_endpoint_send_mouse_report(void) {
+    assert(hid_reports<512);
+    host_reports[hid_reports++]=(struct host_report){hid_x,hid_y,hid_wheel,hid_pan,hid_buttons};
+    if(hid_wheel){last_wheel=hid_wheel;}
+    if(hid_pan){last_pan=hid_pan;}return 0;
+}
 static int filter_with_input_config(const struct input_listener_config *c,
     struct input_listener_data *d,struct input_event *e) {
     (void)d;(void)e;assert(!c->base.processors_len&&!c->layer_overrides_len);return 0;
@@ -156,6 +177,88 @@ static void contact(int index,int x,int y) {
     sensor[off+2]=y>>8;sensor[off+3]=y;
 }
 static void poll(struct axs_touch_data *d) {now+=16;axs_poll(&d->poll_work.work);}
+static void ordinary_failure_tests(void) {
+    const struct axs_touch_config cfg={0};struct axs_touch_data d={0};
+    struct device dev={&d,&cfg};
+    page=0;pose=0;read_error=0;reject_extended=false;
+    memset(sensor,0,sizeof(sensor));nrel=nkey=0;assert(!hid_buttons);
+    assert(axs_touch_init(&dev)==0);poll(&d);
+    contact(0,40,70);contact(1,60,90);
+    failed_press=1;sensor[1]=1;poll(&d);sensor[1]=0;poll(&d);
+    assert(!nkey&&!d.pending_button&&!xiao147_touch_button_pending()&&d.input_errors==1);
+    for(int i=0;i<4;i++){poll(&d);}assert(!nkey); /* No delayed click. */
+
+    /* Right press accepted, release repeatedly fails. Release work is independent
+     * of page, touch bus errors and held contacts; at most one retry per tick. */
+    failed_release=3;sensor[1]=2;poll(&d);sensor[1]=0;poll(&d);
+    assert(nkey==1&&d.pending_button==INPUT_BTN_1&&xiao147_touch_button_pending());
+    assert(hid_buttons==BIT(1));
+    page=XIAO147_PAGE_SETTINGS;read_error=-EIO;sensor[1]=1;
+    unsigned io=extended_calls;
+    for(int i=0;i<3;i++){
+        unsigned attempts=key_attempts;poll(&d);
+        assert(key_attempts==attempts+1&&extended_calls==(int)io);
+    }
+    assert(nkey==2&&!hid_buttons&&!d.pending_button&&!xiao147_touch_button_pending());
+    assert(d.swallow_until_release);poll(&d);assert(nkey==2);
+    read_error=0;page=0;poll(&d);assert(d.swallow_until_release);
+    sensor[1]=0;poll(&d);assert(!d.swallow_until_release);
+    sensor[1]=1;poll(&d);sensor[1]=0;poll(&d);assert(nkey==4&&!hid_buttons);
+
+    /* A large discontinuity followed by lift cannot generate a phantom click. */
+    int keys=nkey;sensor[1]=1;contact(0,40,70);poll(&d);
+    contact(0,40,200);poll(&d);assert(d.swallow_until_release);
+    sensor[1]=0;poll(&d);assert(nkey==keys);
+
+    const int codes[]={INPUT_REL_X,INPUT_REL_Y,INPUT_REL_HWHEEL,INPUT_REL_WHEEL};
+    for(unsigned i=0;i<4;i++){
+        sensor[1]=0;poll(&d);contact(0,40,70);contact(1,60,90);
+        sensor[1]=i<2?1:2;poll(&d);
+        failed_relative=1;failed_relative_code=codes[i];
+        int before=hid_reports;keys=nkey;
+        contact(0,48,78);contact(1,68,98);poll(&d);
+        assert(!failed_relative&&d.swallow_until_release&&!d.fingers);
+        assert(!d.scroll_x_remainder&&!d.scroll_y_remainder);
+        assert(hid_reports-before==(int)(i&1U));
+        if(i&1U){
+            struct host_report r=host_reports[before];
+            assert(!r.y&&!r.wheel&&!r.buttons);
+            if(i==1){assert(r.x==8&&!r.pan);}else{assert(r.pan==-1&&!r.x);}
+        }
+        contact(0,50,80);poll(&d);sensor[1]=0;poll(&d);
+        assert(nkey==keys&&hid_reports==before+(int)(i&1U));
+        /* A later orthogonal event must not flush the failed event or residue. */
+        sensor[1]=1;contact(0,40,70);poll(&d);
+        before=hid_reports;contact(0,44,70);poll(&d);
+        assert(hid_reports==before+1);
+        struct host_report r=host_reports[before];
+        assert(!r.x&&r.y==4&&!r.wheel&&!r.pan&&!r.buttons);
+        contact(0,60,70);poll(&d);sensor[1]=0;poll(&d);assert(nkey==keys);
+    }
+
+    /* The same complete-event/no-replay rule applies to both gyro axes. */
+    struct imu_data id={0};const struct imu_config ic={0};struct device iv={&id,&ic};
+    assert(imu_init(&iv)==0);imu_mode=1;auto_rotate_mode=0;pose=1;id.last_pose=pose;
+    id.gyro_on=true;
+    imu_axes[0]=0x14;imu_axes[1]=5;imu_axes[2]=0x8a;imu_axes[3]=2;
+    for(int i=0;i<2;i++){
+        failed_relative=1;failed_relative_code=i?INPUT_REL_Y:INPUT_REL_X;
+        id.motion.calibrating=false;int before=hid_reports;
+        now+=20;imu_poll(&id.poll_work.work);
+        assert(!failed_relative&&hid_reports==before+i&&id.input_errors==(unsigned)(i+1));
+        assert(!id.motion.remainder[0]&&!id.motion.remainder[1]);
+        if(i){assert(host_reports[before].x==2&&!host_reports[before].y);}
+        imu_mode=0;now+=20;imu_poll(&id.poll_work.work);
+        assert(hid_reports==before+i);
+        imu_mode=1;id.gyro_on=true;
+    }
+    /* A touch release outstanding disables air motion even if its switch is on. */
+    atomic_set(&normal_button_gate,1);int before=hid_reports;
+    now+=20;imu_poll(&id.poll_work.work);assert(!id.gyro_on&&hid_reports==before);
+    atomic_set(&normal_button_gate,0);now+=20;imu_poll(&id.poll_work.work);
+    assert(id.gyro_on&&id.motion.calibrating&&hid_reports==before);
+    puts("PASS: normal press/release failures, page/bus-independent retry, discontinuity cancellation, complete pointer/wheel/IMU events and no stale movement replay");
+}
 int main(void) {
     const struct axs_touch_config cfg={0};struct axs_touch_data d={0};
     struct device dev={&d,&cfg};assert(axs_touch_init(&dev)==0);
@@ -296,6 +399,7 @@ int main(void) {
     xiao147_air_begin(&m,10000);moving[0]=150;moving[1]=-100;moving[2]=50;
     for(int i=0;i<151;i++)xiao147_air_sample(&m,10000+i*20,0,moving);
     assert(m.bias[0]==100&&m.bias[1]==-100);
+    ordinary_failure_tests();
     puts("PASS: actual touch gestures/four poses, cancellation, actual IMU stability/error recovery/vectors and USR1 edge toggles");
 }
 '''

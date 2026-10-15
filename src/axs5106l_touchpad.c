@@ -15,6 +15,7 @@
 #include <zephyr/input/input.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/atomic.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 #include "xiao147_ui.h"
@@ -70,6 +71,8 @@ struct axs_touch_data {
     uint32_t last_trace_ms;
     uint32_t wheel_events;
     uint32_t input_errors;
+    uint16_t pending_button;
+    uint32_t last_release_error_ms;
     uint32_t last_report_trace_ms;
     uint32_t count_histogram[AXS_MAX_POINTS + 1];
     uint32_t reads_extended;
@@ -87,6 +90,9 @@ struct axs_touch_data {
     bool normal_zero;
     uint32_t normal_zero_since_ms;
     uint32_t normal_frame_ms;
+    bool experimental_uart_quarantine;
+    bool experimental_uart_saw_low;
+    bool experimental_uart_low_drained;
 #ifdef CONFIG_LISM_XIAO147_GESTURE_SHADOW
     struct xiao147_raw_baseline baseline;
     struct xiao147_shadow_gesture shadow;
@@ -102,9 +108,6 @@ struct axs_touch_data {
 #ifdef CONFIG_LISM_XIAO147_RAW_GESTURE_HID_TEST
     bool experimental_hid_active;
     bool experimental_button_down;
-    bool experimental_uart_quarantine;
-    bool experimental_uart_saw_low;
-    bool experimental_uart_low_drained;
     uint32_t experimental_release_log_ms;
 #endif
 #endif
@@ -129,19 +132,60 @@ static struct point decode_point(const uint8_t report[AXS_TOUCH_REPORT_LEN], uin
     return (struct point){.x = p.x, .y = p.y};
 }
 
-static void report_button(const struct device *dev, uint16_t code)
+static atomic_t normal_button_gate;
+
+bool xiao147_touch_button_pending(void)
 {
-    input_report_key(dev, code, 1, true, K_NO_WAIT);
-    input_report_key(dev, code, 0, true, K_NO_WAIT);
+    return atomic_get(&normal_button_gate) != 0;
 }
 
-static void report_pointer(const struct device *dev, int16_t dx, int16_t dy)
+static bool release_button(struct axs_touch_data *data)
 {
-    if (dx != 0) { input_report_rel(dev, INPUT_REL_X, dx, dy == 0, K_NO_WAIT); }
-    if (dy != 0) { input_report_rel(dev, INPUT_REL_Y, dy, true, K_NO_WAIT); }
+    if (data->pending_button == 0) { return true; }
+    int ret = input_report_key(data->dev, data->pending_button, 0, true, K_NO_WAIT);
+    if (ret == 0) {
+        data->pending_button = 0;
+        atomic_set(&normal_button_gate, 0);
+        return true;
+    }
+    data->input_errors++;
+#ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
+    if (!data->experimental_uart_quarantine) {
+        data->experimental_uart_quarantine = true;
+        data->experimental_uart_saw_low = false;
+        data->experimental_uart_low_drained = false;
+    }
+#endif
+    if (k_uptime_get_32() - data->last_release_error_ms >= 1000) {
+        LOG_WRN("Touch button release retry failed %d", ret);
+        data->last_release_error_ms = k_uptime_get_32();
+    }
+    return false;
 }
 
-static void report_scroll(struct axs_touch_data *data, int16_t dx, int16_t dy)
+static void report_button(struct axs_touch_data *data, uint16_t code)
+{
+    if (data->pending_button != 0) { return; }
+    int ret = input_report_key(data->dev, code, 1, true, K_NO_WAIT);
+    if (ret != 0) {
+        data->input_errors++;
+        return; /* Failed presses are never replayed as delayed clicks. */
+    }
+    data->pending_button = code;
+    atomic_set(&normal_button_gate, 1);
+    if (!release_button(data)) { data->swallow_until_release = true; }
+}
+
+static bool report_pointer(struct axs_touch_data *data, int16_t dx, int16_t dy)
+{
+    /* Each accepted axis is complete, even if the next queue submission fails. */
+    int ret = dx == 0 ? 0 : input_report_rel(data->dev, INPUT_REL_X, dx, true, K_NO_WAIT);
+    if (ret == 0 && dy != 0) { ret = input_report_rel(data->dev, INPUT_REL_Y, dy, true, K_NO_WAIT); }
+    if (ret != 0) { data->input_errors++; }
+    return ret == 0;
+}
+
+static bool report_scroll(struct axs_touch_data *data, int16_t dx, int16_t dy)
 {
     data->scroll_x_remainder += dx;
     data->scroll_y_remainder += dy;
@@ -151,8 +195,8 @@ static void report_scroll(struct axs_touch_data *data, int16_t dx, int16_t dy)
     data->scroll_y_remainder -= sy * SCROLL_PIXELS_PER_TICK;
     /* HID wheel sign is inverted relative to content motion. */
     int horizontal = 0, vertical = 0;
-    if (sx != 0) { horizontal = input_report_rel(data->dev, INPUT_REL_HWHEEL, -sx, sy == 0, K_NO_WAIT); }
-    if (sy != 0) { vertical = input_report_rel(data->dev, INPUT_REL_WHEEL, -sy, true, K_NO_WAIT); }
+    if (sx != 0) { horizontal = input_report_rel(data->dev, INPUT_REL_HWHEEL, -sx, true, K_NO_WAIT); }
+    if (horizontal == 0 && sy != 0) { vertical = input_report_rel(data->dev, INPUT_REL_WHEEL, -sy, true, K_NO_WAIT); }
     if (sx || sy) {
         data->scrolled = true; /* Even one tick cancels the right-click tap. */
         data->wheel_events++;
@@ -163,15 +207,15 @@ static void report_scroll(struct axs_touch_data *data, int16_t dx, int16_t dy)
             data->last_trace_ms = k_uptime_get_32();
         }
     }
+    return horizontal == 0 && vertical == 0;
 }
 
 static void end_contact(struct axs_touch_data *data, bool allow_tap)
 {
-    if (allow_tap && data->fingers != 0 && !data->moved && !data->scrolled &&
+    bool tap = allow_tap && data->fingers != 0 && !data->moved && !data->scrolled &&
         !data->swallow_until_release &&
-        k_uptime_get_32() - data->touch_start_ms <= TAP_MAX_MS) {
-        report_button(data->dev, data->max_fingers >= 2 ? INPUT_BTN_1 : INPUT_BTN_0);
-    }
+        k_uptime_get_32() - data->touch_start_ms <= TAP_MAX_MS;
+    uint16_t button = data->max_fingers >= 2 ? INPUT_BTN_1 : INPUT_BTN_0;
     data->fingers = 0;
     data->max_fingers = 0;
     data->moved = false;
@@ -179,6 +223,7 @@ static void end_contact(struct axs_touch_data *data, bool allow_tap)
     data->scroll_x_remainder = 0;
     data->scroll_y_remainder = 0;
     data->swallow_until_release = false;
+    if (tap) { report_button(data, button); }
 }
 
 static void cancel_contact(struct axs_touch_data *data)
@@ -274,6 +319,7 @@ static bool axs_experimental_release(struct axs_touch_data *data)
     }
     return false;
 }
+#endif
 
 static bool axs_experimental_discard_commands(struct axs_touch_data *data,
                                               bool known_low, bool known_high)
@@ -300,9 +346,14 @@ static bool axs_experimental_discard_commands(struct axs_touch_data *data,
         }
     }
     if (known_low) { data->experimental_uart_low_drained = empty; }
+    bool button_down = data->pending_button != 0;
+#ifdef CONFIG_LISM_XIAO147_RAW_GESTURE_HID_TEST
+    button_down = button_down || data->experimental_button_down;
+#endif
     if (known_high && data->experimental_uart_saw_low &&
         data->experimental_uart_low_drained && empty &&
-        !data->experimental_button_down && !xiao147_raw_capture_active(&data->capture)) {
+        !button_down &&
+        !xiao147_raw_capture_active(&data->capture)) {
         data->experimental_uart_quarantine = false;
         data->experimental_uart_saw_low = false;
         data->experimental_uart_low_drained = false;
@@ -311,6 +362,7 @@ static bool axs_experimental_discard_commands(struct axs_touch_data *data,
     return true; /* Never parse bytes in the same tick that drains isolation. */
 }
 
+#ifdef CONFIG_LISM_XIAO147_RAW_GESTURE_HID_TEST
 static void axs_experimental_abort(struct axs_touch_data *data)
 {
     data->experimental_hid_active = false;
@@ -542,12 +594,13 @@ static bool axs_raw_poll(struct axs_touch_data *data)
     int dtr_result = device_is_ready(capture_console) ?
         uart_line_ctrl_get(capture_console, UART_LINE_CTRL_DTR, &dtr) : -ENODEV;
     bool connected = dtr_result == 0 && dtr != 0;
-    bool discard_commands = false;
 #ifdef CONFIG_LISM_XIAO147_RAW_GESTURE_HID_TEST
     bool was_button_down = data->experimental_button_down;
     axs_experimental_release(data);
-    discard_commands = axs_experimental_discard_commands(data,
+#endif
+    bool discard_commands = axs_experimental_discard_commands(data,
         dtr_result == 0 && dtr == 0, connected);
+#ifdef CONFIG_LISM_XIAO147_RAW_GESTURE_HID_TEST
     if (data->experimental_button_down && !was_active) {
         atomic_set(&capture_gate, 1);
         return true;
@@ -667,6 +720,25 @@ static void axs_poll(struct k_work *work)
     struct k_work_delayable *dwork = k_work_delayable_from_work(work);
     struct axs_touch_data *data = CONTAINER_OF(dwork, struct axs_touch_data, poll_work);
     const struct axs_touch_config *cfg = data->dev->config;
+    if (data->pending_button != 0) {
+        /* Retry once per work tick before bus access, page logic or RAW entry.
+         * A held finger must lift after recovery before starting a new gesture. */
+        release_button(data);
+        cancel_contact(data);
+        data->swallow_until_release = true;
+#ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
+        data->normal_zero = false;
+        data->info_valid = false;
+        data->info_stage = 0;
+        data->control = (struct xiao147_raw_control){0};
+        uint32_t dtr = 0;
+        int status = device_is_ready(capture_console) ?
+            uart_line_ctrl_get(capture_console, UART_LINE_CTRL_DTR, &dtr) : -ENODEV;
+        axs_experimental_discard_commands(data, status == 0 && dtr == 0,
+                                          status == 0 && dtr != 0);
+#endif
+        goto next;
+    }
 #ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
     if (axs_raw_poll(data)) { goto next; }
 #endif
@@ -818,8 +890,14 @@ static void axs_poll(struct k_work *work)
     if (abs(dx) <= TOUCH_JUMP_LIMIT && abs(dy) <= TOUCH_JUMP_LIMIT) {
         if (abs(p.x - data->start.x) > TAP_MAX_MOVE ||
             abs(p.y - data->start.y) > TAP_MAX_MOVE) { data->moved = true; }
-        if (fingers == 2) { report_scroll(data, dx, dy); }
-        else if (data->max_fingers < 2) { report_pointer(data->dev, dx, dy); }
+        bool accepted = true;
+        if (fingers == 2) { accepted = report_scroll(data, dx, dy); }
+        else if (data->max_fingers < 2) { accepted = report_pointer(data, dx, dy); }
+        if (!accepted) { cancel_contact(data); goto next; }
+    } else {
+        /* A discontinuity is not a stationary tap or a new movement anchor. */
+        cancel_contact(data);
+        goto next;
     }
     data->last = p;
 

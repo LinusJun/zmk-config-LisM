@@ -67,6 +67,7 @@ static unsigned input_used, release_attempts, press_attempts, scroll_attempts;
 static unsigned release_attempts_this_poll;
 static bool queue_right_down, explicit_window_requested;
 static unsigned fail_press, fail_release, fail_scroll;
+static unsigned fail_normal_release;
 static int fail_scroll_code=-1;
 '''
 hardware = replace_once(hardware, 'static struct device touch_device={&state,&config};',
@@ -98,7 +99,8 @@ hardware = replace_once(hardware,
     '''scheduled_ms=16;shadow_logs=armed_logs=rate_logs=rejected_logs=0;latest_shadow[0]=0;
     input_used=release_attempts=press_attempts=scroll_attempts=release_attempts_this_poll=0;
     queue_right_down=explicit_window_requested=false;
-    fail_press=fail_release=fail_scroll=0;fail_scroll_code=-1;''')
+    fail_press=fail_release=fail_scroll=fail_normal_release=0;fail_scroll_code=-1;
+    atomic_set(&normal_button_gate,0);''')
 hardware = replace_once(hardware,
     'atomic_set(&capture_gate,0);dtr=console_ready=true;uart_error=0;',
     'atomic_set(&capture_gate,0);dtr=console_ready=true;uart_error=uart_query_error=0;')
@@ -128,7 +130,10 @@ static int host_input_key(const struct device *dev,int code,int value,bool sync,
 #else
         assert(false);
 #endif
-    } else {assert(code==INPUT_BTN_0||code==INPUT_BTN_1);}
+    } else {
+        assert(code==INPUT_BTN_0||code==INPUT_BTN_1);
+        if(value==0&&fail_normal_release){fail_normal_release--;result=-EIO;}
+    }
     record_input(false,code,value,result,sync);
     if(result==0){
         hid_events++;key_events++;last_key=code;
@@ -208,6 +213,31 @@ static void request_rejected(void) {
 #if HID_MODE
     assert(!state.experimental_hid_active);
 #endif
+}
+static void normal_release_quarantine_all_raw(void) {
+    fixture();hands_off();info();
+    contact(1,40,70);poll();fail_normal_release=3;contact(0,40,70);poll();
+    assert(state.pending_button&&state.experimental_uart_quarantine);
+    feed("AXS_RAW_INFO\n");for(unsigned i=0;i<64;i++){feed("\n");}
+    feed("AXS_RAW_START 0101\nAXS_SHADOW_START 0101\nAXS_GESTURE_START 0101\n");
+    drain();for(unsigned i=0;i<6;i++){poll();}
+    assert(!state.pending_button&&!xiao147_touch_button_pending());
+    assert(state.experimental_uart_quarantine&&!state.info_valid&&!factory_writes);
+    feed("AXS_RAW_IN");drain();for(unsigned i=0;i<6;i++){poll();}
+    feed("FO\n");drain();for(unsigned i=0;i<6;i++){poll();}
+    feed("AXS_RAW_STA");drain();for(unsigned i=0;i<6;i++){poll();}
+    feed("RT 0101\n");drain();assert(!factory_writes&&state.experimental_uart_quarantine);
+    uart_query_error=-EIO;dtr=false;poll();
+    assert(!state.experimental_uart_saw_low);uart_query_error=0;dtr=true;poll();
+    dtr=false;uart_error=-EIO;poll();assert(!state.experimental_uart_low_drained);
+    uart_error=0;dtr=true;poll();assert(state.experimental_uart_quarantine);
+    dtr=false;poll();dtr=true;poll();assert(!state.experimental_uart_quarantine);
+    feed("AXS_RAW_START 0101\n");drain();assert(!factory_writes);request_rejected();
+    hands_off();info();feed("AXS_RAW_START 0101\n");drain();
+    for(unsigned i=0;!factory_page&&i<50;i++){poll();}
+    assert(factory_page&&page_enters==1);
+    feed("AXS_RAW_STOP\n");drain();restore_engine();
+    puts("PASS: normal-button release quarantine in RAW/shadow/functional variants, delayed command fragments, DTR/query/RX errors and fresh-session recovery");
 }
 static void command_disabled(void) {
     fixture();hands_off();info();feed("AXS_GESTURE_START 0101\n");drain();
@@ -361,6 +391,24 @@ static void exact_tap_and_natural_scroll(void) {
     unsigned emitted=hid_events;stop();for(unsigned i=0;i<10;i++)poll();assert(hid_events==emitted);
 }
 
+static void normal_release_blocks_experiment(void) {
+    fixture();hands_off();info();
+    contact(1,40,70);poll();fail_normal_release=4;contact(0,40,70);poll();
+    assert(state.pending_button==INPUT_BTN_0&&xiao147_touch_button_pending());
+    assert(state.experimental_uart_quarantine&&!state.experimental_hid_active);
+    feed("AXS_RAW_INFO\nAXS_GESTURE_START 0101\n");
+    unsigned reads=ordinary_reads;
+    /* A serial reconnect cannot clear isolation while the normal press is held. */
+    dtr=false;poll();poll();dtr=true;poll();
+    assert(state.pending_button&&state.experimental_uart_quarantine&&!factory_writes);
+    poll();assert(!state.pending_button&&!xiao147_touch_button_pending()&&!factory_writes);
+    assert(ordinary_reads==reads&&!state.info_valid&&!state.experimental_hid_active);
+    poll();assert(!state.experimental_uart_quarantine);
+    feed("AXS_GESTURE_START 0101\n");drain();assert(!factory_writes);request_rejected();
+    hands_off();info();request(true);until_phase(XIAO147_RAW_SCAN_START,50);
+    assert(state.experimental_hid_active&&page_enters==1&&!state.pending_button);
+    stop();assert(accepted(INPUT_BTN_0,1)==1&&accepted(INPUT_BTN_0,0)==1);
+}
 static void release_fault_command_quarantine(void) {
     prepare(true);arm();fail_release=100;tap();
     assert(state.experimental_button_down&&state.experimental_uart_quarantine);
@@ -527,7 +575,7 @@ static void interruption_and_deadline(void) {
 int main(void) {
     normal_boot();
 #if RAW_MODE
-    command_disabled();
+    command_disabled();normal_release_quarantine_all_raw();
 #if !SHADOW_MODE
     legacy_raw();
 #endif
@@ -537,7 +585,7 @@ int main(void) {
 #endif
 #if HID_MODE
     gates_and_parser();exact_tap_and_natural_scroll();emission_bounds_and_conflicts();
-    press_and_release_failures();release_fault_command_quarantine();scroll_failures();interruption_and_deadline();
+    press_and_release_failures();normal_release_blocks_experiment();release_fault_command_quarantine();scroll_failures();interruption_and_deadline();
     puts("PASS: explicit bounded experimental GESTURE_START actual C, right press/release retries, both natural-scroll axes, error/disconnect/deadline isolation; queue acceptance only, NOT OS/hardware validation");
 #else
     puts("PASS: non-functional configuration cannot activate GESTURE_START; normal behavior preserved and SHADOW never emits HID");

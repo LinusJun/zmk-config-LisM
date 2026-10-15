@@ -88,10 +88,10 @@ static void xiao147_ui_touch(uint8_t fingers,uint16_t x,uint16_t y,enum xiao147_
     else {assert(!input_must_be_blocked());menu_samples++;}
 }
 
-#if RAW_MODE
 typedef int atomic_t;
 static int atomic_get(atomic_t *value) {return *value;}
 static int atomic_set(atomic_t *value,int next) {int old=*value;*value=next;return old;}
+#if RAW_MODE
 static struct device host_console;
 #define DT_CHOSEN(x) 0
 #define DEVICE_DT_GET(x) (&host_console)
