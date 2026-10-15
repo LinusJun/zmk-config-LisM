@@ -96,6 +96,15 @@ int main(void) {
     /* Portrait brightness uses logical x and clamps both ends. */
     pose=XIAO147_BUTTONS_BOTTOM;send(1,200,77);send(0,0,0);frame();assert(brightness==100);
     send(1,0,77);send(0,0,0);frame();assert(brightness==1);
+    /* The producer cancels a drag using its OLD orientation after rotation.
+     * CANCEL must be honored before the handler's stale-orientation check. */
+    send(1,80,77);frame();assert(slider_drag);
+    unsigned prior_redraws=redraws;
+    pose=XIAO147_USB_LEFT;
+    xiao147_ui_touch(XIAO147_TOUCH_CANCEL,0,0,XIAO147_BUTTONS_BOTTOM);
+    frame();assert(!slider_drag&&!previous_touch_fingers&&redraws==prior_redraws);
+    send(1,301,52);send(0,0,0);frame();
+    assert(brightness==100&&!slider_drag&&!previous_touch_fingers&&redraws==prior_redraws);
     assert(cancels>30);
     puts("PASS: actual slider handler: bounded batches, latest value, release/cancel, 33ms non-postponed schedule, no full redraw during drag");
 }

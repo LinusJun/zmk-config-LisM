@@ -42,6 +42,7 @@ LOG_MODULE_REGISTER(lism_axs5106l, LOG_LEVEL_INF);
 #define AXS_REGISTER_SETTLE_US 100
 #define TOUCH_POLL_MS 16
 #define TOUCH_JUMP_LIMIT 80
+#define TOUCH_MAX_GAP_MS 100
 #define TAP_MAX_MS 240
 #define TAP_MAX_MOVE 12
 #define SCROLL_PIXELS_PER_TICK 8
@@ -59,6 +60,7 @@ struct axs_touch_data {
     struct point last;
     struct point start;
     uint32_t touch_start_ms;
+    uint32_t last_valid_frame_ms;
     int16_t scroll_x_remainder;
     int16_t scroll_y_remainder;
     bool moved;
@@ -375,7 +377,8 @@ static void axs_experimental_emit(struct axs_touch_data *data,
 {
     if (!data->experimental_hid_active || result.cancelled || !data->baseline.armed ||
         data->capture.phase != XIAO147_RAW_READ_SAMPLE ||
-        xiao147_ui_page() != XIAO147_PAGE_STATUS || xiao147_ui_imu_enabled()) { return; }
+        xiao147_ui_page() != XIAO147_PAGE_STATUS || xiao147_ui_imu_enabled() ||
+        xiao147_ui_is_sleeping()) { return; }
     if (!axs_experimental_release(data) || result.candidate_wheel < -127 ||
         result.candidate_wheel > 127 || result.candidate_hwheel < -127 ||
         result.candidate_hwheel > 127) {
@@ -536,7 +539,8 @@ static void axs_raw_command(struct axs_touch_data *data, enum xiao147_raw_comman
                data->info_valid && data->info_fw == data->control.expected_fw &&
                data->normal_zero && k_uptime_get_32() - data->normal_zero_since_ms >= 100 &&
                k_uptime_get_32() - data->normal_frame_ms <= 100 &&
-               xiao147_ui_page() == XIAO147_PAGE_STATUS && !xiao147_ui_imu_enabled()) {
+               xiao147_ui_page() == XIAO147_PAGE_STATUS && !xiao147_ui_imu_enabled() &&
+               !xiao147_ui_is_sleeping()) {
         cancel_contact(data);
         data->swallow_until_release = true;
         data->info_valid = false;
@@ -573,7 +577,8 @@ static void axs_raw_command(struct axs_touch_data *data, enum xiao147_raw_comman
         data->info_valid = false;
         data->info_stage = 1;
     } else if (command == XIAO147_RAW_COMMAND_START && !active && !data->info_stage &&
-               data->info_valid && data->info_fw == data->control.expected_fw) {
+               data->info_valid && data->info_fw == data->control.expected_fw &&
+               !xiao147_ui_is_sleeping()) {
         cancel_contact(data);
         data->swallow_until_release = true;
         data->info_valid = false; /* A new session always needs fresh INFO. */
@@ -633,6 +638,19 @@ static bool axs_raw_poll(struct axs_touch_data *data)
         }
     }
     if (xiao147_raw_capture_active(&data->capture)) {
+        /* Factory samples do not pass through normal wake-on-touch. Restore
+         * normal reports on sleep, rather than emitting invisible gestures or
+         * leaving the screen unable to wake by touch. Never auto-rearm. */
+        if (xiao147_ui_is_sleeping()) {
+#ifdef CONFIG_LISM_XIAO147_RAW_GESTURE_HID_TEST
+            data->experimental_hid_active = false;
+#endif
+#ifdef CONFIG_LISM_XIAO147_GESTURE_SHADOW
+            xiao147_shadow_gesture_cancel(&data->shadow);
+#endif
+            data->info_valid = false;
+            xiao147_raw_capture_stop(&data->capture, k_uptime_get_32());
+        }
 #ifdef CONFIG_LISM_XIAO147_GESTURE_SHADOW
         if (data->shadow_active && (xiao147_ui_page() != XIAO147_PAGE_STATUS ||
             xiao147_ui_imu_enabled() || data->shadow_abort_pending)) {
@@ -817,6 +835,13 @@ static void axs_poll(struct k_work *work)
         if (fingers != 0) { data->swallow_until_release = true; }
         goto next;
     }
+    /* Missing time is not evidence of a stationary finger. A delayed poll
+     * cannot safely bridge an old contact to a new one (or a release/tap). */
+    uint32_t frame_ms = k_uptime_get_32();
+    if (data->fingers != 0 && frame_ms - data->last_valid_frame_ms > TOUCH_MAX_GAP_MS) {
+        cancel_contact(data);
+    }
+    data->last_valid_frame_ms = frame_ms;
 #ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
     data->normal_frame_ms = k_uptime_get_32();
     if (fingers == 0) {
@@ -835,7 +860,8 @@ static void axs_poll(struct k_work *work)
     enum xiao147_page page = xiao147_ui_page();
     enum xiao147_orientation orientation = xiao147_rotation_get();
     if (page != data->last_page || orientation != data->last_orientation) {
-        end_contact(data, false);
+        /* Also cancel a queued settings drag in its original orientation. */
+        cancel_contact(data);
         data->last_page = page;
         data->last_orientation = orientation;
         data->swallow_until_release = fingers != 0;

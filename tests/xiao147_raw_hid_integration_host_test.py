@@ -570,6 +570,38 @@ static void interruption_and_deadline(void) {
     feed("AXS_GESTURE_START 0101\n");drain();assert(page_enters==1&&!state.experimental_hid_active&&!hid_events);
     request_rejected();
 }
+static void sleep_boundaries(void) {
+    const char *commands[]={"AXS_RAW_START 0101\n","AXS_SHADOW_START 0101\n",
+                            "AXS_GESTURE_START 0101\n"};
+    for(unsigned i=0;i<3;i++) {
+        fixture();hands_off();info();screen_sleeping=true;
+        feed(commands[i]);drain();assert(!factory_writes&&!hid_events);
+        request_rejected();
+    }
+    prepare(true);arm();two(1,4,280,280);samples(2);
+    until_phase(XIAO147_RAW_READ_SAMPLE,30);
+    screen_sleeping=true;
+    /* A callback arriving between the UI sleep transition and next poll must
+     * not emit a right press, wheel, or horizontal wheel. */
+    unsigned before=hid_events;
+    axs_experimental_emit(&state,(struct xiao147_shadow_result){.candidate_right_tap=true});
+    axs_experimental_emit(&state,(struct xiao147_shadow_result){.candidate_wheel=1,.candidate_hwheel=1});
+    assert(hid_events==before);
+    poll();assert(!state.experimental_hid_active&&state.shadow.blocked&&!state.info_valid);
+    restore_engine();assert(screen_sleeping&&!hid_events&&!queue_right_down);
+    screen_sleeping=false;contact(1,40,70);poll();contact(0,40,70);poll();
+    assert(!hid_events&&!state.swallow_until_release); /* Held tail is swallowed. */
+    feed("AXS_GESTURE_START 0101\n");drain();request_rejected();
+    assert(page_enters==1); /* Wake does not auto-rearm or reuse old INFO. */
+
+    prepare(true);arm();fail_release=100;tap();assert(queue_right_down);
+    screen_sleeping=true;poll();assert(!state.experimental_hid_active);
+    restore_engine();assert(queue_right_down&&xiao147_touch_capture_active());
+    fail_release=0;poll();assert(!queue_right_down&&!state.experimental_button_down);
+    assert(accepted(INPUT_BTN_1,1)==1&&accepted(INPUT_BTN_1,0)==1);
+    assert(screen_sleeping); /* Retrying a release does not wake the display. */
+    puts("PASS: sleeping rejects RAW starts, suppresses late HID, restores normal page, retains release retry and never auto-rearms");
+}
 #endif
 
 int main(void) {
@@ -585,7 +617,7 @@ int main(void) {
 #endif
 #if HID_MODE
     gates_and_parser();exact_tap_and_natural_scroll();emission_bounds_and_conflicts();
-    press_and_release_failures();normal_release_blocks_experiment();release_fault_command_quarantine();scroll_failures();interruption_and_deadline();
+    press_and_release_failures();normal_release_blocks_experiment();release_fault_command_quarantine();scroll_failures();interruption_and_deadline();sleep_boundaries();
     puts("PASS: explicit bounded experimental GESTURE_START actual C, right press/release retries, both natural-scroll axes, error/disconnect/deadline isolation; queue acceptance only, NOT OS/hardware validation");
 #else
     puts("PASS: non-functional configuration cannot activate GESTURE_START; normal behavior preserved and SHADOW never emits HID");

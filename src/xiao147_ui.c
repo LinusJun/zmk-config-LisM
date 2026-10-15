@@ -809,6 +809,11 @@ void xiao147_ui_next_page(void)
     if (zmk_display_is_initialized()) { k_work_submit_to_queue(zmk_display_work_q(), &redraw_work); }
 }
 
+bool xiao147_ui_is_sleeping(void)
+{
+    return atomic_get(&sleeping) != 0;
+}
+
 bool xiao147_ui_wake_on_touch(void)
 {
     last_activity_ms = k_uptime_get_32();

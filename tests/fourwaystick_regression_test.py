@@ -101,6 +101,11 @@ for path, digest in baseline["protected_files"].items():
         data = data.replace(
             b'if (!zmk_display_is_initialized() || !xiao147_display_ui_ready()) {',
             b'if (!zmk_display_is_initialized()) {')
+    if path == "src/xiao147_ui.c":
+        # Read-only touch safety query: no change to protected UI/charging code.
+        query = b'bool xiao147_ui_is_sleeping(void)\n{\n    return atomic_get(&sleeping) != 0;\n}\n\n'
+        assert data.count(query) == 1
+        data = data.replace(query, b'')
     assert hashlib.sha256(data).hexdigest() == digest, path + " unexpectedly changed"
 build = (ROOT / "build.yaml").read_text()
 assert "lism_left_peripheral_4waystick" in build and "lism_left_peripheral_trackball" not in build

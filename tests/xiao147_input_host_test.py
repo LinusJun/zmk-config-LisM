@@ -14,6 +14,7 @@ def function(signature):
     end = ui.index("\n}\n", start)+3
     return ui[start:end]
 toggle = function("void xiao147_ui_toggle_imu(void)")
+sleep_query = function("bool xiao147_ui_is_sleeping(void)")
 callback = function("static void imu_button_input(struct input_event *evt, void *user_data)")
 # Unmodified upstream fixture from the pinned ZMK revision, MIT licensed.
 listener = (root / "tests/fixtures/zmk_input_listener.c").read_text()
@@ -121,7 +122,7 @@ static int input_report_key(const struct device*d,int c,int v,bool sync,int wait
 static enum xiao147_page xiao147_ui_page(void) {return page;}
 static enum xiao147_orientation xiao147_rotation_get(void) {return pose;}
 static bool xiao147_ui_wake_on_touch(void) {return false;}
-static void xiao147_ui_touch(uint8_t f,uint16_t x,uint16_t y,enum xiao147_orientation o) {assert(o==pose);if(f==XIAO147_TOUCH_CANCEL){cancel_samples++;}else if(f){sample_x=x;sample_y=y;nsample++;}}
+static void xiao147_ui_touch(uint8_t f,uint16_t x,uint16_t y,enum xiao147_orientation o) {assert(f==XIAO147_TOUCH_CANCEL||o==pose);if(f==XIAO147_TOUCH_CANCEL){cancel_samples++;}else if(f){sample_x=x;sample_y=y;nsample++;}}
 typedef int atomic_val_t;
 typedef int atomic_t;
 static int imu_mode,auto_rotate_mode,restore_landscape,sleeping;
@@ -259,7 +260,40 @@ static void ordinary_failure_tests(void) {
     assert(id.gyro_on&&id.motion.calibrating&&hid_reports==before);
     puts("PASS: normal press/release failures, page/bus-independent retry, discontinuity cancellation, complete pointer/wheel/IMU events and no stale movement replay");
 }
+static void interrupted_contact_tests(void) {
+    const struct axs_touch_config cfg={0};struct axs_touch_data d={0};
+    struct device dev={&d,&cfg};
+    page=0;pose=0;read_error=0;reject_extended=false;imu_mode=0;
+    memset(sensor,0,sizeof(sensor));nrel=nkey=0;assert(!hid_buttons);
+    assert(axs_touch_init(&dev)==0);poll(&d);
+    for(int fingers=1;fingers<=2;fingers++) {
+        contact(0,40,70);contact(1,60,90);sensor[1]=fingers;poll(&d);
+        now+=85; /* poll adds 16: a 101 ms gap, still inside tap duration */
+        contact(0,48,78);contact(1,68,98);poll(&d);
+        assert(d.swallow_until_release&&!nrel&&!nkey);
+        sensor[1]=0;poll(&d);assert(!d.swallow_until_release&&!nkey);
+        sensor[1]=fingers;poll(&d);now+=85;sensor[1]=0;poll(&d);
+        assert(!nkey&&!d.swallow_until_release); /* Late zero is not a tap. */
+    }
+    /* Unsigned uptime wrap does not cancel a genuinely short gesture. */
+    now=UINT32_MAX-24;sensor[1]=1;poll(&d);sensor[1]=0;poll(&d);
+    assert(nkey==2&&key_code[0]==INPUT_BTN_0&&!hid_buttons);
+    nkey=0;
+    /* The boundary is inclusive, not a blanket ban on delayed valid frames. */
+    sensor[1]=1;poll(&d);now+=84;sensor[1]=0;poll(&d);assert(nkey==2);
+    nkey=0;
+    page=XIAO147_PAGE_SETTINGS;poll(&d);sensor[1]=1;poll(&d);
+    int cancels=cancel_samples,samples=nsample;
+    now+=85;poll(&d);assert(cancel_samples==cancels+1&&nsample==samples);
+    sensor[1]=0;poll(&d);assert(!nkey);
+    sensor[1]=1;poll(&d);cancels=cancel_samples;page=XIAO147_PAGE_STATUS;
+    poll(&d);assert(cancel_samples==cancels+1&&d.swallow_until_release);
+    sensor[1]=0;poll(&d);assert(!nkey);
+    puts("PASS: late one/two contact frames and releases cancel without HID, menu drag cancellation, exact gap boundary and uptime wrap");
+}
 int main(void) {
+    sleeping=1;assert(xiao147_ui_is_sleeping());assert(sleeping==1&&!submitted);
+    sleeping=0;assert(!xiao147_ui_is_sleeping());
     const struct axs_touch_config cfg={0};struct axs_touch_data d={0};
     struct device dev={&d,&cfg};assert(axs_touch_init(&dev)==0);
     /* Independent corner expectations for raw (0,0),(171,319), and point(40,70). */
@@ -299,8 +333,8 @@ int main(void) {
     /* I2C cancellation swallows a held finger across menu rows until lift. */
     int samples=nsample;unsigned waits=settle_calls;read_error=-EIO;poll(&d);
     assert(settle_calls==waits);
-    assert(cancel_samples==1&&d.swallow_until_release&&d.fingers==0);
-    poll(&d);assert(cancel_samples==1&&d.swallow_until_release);
+    assert(cancel_samples==2&&d.swallow_until_release&&d.fingers==0);
+    poll(&d);assert(cancel_samples==2&&d.swallow_until_release);
     read_error=0;contact(0,80,140);poll(&d);assert(nsample==samples&&d.swallow_until_release);
     sensor[1]=0;poll(&d);assert(!d.swallow_until_release);
     sensor[1]=1;poll(&d);assert(nsample==samples+1);
@@ -400,13 +434,14 @@ int main(void) {
     for(int i=0;i<151;i++)xiao147_air_sample(&m,10000+i*20,0,moving);
     assert(m.bias[0]==100&&m.bias[1]==-100);
     ordinary_failure_tests();
+    interrupted_contact_tests();
     puts("PASS: actual touch gestures/four poses, cancellation, actual IMU stability/error recovery/vectors and USR1 edge toggles");
 }
 '''
 with tempfile.TemporaryDirectory(prefix="xiao147-input-") as directory:
     c=Path(directory)/"test.c"
     c.write_text(prelude+listener_types+hid_mocks+listener_functions+hid_route+
-                 source+imu_source+toggle+callback+test)
+                 source+imu_source+toggle+sleep_query+callback+test)
     binary=Path(directory)/"test"
     subprocess.run(["cc","-std=gnu11","-Wall","-Wextra","-Werror",
                     "-Wno-unused-parameter","-fsanitize=address,undefined",

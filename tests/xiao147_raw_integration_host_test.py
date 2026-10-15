@@ -82,8 +82,12 @@ static int input_report_rel(const struct device *dev,int code,int value,bool syn
 static enum xiao147_page xiao147_ui_page(void) {return page;}
 static enum xiao147_orientation xiao147_rotation_get(void) {return pose;}
 static bool xiao147_ui_wake_on_touch(void) {return false;}
+#if RAW_MODE
+static bool screen_sleeping;
+static bool xiao147_ui_is_sleeping(void) {return screen_sleeping;}
+#endif
 static void xiao147_ui_touch(uint8_t fingers,uint16_t x,uint16_t y,enum xiao147_orientation o) {
-    (void)x;(void)y;assert(o==pose);
+    (void)x;(void)y;assert(fingers==XIAO147_TOUCH_CANCEL||o==pose);
     if(fingers==XIAO147_TOUCH_CANCEL){menu_cancels++;}
     else {assert(!input_must_be_blocked());menu_samples++;}
 }
@@ -194,6 +198,7 @@ static void fixture(void) {
     io_phase=register_selects=ordinary_reads=normal_validation_reads=0;
     hid_events=key_events=menu_samples=menu_cancels=0;last_key=-1;contact(0,40,70);
 #if RAW_MODE
+    screen_sleeping=false;
     atomic_set(&capture_gate,0);dtr=console_ready=true;uart_error=0;
     uart_used=uart_cursor=0;factory_page=block_restore=wrong_id=false;firmware=0x0101;
     factory_writes=page_enters=page_restores=type_writes=scan_writes=samples_read=0;selected_type=0;
