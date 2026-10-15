@@ -6,6 +6,8 @@ on:
     paths:
       - '.github/workflows/display-test.yml'
       - 'build-display-test.yaml'
+      - 'build-charge-peripherals.yaml'
+      - 'build-xiao147-charge.yaml'
       - 'CMakeLists.txt'
       - 'Kconfig'
       - 'src/**'
@@ -34,15 +36,9 @@ jobs:
       - run: python3 tests/xiao147_raw_dynamic_host_test.py
       - run: python3 tests/xiao147_raw_hid_integration_host_test.py
       - run: python3 tests/lism_charge_host_test.py
-  peripherals:
-    needs: regression
-    uses: zmkfirmware/zmk/.github/workflows/build-user-config.yml@9ebbeff0a8b69a42f14aec022cdf16c7a107b9e0
-    with:
-      build_matrix_path: build-charge-peripherals.yaml
-      archive_name: lism-charge-peripherals
   build:
     needs: regression
     uses: zmkfirmware/zmk/.github/workflows/build-user-config.yml@9ebbeff0a8b69a42f14aec022cdf16c7a107b9e0
     with:
-      build_matrix_path: build-display-test.yaml
-      archive_name: xiao147-display-test
+      build_matrix_path: build-xiao147-charge.yaml
+      archive_name: xiao147-charge-firmware

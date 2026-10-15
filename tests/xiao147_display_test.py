@@ -75,6 +75,11 @@ for peripheral in ("left_4waystick", "right_trackball", "jp19", "circlepad"):
     assert f"lism_{peripheral}_battery_connected" in charge_matrix
 assert charge_matrix.count("CONFIG_LISM_CHARGE_BATTERY_CONNECTED=n") == 4
 assert charge_matrix.count("CONFIG_LISM_CHARGE_BATTERY_CONNECTED=y") == 4
+combined = read("build-xiao147-charge.yaml").split("include:\n", 1)[1]
+assert combined == test_matrix.split("include:\n", 1)[1] + charge_matrix.split("include:\n", 1)[1]
+workflow = read(".github/workflows/display-test.yml")
+assert workflow.count("uses: zmkfirmware/zmk/.github/workflows/build-user-config.yml@") == 1
+assert "build_matrix_path: build-xiao147-charge.yaml" in workflow
 assert "gpio_pin_get_raw" in ui and "NRF_P1->PIN_CNF[usr1.pin]" in ui
 native_layout = ui[ui.index("static void layout_status"):ui.index("static void redraw(struct k_work *work)\n{")]
 assert "portrait ? 164 : 300" in native_layout
