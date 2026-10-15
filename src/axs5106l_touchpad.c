@@ -59,6 +59,8 @@ struct axs_touch_data {
     enum xiao147_orientation last_orientation;
     struct point last;
     struct point start;
+    struct point tap_pair[2];
+    bool tap_pair_valid;
     uint32_t touch_start_ms;
     uint32_t last_valid_frame_ms;
     int16_t scroll_x_remainder;
@@ -220,12 +222,49 @@ static void end_contact(struct axs_touch_data *data, bool allow_tap)
     uint16_t button = data->max_fingers >= 2 ? INPUT_BTN_1 : INPUT_BTN_0;
     data->fingers = 0;
     data->max_fingers = 0;
+    data->tap_pair_valid = false;
     data->moved = false;
     data->scrolled = false;
     data->scroll_x_remainder = 0;
     data->scroll_y_remainder = 0;
     data->swallow_until_release = false;
     if (tap) { report_button(data, button); }
+}
+
+static bool near_tap_anchor(struct point p, struct point anchor)
+{
+    return abs(p.x - anchor.x) <= TAP_MAX_MOVE &&
+           abs(p.y - anchor.y) <= TAP_MAX_MOVE;
+}
+
+static void guard_pair_tap(struct axs_touch_data *data, uint8_t fingers,
+                           struct point p, struct point q)
+{
+    /* These are real reported coordinates, not inferred RAW contacts. Keep
+     * FIRST-pair anchors for the entire contact. The event/ID nibble remains
+     * undocumented: accept either record order rather than inventing IDs.
+     * A stationary centroid alone cannot distinguish a tap from a pinch.
+     * This is tap-only; coherent scrolling keeps its existing mapping.
+     */
+    if (fingers == 2) {
+        if (!data->tap_pair_valid) {
+            if (data->fingers == 1 && !near_tap_anchor(p, data->start) &&
+                !near_tap_anchor(q, data->start)) { data->moved = true; }
+            data->tap_pair[0] = p;
+            data->tap_pair[1] = q;
+            data->tap_pair_valid = true;
+        } else if (!((near_tap_anchor(p, data->tap_pair[0]) &&
+                      near_tap_anchor(q, data->tap_pair[1])) ||
+                     (near_tap_anchor(p, data->tap_pair[1]) &&
+                      near_tap_anchor(q, data->tap_pair[0])))) {
+            data->moved = true;
+        }
+    } else if (data->tap_pair_valid &&
+               !near_tap_anchor(p, data->tap_pair[0]) &&
+               !near_tap_anchor(p, data->tap_pair[1])) {
+        /* A moving 2->1 lift tail must not become a right click at release. */
+        data->moved = true;
+    }
 }
 
 static void cancel_contact(struct axs_touch_data *data)
@@ -883,8 +922,14 @@ static void axs_poll(struct k_work *work)
     }
 
     struct point p = decode_point(report, 0, orientation);
+    struct point q = p;
     if (fingers == 2) {
-        struct point q = decode_point(report, 1, orientation);
+        q = decode_point(report, 1, orientation);
+    }
+    if (page == XIAO147_PAGE_STATUS && !data->swallow_until_release) {
+        guard_pair_tap(data, fingers, p, q);
+    }
+    if (fingers == 2) {
         p.x = (p.x + q.x) / 2;
         p.y = (p.y + q.y) / 2;
     }

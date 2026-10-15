@@ -1,0 +1,39 @@
+{
+  "date": "2026-10-15",
+  "base_commit": "f79080d1c35c6d307eaba6cb679b0eff1ee2c4f4",
+  "scope": "Prevent demonstrable phantom right-clicks; not a native second-contact or daily-use RAW solution.",
+  "historical_device_evidence": {
+    "capture": "xiao147-9ddcdde-two-finger-timing.log",
+    "successful_normal_reports": 2986,
+    "reports_with_two_or_more_points": 0,
+    "retained_snapshots": 31,
+    "second_record": "FF in retained snapshots",
+    "raw_dynamic_fixture": "tests/fixtures/xiao147_raw_dynamic_profiles.json",
+    "raw_dynamic_frames": 2241,
+    "limitation": "Historical observation, not current device state. RAW samples are in-sample positives with no independent moving-single negatives or arbitrary-position/short-axis calibration."
+  },
+  "source_refresh": [
+    {
+      "url": "https://raw.githubusercontent.com/toto04/axs5106l/main/src/lib.rs",
+      "finding": "Implementation uses MAX_TOUCH_POINTS=2, register01 and14-byte reads. Reset/ID init contains no multitouch-enable write. README five-point claim is not proof of second-contact reports on this panel."
+    },
+    {
+      "url": "https://raw.githubusercontent.com/dkyazzentwatwa/esp_lcd_touch_axs5106l/main/esp_lcd_touch_axs5106l.cpp",
+      "finding": "Again register01,14-byte reads and countbyte1; no verified enable sequence. Its unbounded count loop can exceed the read buffer; do not import this parser or infer physical capability from its advertised maximum."
+    }
+  ],
+  "changes": [
+    "Normal native TWO records: first-pair fixed anchors with order-independent one-to-one matching suppress opposed-motion false right taps; moving single lift tails and staggered touchdown displacement also disqualify taps. No new controller write or synthetic contact.",
+    "RAW qualified TWO to ONE tail: tap eligibility requires the inferred tail to remain within existing12-unit tolerance of either original lobe; displaced/merged tails permanently suppress right taps. ONE is still not a proven single finger.",
+    "Both guards are tap-only: existing scroll mapping and mac-natural signs remain unchanged. Normal one-finger behavior, menu, USR1, charging and display layout are not intentionally changed.",
+    "Synthetic actual-C regressions include all four native poses,12/13 boundaries, record reorder, opposed motion, tail movement, staggered touchdown, no re-anchor, subsequent scrolling and clean release recovery. Mutation checks remove each guard to require detection of the original defect."
+  ],
+  "release_boundary": {
+    "raw_default_enabled": false,
+    "experiment_max_seconds": 60,
+    "device_access_or_flash_this_change": false,
+    "mtp_or_calibration_writes": false,
+    "stable_two_finger_claim": false,
+    "next_evidence": "Verified same-panel multi-contact report/configuration, or independent RAW moving-single/close-contact negatives and short-axis calibration before promotion."
+  }
+}

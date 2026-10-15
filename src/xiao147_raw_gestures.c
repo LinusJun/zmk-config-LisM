@@ -545,6 +545,23 @@ struct xiao147_shadow_result xiao147_shadow_gesture_observe_profile(
     enum xiao147_raw_hypothesis hypothesis = profile == NULL ?
         XIAO147_RAW_UNKNOWN : profile->hypothesis;
     bool associated = true;
+    if (valid && hypothesis == XIAO147_RAW_ONE_LOBE && gesture != NULL &&
+        !gesture->blocked && gesture->qualified_two && gesture->tap_anchor_valid) {
+        /* A disappearing lobe can move the pair mean, so never scroll here.
+         * However, ignoring the tail altogether would allow a displaced or
+         * merged lobe to end in a right click. Require proximity to either
+         * original lobe for tap eligibility; ONE still does NOT prove one
+         * finger and this check does not establish physical calibration.
+         */
+        bool near_anchor = false;
+        for (unsigned i = 0; i < 2; i++) {
+            if (magnitude((int)profile->native_short_x - gesture->tap_short_anchor[i]) <= TAP_MOVE &&
+                magnitude((int)profile->native_long_y - gesture->tap_long_anchor[i]) <= TAP_MOVE) {
+                near_anchor = true;
+            }
+        }
+        if (!near_anchor) { gesture->tap_disqualified = true; }
+    }
     if (valid && hypothesis == XIAO147_RAW_TWO_SEPARATED_LOBES) {
         associated = partition_valid(profile);
         if (associated && gesture != NULL && gesture->association_valid) {

@@ -532,6 +532,51 @@ static void individual_lobe_tap_tests(void)
     no_output(profile_step(&g, &lifted, 120)); no_output(profile_step(&g, &lifted, 140));
 }
 
+static void moving_lift_tail_tests(void)
+{
+    const int32_t pair_values[12] = {0,0,280,280,0,0,0,0,280,280,0,0};
+    struct xiao147_raw_profile pair, lifted, one;
+    assert(xiao147_raw_profile_evaluate(pair_values,12,NULL,&pair));
+    assert(xiao147_raw_profile_evaluate(quiet,12,NULL,&lifted));
+    for (unsigned lobe=0;lobe<2;lobe++) {
+        for (unsigned outer=0;outer<=2;outer++) {
+            int32_t tail[12]={0};
+            unsigned peak=lobe==0?1:4,edge=lobe==0?0:5;
+            tail[2*peak]=tail[2*peak+1]=280;
+            tail[2*edge]=tail[2*edge+1]=outer==0?0:outer==1?85:91;
+            assert(xiao147_raw_profile_evaluate(tail,12,NULL,&one));
+            assert(one.hypothesis==XIAO147_RAW_ONE_LOBE);
+            assert(abs((int)one.native_long_y-pair.lobes[lobe].native_long_y)==
+                   (outer==0?0:outer==1?12:13));
+            struct xiao147_shadow_gesture g;
+            xiao147_shadow_gesture_init(&g);
+            no_output(profile_step(&g,&lifted,0));no_output(profile_step(&g,&lifted,20));
+            no_output(profile_step(&g,&pair,40));no_output(profile_step(&g,&pair,60));
+            no_output(profile_step(&g,&one,80));
+            assert(g.tap_disqualified==(outer==2)&&g.tail_one);
+            /* Returning the remaining lobe cannot undo a disqualification. */
+            tail[2*edge]=tail[2*edge+1]=0;
+            assert(xiao147_raw_profile_evaluate(tail,12,NULL,&one));
+            no_output(profile_step(&g,&one,100));
+            no_output(profile_step(&g,&lifted,120));
+            struct xiao147_shadow_result r=profile_step(&g,&lifted,140);
+            assert(r.candidate_right_tap==(outer!=2));
+            assert(!r.candidate_wheel&&!r.candidate_hwheel);
+        }
+    }
+    /* A merged central lobe is not evidence of a stationary lift tail. */
+    const int32_t merged[12]={0,0,0,0,280,280,280,280,0,0,0,0};
+    assert(xiao147_raw_profile_evaluate(merged,12,NULL,&one));
+    assert(one.hypothesis==XIAO147_RAW_ONE_LOBE);
+    struct xiao147_shadow_gesture g;
+    xiao147_shadow_gesture_init(&g);
+    no_output(profile_step(&g,&lifted,0));no_output(profile_step(&g,&lifted,20));
+    no_output(profile_step(&g,&pair,40));no_output(profile_step(&g,&pair,60));
+    no_output(profile_step(&g,&one,80));assert(g.tap_disqualified);
+    no_output(profile_step(&g,&lifted,100));no_output(profile_step(&g,&lifted,120));
+    puts("PASS: synthetic RAW lift-tail movement/merging suppresses false right tap; no claim of independent physical negatives");
+}
+
 static void gesture_tests(void)
 {
     struct xiao147_shadow_gesture g;
@@ -699,6 +744,7 @@ int main(void)
 {
     profile_tests(); baseline_tests(); pending_tests(); independent_lobe_tests();
     activation_and_axis_tests(); individual_lobe_tap_tests();
+    moving_lift_tail_tests();
     gesture_tests(); actual_scene_replay();
     puts("PASS: actual C signed DIFF morphology (4 in-sample scenes only), "
          "fresh-lift baseline gate, independently normalised/equal lobes, "
@@ -724,3 +770,18 @@ with tempfile.TemporaryDirectory(prefix="xiao147-raw-gestures-") as directory:
         str(source), "-o", str(binary),
     ], check=True)
     subprocess.run([str(binary)], check=True)
+    # Prove the new counterexamples fail with the previous ignored-tail rule.
+    driver = (root / "src/xiao147_raw_gestures.c").read_text()
+    guard = "if (!near_anchor) { gesture->tap_disqualified = true; }"
+    assert driver.count(guard) == 1
+    mutant = folder / "mutant.c"
+    mutant.write_text(driver.replace(guard,
+        "if (false && !near_anchor) { gesture->tap_disqualified = true; }"))
+    subprocess.run([
+        "cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
+        "-fsanitize=address,undefined", "-fno-omit-frame-pointer",
+        "-I", str(root / "src"), str(mutant), str(source), "-o", str(binary),
+    ], check=True)
+    result = subprocess.run([str(binary)], capture_output=True, text=True)
+    assert result.returncode != 0 and "g.tap_disqualified==(outer==2)" in result.stderr, result.stderr
+    print("PASS: removing RAW tail guard reproduces the moving-lift-tail regression")

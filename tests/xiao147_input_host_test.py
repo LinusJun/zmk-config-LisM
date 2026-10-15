@@ -291,6 +291,51 @@ static void interrupted_contact_tests(void) {
     sensor[1]=0;poll(&d);assert(!nkey);
     puts("PASS: late one/two contact frames and releases cancel without HID, menu drag cancellation, exact gap boundary and uptime wrap");
 }
+static void pair_tap_geometry_tests(void) {
+    /* Synthetic native two-record reports test code behaviour, NOT proof
+     * that the physical panel has begun reporting a second contact. */
+    page=0;read_error=0;reject_extended=false;imu_mode=0;
+    for(pose=0;pose<4;pose++) {
+        for(int scenario=0;scenario<8;scenario++) {
+            const struct axs_touch_config cfg={0};struct axs_touch_data d={0};
+            struct device dev={&d,&cfg};
+            memset(sensor,0,sizeof(sensor));nrel=nkey=hid_reports=0;
+            assert(!hid_buttons);assert(axs_touch_init(&dev)==0);poll(&d);
+            contact(0,40,80);contact(1,120,240);
+            if(scenario==5) {sensor[1]=1;poll(&d);contact(0,60,80);}
+            sensor[1]=2;poll(&d);
+            if(scenario==0) {
+                contact(0,120,240);contact(1,40,80);poll(&d);
+            } else if(scenario==1||scenario==4||scenario==7) {
+                int offset=scenario==4?12:13;
+                contact(0,40-offset,80);contact(1,120+offset,240);poll(&d);
+                assert(!nrel); /* Mean unchanged even while both move. */
+                contact(0,40,80);contact(1,120,240);poll(&d);
+                if(scenario==7) {
+                    assert(d.moved); /* Tap-only rejection must not block scroll. */
+                    contact(0,48,88);contact(1,128,248);poll(&d);
+                    const int signs[4][2]={{-1,-1},{1,-1},{1,1},{-1,1}};
+                    assert(nrel==2&&last_pan==signs[pose][0]&&last_wheel==signs[pose][1]);
+                }
+            } else if(scenario==2||scenario==3) {
+                sensor[1]=1;contact(0,40+(scenario==2?13:12),80);poll(&d);
+                contact(0,40,80);poll(&d);assert(!nrel);
+            } else if(scenario==6) {
+                sensor[1]=1;poll(&d);sensor[1]=2;
+                contact(1,140,240);poll(&d); /* Must not re-anchor pair. */
+            }
+            sensor[1]=0;poll(&d);
+            bool click=scenario==0||scenario==3||scenario==4;
+            assert(nkey==(click?2:0)&&!hid_buttons&&!d.tap_pair_valid);
+            if(click) {assert(key_code[0]==INPUT_BTN_1&&key_value[0]==1&&key_value[1]==0);}
+            /* Clean full release permits the next genuine stationary tap. */
+            nkey=0;contact(0,40,80);contact(1,120,240);
+            sensor[1]=2;poll(&d);sensor[1]=0;poll(&d);
+            assert(nkey==2&&key_code[0]==INPUT_BTN_1&&!hid_buttons);
+        }
+    }
+    puts("PASS: all-four-pose pair anchors, record reorder, opposed motion, moving lift tail, exact12 boundary, staggered touchdown and no re-anchor before lift");
+}
 int main(void) {
     sleeping=1;assert(xiao147_ui_is_sleeping());assert(sleeping==1&&!submitted);
     sleeping=0;assert(!xiao147_ui_is_sleeping());
@@ -435,6 +480,7 @@ int main(void) {
     assert(m.bias[0]==100&&m.bias[1]==-100);
     ordinary_failure_tests();
     interrupted_contact_tests();
+    pair_tap_geometry_tests();
     puts("PASS: actual touch gestures/four poses, cancellation, actual IMU stability/error recovery/vectors and USR1 edge toggles");
 }
 '''
@@ -447,3 +493,15 @@ with tempfile.TemporaryDirectory(prefix="xiao147-input-") as directory:
                     "-Wno-unused-parameter","-fsanitize=address,undefined",
                     "-I",str(root/"src"),str(c),"-o",str(binary)],check=True)
     subprocess.run([str(binary)],check=True)
+    # Mutation proof: the new geometry scenarios must actually catch the old
+    # centroid-only policy, not just compile/run without exercising the guard.
+    original = c.read_text()
+    call = "guard_pair_tap(data, fingers, p, q);"
+    assert original.count(call) == 1
+    c.write_text(original.replace(call, "if (false) { " + call + " }"))
+    subprocess.run(["cc","-std=gnu11","-Wall","-Wextra","-Werror",
+                    "-Wno-unused-parameter","-fsanitize=address,undefined",
+                    "-I",str(root/"src"),str(c),"-o",str(binary)],check=True)
+    mutation = subprocess.run([str(binary)],capture_output=True,text=True)
+    assert mutation.returncode != 0 and "nkey==(click?2:0)" in mutation.stderr, mutation.stderr
+    print("PASS: removing native pair guard reproduces the phantom-right-click regression")
