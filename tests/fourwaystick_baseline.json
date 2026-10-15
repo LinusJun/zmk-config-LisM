@@ -1163,11 +1163,11 @@
     "boards/shields/lism/paw3222-right.dtsi": "0c6cc9ee95922a445292671ded10571cfd19de5cf6c1eb86214006a78106f82d",
     "boards/shields/lism/split_input_right.dtsi": "80f62f8501acfdff81398fb944e109fafd30000f22370af940830005973dfe3d",
     "config/lism_right.conf": "069f063c24d37c2ec17358826f9727c75f4d024c193a7da6ad7355ef3405c3af",
-    "config/west.yml": "e457a31b6c87af17bb1950060e2c3bd5bade6a8ff6ab7c787111d0b1cee3b9be",
+    "config/west.yml": "a6e4d93b8aca42dcd85f45aeaf05e71d967b57669905e8b5ae3ad901a7e938bc",
     "src/kscan_resistive_joystick.c": "20f28d12254c5692c37f0f00af255bb50233e50bdcdf53ebb7ec87f0774c09a6",
     "src/joystick_sector.h": "68fd8b13c90c1d6f14b94562896ca8f6ece41ecad50581acb73a399ad4a18ef6",
-    "src/xiao147_ui.c": "48cfe9cacba12938ca539a90a2fe732c0af71660fb87f0e387ca0de4dec59364",
-    "src/xiao147_battery_rings.c": "8b82e69bd96197d0d5030a88cc61630722ec1e3ee901811c7f8cf9572de3fc4f",
+    "src/xiao147_ui.c": "8c362746ec4b36950fd9e89b70c1013da357de6a35ac3ac59c53de0804cba8ad",
+    "src/xiao147_battery_rings.c": "9102de9b6fcd3d69996b12fb3a3103bc6208b082d7f26bf25b7dbf34779c0efc",
     "src/xiao147_rssi.c": "25ad196092037437677bff32bf8f095e48d825d67a8db9a704c3d6335392c1d2",
     "src/xiao147_peripheral_roles.h": "874800756dbfe3fef574b45d6c06e94148836c1f0605545a4b383819aa87e196"
   }

@@ -27,7 +27,7 @@ manifest:
       revision: main
     - name: zmk-feature-charge-indicator
       remote: 4mplelab
-      revision: main
+      revision: f0d311ed7804cda0e5837ef902f0419aeace4a88
     - name: prospector-zmk-module
       remote: carrefinho
       # Pin the OPERATOR implementation so a later upstream push cannot

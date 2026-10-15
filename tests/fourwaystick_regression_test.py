@@ -88,6 +88,11 @@ assert "time-to-max-speed-ms = <0>" in keymap
 assert "acceleration-exponent = <0>" in keymap
 for path, digest in baseline["protected_files"].items():
     data = (ROOT / path).read_bytes()
+    if path == "config/lism_right.conf":
+        # Explicitly allow only additive charging telemetry; retain the original
+        # protection hash for every trackball/input/radio setting.
+        assert data.count(b"CONFIG_LISM_CHARGE_TELEMETRY=y\n") == 1
+        data = data.replace(b"CONFIG_LISM_CHARGE_TELEMETRY=y\n", b"")
     if path in ("src/xiao147_ui.c", "src/xiao147_battery_rings.c"):
         # Normalize only the diagnostic-startup gate. UI's reviewed native-pixel
         # repair has a new protected hash; right-trackball/joystick hashes and
