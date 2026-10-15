@@ -24,6 +24,38 @@ static bool gpio_ready;
 static bool battery_sample_valid;
 static uint8_t battery_sample_percent;
 static uint32_t battery_sample_at;
+static bool power_seen, power_usb, power_settling;
+static uint32_t power_changed_at;
+static uint32_t power_epoch, fetch_epoch;
+static bool fetch_pending, fetch_started_settled;
+
+/* charge_lock held. A physical source transition invalidates the old ADC
+ * result, including an unplug/replug seen before the next battery-worker run.
+ * This is telemetry hygiene, NOT battery detection or charger control. */
+static void observe_power_locked(bool usb, uint32_t now) {
+    if (power_seen && power_usb != usb) {
+        battery_sample_valid = false;
+        local_filter.state.flags &= ~(LISM_CHARGE_LEVEL_VALID | LISM_CHARGE_STAT_ACTIVE);
+        local_filter.low_samples = 0;
+        power_changed_at = now;
+        power_settling = true;
+        power_epoch++;
+    }
+    power_seen = true;
+    power_usb = usb;
+}
+
+/* Sole battery worker calls this BEFORE fetching. Never hold charge_lock
+ * while ADC work runs. Completion must belong to the same observed epoch. */
+void lism_charge_begin_battery_sample(void) {
+    k_mutex_lock(&charge_lock, K_FOREVER);
+    uint32_t now = k_uptime_get_32();
+    observe_power_locked(nrf_power_usbregstatus_vbusdet_get(NRF_POWER), now);
+    fetch_epoch = power_epoch;
+    fetch_pending = true;
+    fetch_started_settled = !power_settling || now - power_changed_at >= 1000U;
+    k_mutex_unlock(&charge_lock);
+}
 
 /* Called after the sole ZMK battery worker completes a real fetch. A failed
  * fetch must invalidate old cached voltage, even when channel_get still works.
@@ -36,16 +68,29 @@ void lism_charge_note_battery_sample(int result) {
     int32_t mv = valid ? voltage.val1 * 1000 + voltage.val2 / 1000 : 0;
     valid = valid && mv >= 2800 && mv <= 4350;
     k_mutex_lock(&charge_lock, K_FOREVER);
+    uint32_t now = k_uptime_get_32();
+    observe_power_locked(nrf_power_usbregstatus_vbusdet_get(NRF_POWER), now);
+    /* Do not relabel a transition/transient sample as a new-source sample.
+     * Only a subsequent real battery-worker fetch can restore validity. */
+    valid = valid && fetch_pending && fetch_epoch == power_epoch && fetch_started_settled;
+    fetch_pending = false;
+    if (valid) { power_settling = false; }
     battery_sample_valid = valid;
     battery_sample_percent = zmk_battery_state_of_charge();
-    battery_sample_at = k_uptime_get_32();
+    battery_sample_at = now;
     if (!valid) { local_filter.state.flags &= ~LISM_CHARGE_LEVEL_VALID; }
     k_mutex_unlock(&charge_lock);
 }
 
 struct lism_charge_state lism_charge_local(void) {
     k_mutex_lock(&charge_lock, K_FOREVER);
+    bool usb = nrf_power_usbregstatus_vbusdet_get(NRF_POWER);
+    observe_power_locked(usb, k_uptime_get_32());
     struct lism_charge_state s = local_filter.state;
+    /* Never serve a cached charging bolt after physical USB removal, even
+     * when the 250ms sampling worker has not run yet. */
+    if (usb) { s.flags |= LISM_CHARGE_USB; }
+    else { s.flags &= ~(LISM_CHARGE_USB | LISM_CHARGE_STAT_ACTIVE); }
     if (!gpio_ready || k_uptime_get_32() - local_filter.sampled_at > 1500) {
         s = (struct lism_charge_state){0};
     }
@@ -59,14 +104,15 @@ static void sample_charge(struct k_work *work) {
     ARG_UNUSED(work);
     /* Physical VBUS also covers wall chargers without USB enumeration and
      * split peripherals without the USB stack. Read-only: no power controls. */
-    bool usb = nrf_power_usbregstatus_vbusdet_get(NRF_POWER);
-    int stat = gpio_ready ? gpio_pin_get_raw(charge_port, 17) : -ENODEV;
     /* An explicit installation declaration is necessary under USB: the official
      * reference notes that an unconnected BAT node can mimic a real battery.
      * No cached 'once battery powered' guess survives a switch-off/hot removal.
      */
     bool installed = IS_ENABLED(CONFIG_LISM_CHARGE_BATTERY_CONNECTED);
     k_mutex_lock(&charge_lock, K_FOREVER);
+    bool usb = nrf_power_usbregstatus_vbusdet_get(NRF_POWER);
+    int stat = gpio_ready ? gpio_pin_get_raw(charge_port, 17) : -ENODEV;
+    observe_power_locked(usb, k_uptime_get_32());
     bool valid = battery_sample_valid && k_uptime_get_32() - battery_sample_at <=
         CONFIG_ZMK_BATTERY_REPORT_INTERVAL * 1000U + 5000U;
     lism_charge_observe(&local_filter, k_uptime_get_32(), usb, stat, installed,

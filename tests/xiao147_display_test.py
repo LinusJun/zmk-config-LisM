@@ -85,7 +85,28 @@ native_layout = ui[ui.index("static void layout_status"):ui.index("static void r
 assert "portrait ? 164 : 300" in native_layout
 assert "portrait ? 55 : 65" in native_layout
 assert "LV_LAYOUT_NONE" in native_layout and "portrait ? 50 : 24" in native_layout
-assert "portrait && i == 5" in native_layout
+assert "portrait && index == 4" in native_layout
+assert "lv_txt_get_size(&size, lv_label_get_text(label), &FG_Medium_20," in native_layout
+assert "const int columns = portrait ? 3 : 6;" in native_layout
+assert "const int row_width = portrait ? 162 : 300;" in native_layout
+assert "if (spare < 0) { spare = 0; }" in native_layout
+assert "lv_obj_set_style_text_letter_space(label, 0, LV_PART_MAIN);" in native_layout
+assert "lv_obj_set_size(divider, 2, portrait ? 20 : 24);" in native_layout
+for row_width, widths in ((300, [34, 35, 37, 35, 41, 44]),
+                          (162, [34, 35, 37]), (162, [35, 41, 44])):
+    columns = len(widths)
+    spaces = 2 * (columns - 1)
+    spare = row_width - sum(widths) - 2 * (columns - 1)
+    assert spare >= spaces * 2
+    gaps = [(i + 1) * spare // spaces - i * spare // spaces for i in range(spaces)]
+    assert max(gaps) - min(gaps) <= 1
+    assert sum(widths) + sum(gaps) + 2 * (columns - 1) == row_width
+assert "portrait ? 288 : 160 + (6 - battery_label_height) / 2" in native_layout
+assert "battery_label_height = lv_font_montserrat_12.line_height" in native_layout
+for height in (12, 14, 15, 16):
+    top = 160 + int((6 - height) / 2)
+    assert abs((2 * top + height) - (2 * 160 + 6)) <= 1
+    assert top + height <= 172
 assert "polling-mode;" in overlay
 assert "XiaoMenu_Bold_16" in ui and "XiaoMenu_Bold_12" in ui
 assert "sample.orientation != xiao147_rotation_get()" in ui

@@ -12,7 +12,7 @@ if(CONFIG_LISM_PROSPECTOR_LOCK_INDICATORS OR CONFIG_LISM_XIAO147_TOUCH OR CONFIG
       message(FATAL_ERROR "Pinned ZMK battery completion hook moved")
     endif()
     string(REPLACE "${_battery_hook}"
-      "${_battery_hook}\n    extern void lism_charge_note_battery_sample(int result);\n    lism_charge_note_battery_sample(rc);"
+      "    extern void lism_charge_begin_battery_sample(void);\n    extern void lism_charge_note_battery_sample(int result);\n    lism_charge_begin_battery_sample();\n${_battery_hook}\n    lism_charge_note_battery_sample(rc);"
       _battery_code "${_battery_code}")
     file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/lism_zmk_battery.c" "${_battery_code}")
     set_source_files_properties("${_battery_src}"

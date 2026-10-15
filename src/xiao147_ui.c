@@ -299,22 +299,47 @@ static void layout_status(bool portrait)
     lv_obj_set_style_pad_all(modifiers, 0, LV_PART_MAIN);
     lv_obj_set_pos(modifiers, portrait ? 6 : 10, portrait ? 5 : 2);
     lv_obj_set_size(modifiers, portrait ? 162 : 300, portrait ? 50 : 24);
-    for (uint32_t i = 0; i < lv_obj_get_child_cnt(modifiers); i++) {
-        lv_obj_t *child = lv_obj_get_child(modifiers, i);
-        if (i % 2 == 0) {
-            int label = i / 2;
-            lv_obj_set_pos(child, portrait ? label % 3 * 54 : label * 50,
-                           portrait ? label / 3 * 25 : 0);
-            lv_obj_set_width(child, portrait ? 44 : 47);
-            lv_label_set_long_mode(child, LV_LABEL_LONG_CLIP);
-            lv_obj_set_style_text_font(child, &FG_Medium_20, LV_PART_MAIN);
-        } else {
-            int label = i / 2;
-            lv_obj_set_pos(child, portrait ? label % 3 * 54 + 48 : label * 50 + 47,
-                           portrait ? label / 3 * 25 : 0);
-            lv_obj_set_height(child, portrait ? 20 : 24);
-            if (portrait && i == 5) { lv_obj_add_flag(child, LV_OBJ_FLAG_HIDDEN); }
-            else { lv_obj_clear_flag(child, LV_OBJ_FLAG_HIDDEN); }
+    /* Measure the real font: equal-width cells do not give equal gaps around
+     * proportional labels such as GUI and NUM. Distribute remainder pixels
+     * cumulatively so the spaces on either side of a divider differ by <=1. */
+    if (lv_obj_get_child_cnt(modifiers) >= 11) {
+        const int columns = portrait ? 3 : 6;
+        const int row_width = portrait ? 162 : 300;
+        for (int row = 0; row < (portrait ? 2 : 1); row++) {
+            int widths[6], total = 0;
+            for (int column = 0; column < columns; column++) {
+                lv_obj_t *label = lv_obj_get_child(modifiers, (row * columns + column) * 2);
+                lv_point_t size;
+                lv_txt_get_size(&size, lv_label_get_text(label), &FG_Medium_20,
+                                0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+                widths[column] = size.x;
+                total += size.x;
+            }
+            const int spaces = 2 * (columns - 1);
+            int spare = row_width - total - 2 * (columns - 1);
+            if (spare < 0) { spare = 0; }
+            int used = 0;
+            for (int column = 0; column < columns; column++) {
+                int index = (row * columns + column) * 2;
+                lv_obj_t *label = lv_obj_get_child(modifiers, index);
+                lv_obj_set_pos(label, used + column * 2 + (column * 2 * spare) / spaces,
+                               row * 25);
+                lv_obj_set_width(label, widths[column]);
+                lv_obj_set_style_pad_all(label, 0, LV_PART_MAIN);
+                lv_obj_set_style_text_letter_space(label, 0, LV_PART_MAIN);
+                lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
+                lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
+                lv_obj_set_style_text_font(label, &FG_Medium_20, LV_PART_MAIN);
+                used += widths[column];
+                if (index < 10) {
+                    lv_obj_t *divider = lv_obj_get_child(modifiers, index + 1);
+                    lv_obj_set_pos(divider, used + column * 2 +
+                                   ((column * 2 + 1) * spare) / spaces, row * 25);
+                    lv_obj_set_size(divider, 2, portrait ? 20 : 24);
+                    if (portrait && index == 4) { lv_obj_add_flag(divider, LV_OBJ_FLAG_HIDDEN); }
+                    else { lv_obj_clear_flag(divider, LV_OBJ_FLAG_HIDDEN); }
+                }
+            }
         }
     }
 
@@ -391,7 +416,12 @@ static void layout_status(bool portrait)
     xiao147_battery_rings_set_portrait(portrait);
     lv_obj_set_pos(dongle_battery_bar, 10, 160);
     lv_obj_set_size(dongle_battery_bar, 140, 6);
-    lv_obj_set_pos(dongle_battery_label, portrait ? 112 : 153, portrait ? 288 : 150);
+    const int battery_label_height = lv_font_montserrat_12.line_height;
+    lv_obj_set_height(dongle_battery_label, battery_label_height);
+    lv_obj_set_style_pad_all(dongle_battery_label, 0, LV_PART_MAIN);
+    lv_label_set_long_mode(dongle_battery_label, LV_LABEL_LONG_CLIP);
+    lv_obj_set_pos(dongle_battery_label, portrait ? 112 : 153,
+                   portrait ? 288 : 160 + (6 - battery_label_height) / 2);
     lv_obj_set_width(dongle_battery_label, portrait ? 53 : 49);
     lv_obj_set_style_text_align(dongle_battery_label,
                                 portrait ? LV_TEXT_ALIGN_RIGHT : LV_TEXT_ALIGN_LEFT,

@@ -15,6 +15,10 @@ config LISM_CHARGE_BATTERY_CONNECTED
       for a device with a connected battery and closed battery switch. USB
       plus CHG LOW cannot distinguish an absent cell on this hardware. When
       disabled USB operation shows USB/unknown and no charging lightning.
+      This declaration cannot detect opening the switch or removing the cell
+      while USB remains attached. Do not use this variant in those conditions.
+      Neither this option nor a displayed 100 percent controls charge cutoff;
+      hardware termination and a compatible protected battery are required.
 
 config LISM_PROSPECTOR_LOCK_INDICATORS
     bool "Compact OPERATOR modifiers with Caps/Num Lock indicators"

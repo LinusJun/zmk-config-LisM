@@ -59,7 +59,7 @@ static int k_work_schedule(struct k_work_delayable *w,int t) {(void)w;(void)t;re
 static uint32_t now;
 static uint32_t k_uptime_get_32(void) {return now;}
 static bool usb=true,ready=true;
-static int stat=1,config_calls,voltage_mv=3800,voltage_error;
+static int stat=1,config_calls,voltage_mv=3800,voltage_error,battery_percent=80;
 static bool device_is_ready(const struct device*d) {(void)d;return ready;}
 static int gpio_pin_get_raw(const struct device*d,int p) {assert(d==&dev&&p==17);return stat;}
 static int gpio_pin_configure(const struct device*d,int p,int flags) {
@@ -69,7 +69,7 @@ static int gpio_pin_configure(const struct device*d,int p,int flags) {
 static bool nrf_power_usbregstatus_vbusdet_get(const struct device*d) {
  assert(d==&dev);return usb;
 }
-static uint8_t zmk_battery_state_of_charge(void) {return 80;}
+static uint8_t zmk_battery_state_of_charge(void) {return battery_percent;}
 #define SENSOR_CHAN_GAUGE_VOLTAGE 1
 struct sensor_value {int val1,val2;};
 static int sensor_channel_get(const struct device*d,int c,struct sensor_value*v) {
@@ -125,6 +125,63 @@ static ssize_t bt_gatt_attr_read(struct bt_conn*c,const struct bt_gatt_attr*a,vo
 }
 '''
 tests = r'''
+static void battery_fetch(int result) {
+ lism_charge_begin_battery_sample();lism_charge_note_battery_sample(result);
+}
+static void power_transition_tests(void) {
+ now=20000;usb=true;stat=0;voltage_error=0;voltage_mv=3800;
+ battery_fetch(0);
+ for(unsigned i=0;i<4;i++){sample_charge(NULL);now+=250;}
+ assert((bool)lism_charge_show_bolt(lism_charge_local())==(bool)INSTALLED);
+ /* A read must suppress stale charging before the sampler gets CPU time. */
+ usb=false;struct lism_charge_state s=lism_charge_local();
+ assert(!(s.flags&(LISM_CHARGE_USB|LISM_CHARGE_STAT_ACTIVE|LISM_CHARGE_LEVEL_VALID)));
+ sample_charge(NULL);battery_fetch(0);sample_charge(NULL);
+ assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
+ now+=999;battery_fetch(0);sample_charge(NULL);
+ assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
+ now++;battery_fetch(0);sample_charge(NULL);
+ assert(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID);
+ assert(!lism_charge_show_bolt(lism_charge_local()));
+ /* The battery-only ADC result must not be reused after USB insertion. */
+ usb=true;s=lism_charge_local();
+ assert((s.flags&LISM_CHARGE_USB)&&!(s.flags&LISM_CHARGE_LEVEL_VALID));
+ now+=1001;sample_charge(NULL);
+ assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
+ battery_fetch(0);
+ for(unsigned i=0;i<4;i++){sample_charge(NULL);now+=250;}
+ assert((bool)lism_charge_show_bolt(lism_charge_local())==(bool)INSTALLED);
+ /* Unplug/replug observed entirely between ADC fetches still invalidates. */
+ usb=false;(void)lism_charge_local();usb=true;(void)lism_charge_local();
+ now+=1001;sample_charge(NULL);
+ assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
+ /* 100% is only an estimate: it neither changes pins nor overrides STAT. */
+ battery_percent=100;battery_fetch(0);
+ for(unsigned i=0;i<4;i++){sample_charge(NULL);now+=250;}
+ assert((bool)lism_charge_show_bolt(lism_charge_local())==(bool)INSTALLED);
+ stat=1;sample_charge(NULL);assert(!lism_charge_show_bolt(lism_charge_local()));
+ assert(config_calls==CENTRAL); /* no runtime charger-control writes */
+ /* Bad voltage is unknown, not an automatic 'full' or 'battery inserted'. */
+ stat=0;voltage_mv=4351;battery_fetch(0);sample_charge(NULL);
+ assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
+ voltage_mv=1600;battery_fetch(0);sample_charge(NULL);
+ assert(!lism_charge_show_bolt(lism_charge_local()));
+ voltage_mv=3800;battery_percent=80;
+ /* Old-source fetch completes after a long preemption and must stay invalid. */
+ lism_charge_begin_battery_sample();usb=false;(void)lism_charge_local();
+ now+=2000;lism_charge_note_battery_sample(0);sample_charge(NULL);
+ assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
+ battery_fetch(0);sample_charge(NULL);
+ assert(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID);
+ /* A fetch started during settling cannot become valid just by completing late. */
+ usb=true;lism_charge_begin_battery_sample();now+=2000;
+ lism_charge_note_battery_sample(0);sample_charge(NULL);
+ assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
+ battery_fetch(0);sample_charge(NULL);
+ assert((bool)(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID)==(bool)INSTALLED);
+ now+=2000;
+ assert(!lism_charge_local().flags);
+}
 static void policy_tests(void) {
  struct lism_charge_filter f={0};struct lism_charge_state s;
  for(unsigned i=1;i<=4;i++)lism_charge_observe(&f,i*250,true,0,false,false,80);
@@ -180,19 +237,20 @@ static void client_tests(void) {
 #endif
 int main(void) {
  policy_tests();assert(charge_init()==0);assert(config_calls==CENTRAL);
- stat=0;now=5000;lism_charge_note_battery_sample(0);
+ stat=0;now=5000;battery_fetch(0);
  for(unsigned i=0;i<4;i++){sample_charge(NULL);now+=250;}
  struct lism_charge_state s=lism_charge_local();
  assert((bool)lism_charge_show_bolt(s)==(bool)INSTALLED);
  /* Real upstream failure leaves cached voltage intact: observer still clears it. */
- lism_charge_note_battery_sample(-EIO);sample_charge(NULL);
+ battery_fetch(-EIO);sample_charge(NULL);
  assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
- lism_charge_note_battery_sample(0);sample_charge(NULL);
+ battery_fetch(0);sample_charge(NULL);
  assert((bool)lism_charge_show_bolt(lism_charge_local())==(bool)INSTALLED);
  now+=65001;sample_charge(NULL);assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
- voltage_error=-EIO;lism_charge_note_battery_sample(0);sample_charge(NULL);
+ voltage_error=-EIO;battery_fetch(0);sample_charge(NULL);
  assert(!lism_charge_show_bolt(lism_charge_local()));
  voltage_error=0;now+=2000;assert(!lism_charge_local().flags);
+ power_transition_tests();
 #if CENTRAL
  client_tests();
 #else

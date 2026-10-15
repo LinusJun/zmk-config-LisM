@@ -1,0 +1,56 @@
+{
+  "scope": "Read-only charging telemetry hardening, not charger/BMS certification",
+  "battery_user_supplied": {
+    "model": "501530",
+    "nominal_voltage_v": 3.7,
+    "full_voltage_v_user_description": 4.2,
+    "capacity_mah": 230,
+    "dimensions_mm_seller_image": [5, 15, 30],
+    "protection_board": "user confirmed; protection thresholds and temperature protection unverified",
+    "maximum_charge_current_ma": null,
+    "connector_polarity": "must check BAT+/BAT-; listing offers both polarities"
+  },
+  "seller_protection_images": {
+    "example_pack_label": "405070 3000mAh, NOT the requested 501530 230mAh",
+    "overcharge_threshold_v_typical_claim": 4.275,
+    "interpretation": "Protection-board trip is a backup, not the normal 4.2V charge target. Table's DC 5V text does not authorize direct 5V connection to the cell. Discharge/overcurrent ratings do not establish safe cell charging current.",
+    "applicability_to_actual_cell": "unconfirmed"
+  },
+  "primary_sources": [
+    {
+      "url": "https://wiki.seeedstudio.com/XIAO_BLE/",
+      "evidence": "Current series specification identifies BQ25101. Older prose calls the family BQ25100; do not use that older name to reinterpret C1 as a programmable control."
+    },
+    {
+      "url": "https://files.seeedstudio.com/wiki/XIAO-BLE/Seeed_Studio_XIAO_nRF52840_Plus_PDF.pdf",
+      "page": 1,
+      "evidence": "U2 TS uses fixed 10k resistor to ground; note explicitly disables temperature sensing. P0.17 is labelled CHG, P0.13 HICHG. U2 symbol labels C1 PRETERM and omits value: schematic symbol is inconsistent with the BQ25101 identification; no change to this pin's input-only handling is justified."
+    },
+    {
+      "url": "https://www.ti.com/lit/ds/symlink/bq25101.pdf",
+      "revision": "SLUSBV8C",
+      "evidence": "BQ25101 is the 4.20V variant. Sections 8.3.2 and 8.3.10 describe hardware termination after voltage regulation and current taper to 10% of programmed charge current. Section 8.4.7 allows a new cycle after approximately 100mV voltage decrease. CHG is a first-cycle indication, not an independent measurement of current or battery presence. Fixed TS resistor does not measure cell temperature."
+    },
+    {
+      "url": "https://wiki.seeedstudio.com/function_1.47_inch_touch_display_nrf52840/#battery-status",
+      "evidence": "Static USB-powered BAT voltage can mimic a connected battery. Firmware must not infer presence solely from plausible voltage plus CHG LOW."
+    }
+  ],
+  "firmware_policy": {
+    "charge_control_changes": false,
+    "percent_100_stops_charging": false,
+    "physical_vbus": "read directly, independent of USB enumeration",
+    "unknown_battery_under_usb": "USB label; no lightning",
+    "vbus_edge": "invalidate old ADC result and charge indication; require real ADC fetch beginning after 1000ms settling and completing in the same observed power epoch",
+    "installed_variant": "explicit installation declaration only; cannot identify cell removal/switch OFF with USB attached",
+    "no_lightning_means": "no supported indication; not proof of full battery, zero charge current or a safe condition",
+    "read_only": "P0.17 remains input. No changes to ISET, TS, termination or timer settings."
+  },
+  "limits": [
+    "No measured charge-current or full-charge termination test on the user's cell.",
+    "Battery current rating, protection thresholds, plug polarity and physical board revision need confirmation.",
+    "No cell-temperature sensor is present in the documented circuit; protection PCB is not assumed to add one.",
+    "Only VBUS transitions observed by firmware invalidate samples; this is not a physical battery-detection circuit.",
+    "Software tests and successful firmware compilation do not certify charging safety."
+  ]
+}
