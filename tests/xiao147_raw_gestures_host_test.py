@@ -316,6 +316,123 @@ static void independent_lobe_tests(void)
     assert(xiao147_shadow_gesture_observe_profile(&g, NULL, true, 100, 100, 0, 120).cancelled);
 }
 
+static void weak_release_tests(void)
+{
+    struct xiao147_shadow_gesture g;
+    struct xiao147_shadow_result r;
+    xiao147_shadow_gesture_init(&g); release(&g,0); qualify(&g,40);
+    no_output(step(&g,XIAO147_RAW_PENDING,0,0,0,80));
+    assert(g.weak_release && g.qualified_two && !g.blocked && g.started_ms==40);
+    no_output(step(&g,XIAO147_RAW_NONE,0,0,0,100));
+    assert(step(&g,XIAO147_RAW_NONE,0,0,0,120).candidate_right_tap);
+    assert(!g.weak_release);
+    /* Renewed contact, ambiguity, bounce, timeout and invalid frame cancel. */
+    for(unsigned scenario=0;scenario<7;scenario++) {
+        xiao147_shadow_gesture_init(&g); release(&g,0); qualify(&g,40);
+        no_output(step(&g,XIAO147_RAW_PENDING,0,0,0,80));
+        if(scenario==0) r=step(&g,XIAO147_RAW_TWO_SEPARATED_LOBES,100,100,0,100);
+        else if(scenario==1) r=step(&g,XIAO147_RAW_ONE_LOBE,100,100,0,100);
+        else if(scenario==2) r=step(&g,XIAO147_RAW_UNKNOWN,0,0,0,100);
+        else if(scenario==3) r=step(&g,XIAO147_RAW_PENDING,0,0,0,141);
+        else if(scenario==4) {
+            no_output(step(&g,XIAO147_RAW_NONE,0,0,0,100));
+            r=step(&g,XIAO147_RAW_PENDING,0,0,0,120);
+        } else if(scenario==5) r=step(&g,XIAO147_RAW_NONE,0,0,1,100);
+        else r=xiao147_shadow_gesture_observe(&g,XIAO147_RAW_NONE,false,0,0,0,100);
+        assert(r.cancelled && g.blocked); no_output(r);
+        if(scenario==5) no_output(step(&g,XIAO147_RAW_NONE,0,0,0,150));
+        release(&g,160);
+    }
+    /* A scroll cannot become a click through a weak release. */
+    xiao147_shadow_gesture_init(&g); release(&g,0); qualify(&g,40);
+    r=step(&g,XIAO147_RAW_TWO_SEPARATED_LOBES,128,100,0,80);
+    assert(r.candidate_hwheel==-2);
+    no_output(step(&g,XIAO147_RAW_PENDING,0,0,0,100)); release(&g,120);
+    /* Weak tail must not extend the original 240-ms tap clock. */
+    xiao147_shadow_gesture_init(&g); release(&g,0); qualify(&g,40);
+    for(unsigned t=80;t<=260;t+=20) no_output(step(&g,XIAO147_RAW_TWO_SEPARATED_LOBES,100,100,0,t));
+    no_output(step(&g,XIAO147_RAW_PENDING,0,0,0,280)); release(&g,300);
+    for(unsigned wrap=0;wrap<2;wrap++) for(unsigned over=0;over<2;over++) {
+        uint32_t base=wrap?UINT32_MAX-120U:0U;
+        xiao147_shadow_gesture_init(&g); release(&g,base); qualify(&g,base+40U);
+        no_output(step(&g,XIAO147_RAW_PENDING,0,0,0,base+80U));
+        no_output(step(&g,XIAO147_RAW_NONE,0,0,0,base+120U));
+        r=step(&g,XIAO147_RAW_NONE,0,0,0,base+140U+over);
+        assert(r.candidate_right_tap==(over==0) && r.cancelled==(over!=0));
+    }
+}
+
+static void requalification_tests(void)
+{
+    struct xiao147_raw_profile p, ambiguous, clear, invalid;
+    const int32_t shallow[12]={20,20,220,220,130,130,130,130,220,220,20,20};
+    assert(xiao147_raw_profile_evaluate(two_lobes,12,NULL,&p));
+    assert(xiao147_raw_profile_evaluate(shallow,12,NULL,&ambiguous));
+    assert(ambiguous.hypothesis==XIAO147_RAW_UNKNOWN && ambiguous.two_peak_ambiguity);
+    assert(xiao147_raw_profile_evaluate(quiet,12,NULL,&clear));
+    invalid=ambiguous; invalid.two_peak_ambiguity=false;
+    for(unsigned scenario=0;scenario<9;scenario++) {
+        struct xiao147_shadow_gesture g; xiao147_shadow_gesture_init(&g); release(&g,0);
+        no_output(profile_step(&g,&p,40)); no_output(profile_step(&g,&p,60));
+        no_output(profile_step(&g,&ambiguous,80));
+        assert(g.reacquiring && g.tap_disqualified && !g.blocked && !g.association_valid);
+        if(scenario==0) {
+            /* Deliberately far new logical anchor: discard pre-unknown delta.
+             * Confirmation only compares the two new, credible frames. */
+            no_output(xiao147_shadow_gesture_observe_profile(&g,&p,true,280,100,0,100));
+            struct xiao147_shadow_result r=xiao147_shadow_gesture_observe_profile(&g,&p,true,252,100,0,120);
+            assert(r.candidate_hwheel==2 && !r.candidate_wheel && !r.candidate_right_tap);
+            assert(!g.reacquiring && g.tap_disqualified);
+            no_output(profile_step(&g,&ambiguous,140));
+            assert(!g.remainder_x && !g.remainder_y && !g.scroll_activated);
+            no_output(xiao147_shadow_gesture_observe_profile(&g,&p,true,20,100,0,160));
+            r=xiao147_shadow_gesture_observe_profile(&g,&p,true,48,100,0,180);
+            assert(r.candidate_hwheel==-2); /* No stale reverse remainder. */
+        } else if(scenario==1) {
+            no_output(profile_step(&g,&p,100)); no_output(profile_step(&g,&p,120));
+            assert(g.tap_disqualified); /* Stationary requalification never tap. */
+        } else if(scenario==2) {
+            no_output(profile_step(&g,&ambiguous,140));
+            no_output(profile_step(&g,&ambiguous,181)); assert(g.blocked);
+        } else if(scenario==3) {
+            no_output(profile_step(&g,&invalid,100)); assert(g.blocked);
+        } else if(scenario==4) {
+            no_output(xiao147_shadow_gesture_observe_profile(&g,&p,false,100,100,0,100)); assert(g.blocked);
+        } else if(scenario==5) {
+            no_output(xiao147_shadow_gesture_observe_profile(&g,&p,true,100,100,1,100)); assert(g.blocked);
+        } else if(scenario==6) {
+            no_output(profile_step(&g,&p,181)); assert(g.blocked);
+        } else if(scenario==7) {
+            no_output(profile_step(&g,&p,100));
+            struct xiao147_raw_profile bad=p; bad.partition_valid=false;
+            no_output(profile_step(&g,&bad,120)); assert(g.blocked);
+        } else {
+            /* ONE cannot bridge two separated TWO observations. */
+            no_output(profile_step(&g,&p,100));
+            struct xiao147_raw_profile one;
+            assert(xiao147_raw_profile_evaluate(one_lobe,12,NULL,&one));
+            no_output(profile_step(&g,&one,120)); assert(g.blocked);
+        }
+        no_output(profile_step(&g,&clear,220)); no_output(profile_step(&g,&clear,240));
+    }
+    /* A hard-cancelled tracker cannot unlock on a recoverable-looking shape. */
+    struct xiao147_shadow_gesture g; xiao147_shadow_gesture_init(&g);
+    no_output(profile_step(&g,&ambiguous,0)); no_output(profile_step(&g,&p,20));
+    no_output(profile_step(&g,&p,40)); assert(g.blocked);
+    for(unsigned wrap=0;wrap<2;wrap++) for(unsigned over=0;over<2;over++) {
+        uint32_t base=wrap?UINT32_MAX-120U:0U;
+        xiao147_shadow_gesture_init(&g); release(&g,base);
+        no_output(profile_step(&g,&p,base+40U)); no_output(profile_step(&g,&p,base+60U));
+        no_output(profile_step(&g,&ambiguous,base+80U));
+        no_output(profile_step(&g,&p,base+140U));
+        struct xiao147_shadow_result r=profile_step(&g,&p,base+180U+over);
+        no_output(r);
+        assert(g.qualified_two==(over==0) && g.blocked==(over!=0));
+        assert(r.cancelled==(over!=0));
+    }
+    puts("PASS: bounded weak release; fresh scroll-only requalification; no uncertainty backlog/tap; hard faults stay blocked");
+}
+
 static void activation_and_axis_tests(void)
 {
     struct xiao147_shadow_gesture g;
@@ -746,6 +863,7 @@ int main(void)
     profile_tests(); baseline_tests(); pending_tests(); independent_lobe_tests();
     activation_and_axis_tests(); individual_lobe_tap_tests();
     moving_lift_tail_tests();
+    weak_release_tests(); requalification_tests();
     gesture_tests(); actual_scene_replay();
     puts("PASS: actual C signed DIFF morphology (4 in-sample scenes only), "
          "fresh-lift baseline gate, independently normalised/equal lobes, "

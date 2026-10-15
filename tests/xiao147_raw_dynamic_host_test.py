@@ -219,7 +219,15 @@ static struct replay_counts replay(enum xiao147_orientation pose,
             profile.hypothesis == XIAO147_RAW_PENDING) { no_candidate(result); }
         if (was_active && (profile.hypothesis == XIAO147_RAW_UNKNOWN ||
                            profile.hypothesis == XIAO147_RAW_PENDING)) {
-            assert(result.cancelled && gesture.blocked && !gesture.active);
+            if (gesture.weak_release) {
+                assert(profile.hypothesis == XIAO147_RAW_PENDING && gesture.qualified_two);
+                assert(!result.cancelled && timestamp - gesture.weak_release_since_ms <= 60);
+            } else if (gesture.reacquiring) {
+                assert(profile.two_peak_ambiguity && result.cancelled && !gesture.active);
+                assert(gesture.tap_disqualified && !gesture.association_valid);
+            } else {
+                assert(result.cancelled && gesture.blocked && !gesture.active);
+            }
         }
         if (gesture.pending) {
             assert(!gesture.active && !gesture.blocked && !gesture.qualified_two);

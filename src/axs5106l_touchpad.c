@@ -535,11 +535,13 @@ static void axs_raw_sample(void *context, enum xiao147_raw_type type, uint8_t ch
         if (profile.hypothesis != data->shadow_last_hypothesis || result.candidate_right_tap ||
             result.candidate_wheel || result.candidate_hwheel ||
             now - data->shadow_last_log_ms >= 1000) {
-            LOG_INF("AXS_SHADOW t=%u armed=%d shape=%u xy=%d,%d peaks=%u valley=%u ratio=%u tap=%d wheel=%d pan=%d cancel=%d HID=%d",
+            LOG_INF("AXS_SHADOW t=%u armed=%d shape=%u xy=%d,%d peaks=%u valley=%u ratio=%u tap=%d wheel=%d pan=%d cancel=%d HID=%d tap_disq=%d weak_release=%d reacquire=%d",
                     elapsed_ms, armed, profile.hypothesis, p.x, p.y, profile.significant_peaks,
                     profile.valley_permille, profile.lesser_peak_permille,
                     result.candidate_right_tap, result.candidate_wheel,
-                    result.candidate_hwheel, result.cancelled, hid_enabled);
+                    result.candidate_hwheel, result.cancelled, hid_enabled,
+                    data->shadow.tap_disqualified, data->shadow.weak_release,
+                    data->shadow.reacquiring);
             data->shadow_last_hypothesis = profile.hypothesis;
             data->shadow_last_log_ms = now;
         }

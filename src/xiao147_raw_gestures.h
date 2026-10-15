@@ -42,6 +42,9 @@ struct xiao147_raw_profile {
     uint8_t significant_peaks;
     uint8_t valley_station;
     bool partition_valid;
+    /* Two significant narrow peaks, but valley too shallow for TWO. Not a
+     * contact count; only permits bounded scroll requalification, never tap. */
+    bool two_peak_ambiguity;
     /* Ordered by long-axis position, not relative amplitude. The weakest
      * valley station is excluded from both support regions. Each significant
      * lobe is normalised independently, then the two coordinates are averaged
@@ -117,6 +120,8 @@ struct xiao147_shadow_gesture {
     uint32_t first_release_ms;
     uint32_t one_since_ms;
     uint32_t pending_since_ms;
+    uint32_t weak_release_since_ms;
+    uint32_t reacquire_since_ms;
     int16_t previous_x;
     int16_t previous_y;
     int16_t start_x;
@@ -152,6 +157,8 @@ struct xiao147_shadow_gesture {
     uint16_t tap_long_anchor[2];
     bool tail_one;
     bool pending;
+    bool weak_release;
+    bool reacquiring;
     bool association_valid;
     uint8_t previous_valley;
     struct xiao147_raw_lobe previous_lobes[2];
@@ -165,9 +172,11 @@ void xiao147_shadow_gesture_cancel(struct xiao147_shadow_gesture *gesture);
  * centroid jumps cancel the WHOLE gesture until two confirmed NONE frames.
  * Two consecutive TWO hypotheses qualify a shadow candidate. An intervening
  * ONE_LOBE before qualification cancels the whole gesture until full lift.
- * PENDING is allowed only before any trusted contact, after two real NONE
+ * PENDING is allowed before any trusted contact, after two real NONE
  * frames already unblocked the tracker. It emits nothing, starts no tap clock
- * and is bounded to 100 ms. PENDING after ONE/TWO cancels until full release.
+ * and is bounded to 100 ms. After qualified TWO it may wait up to 60 ms for
+ * two NONE frames: no motion/release is inferred from PENDING, no tap clock
+ * extension, and any renewed contact cancels. Unqualified contact cancels.
  * A right-tap candidate requires a <=240 ms stationary gesture and full lift.
  * Net displacement <=12 cannot accumulate scroll jitter. On first >12,
  * scroll activates permanently and only the excess beyond 12 is consumed.
@@ -188,7 +197,10 @@ struct xiao147_shadow_result xiao147_shadow_gesture_observe(
 /* Production shadow wrapper must use the full-profile API. It validates
  * disjoint lobe supports, ordered/strong peaks, valley geometry and bounded
  * per-frame association changes before the legacy shadow transition logic.
- * Merged, invalid or abruptly swapped partitions cancel the whole gesture.
+ * Invalid or abruptly swapped partitions cancel the whole gesture. A valid
+ * two-peak shallow-valley ambiguity may restart scroll qualification within
+ * 100 ms, discarding old motion/association and permanently forbidding tap
+ * until full lift. Only motion between new consecutive trusted TWO counts.
  * Each first-TWO lobe coordinate is also a fixed tap-only anchor. A >12
  * cumulative native offset on either lobe permanently disqualifies tap,
  * without changing the net-motion scroll/axis policy. Native units are not

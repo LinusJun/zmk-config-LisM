@@ -1,0 +1,22 @@
+{
+  "source_log": "diagnostics/xiao147-1309c8f-live-20261015-01.log",
+  "source_sha256": "8b23edd5420269a65eff2fbd6cc14a4adcf68dd2e3f74178bb23bb6464a94b7e",
+  "frame_count": 2224,
+  "interval_ms": {"min": 21, "median": 26, "max": 31},
+  "controller": "510601 / FW 0100 / HOST4 / EXPERIMENTAL_HID=1",
+  "commit_not_read_back_from_device": true,
+  "normal_input_restored": true,
+  "human_observation": "Last rightward movement navigated Codex to a usage-limit interface. Right-click menu not confirmed. Exact requested sequence/timestamps not independently confirmed.",
+  "old_actual_c_replay": {"taps": 0, "positive_pan_frames": 0, "negative_pan_frames": 3, "positive_wheel_frames": 3, "negative_wheel_frames": 6},
+  "revised_actual_c_replay": {"taps": 1, "positive_pan_frames": 2, "negative_pan_frames": 3, "positive_wheel_frames": 3, "negative_wheel_frames": 6},
+  "root_causes": [
+    "27153ms first apparent tap: shallow valley UNKNOWN cancels before two consecutive credible frames. Remains rejected; no count-threshold relaxation.",
+    "27811ms second apparent tap: ONE release centroid is not near either fixed lobe anchor. Remains rejected; no removal of movement guard.",
+    "28355ms third apparent tap: weak PENDING used to cancel qualified stationary contact. Now bounded 60ms wait for two NONE frames without extending 240ms clock; output at28407ms.",
+    "39344/39894ms apparent left movements: shallow valley ambiguity poisoned all subsequent credible frames. Now fresh scroll-only requalification discards uncertain displacement and permits output at39417/39941ms.",
+    "Last apparent right movement still lacks consecutive credible TWO frames and stays rejected. Codex navigation alone is not a scroll-direction test."
+  ],
+  "scope": "Controlled experiment only; RAW disabled by default, explicit awake-user window <=60 seconds. No controller MTP/firmware/calibration writes. No native second contact demonstrated. No daily-use multi-touch stability claim.",
+  "validation": "Actual C, ASan/UBSan: complete new and old dynamic recordings, four stationary scenes, synthetic weak release/renewed contact/timeout/bounce, fresh anchors/opposite direction/repeated ambiguity/hard faults. Existing 18 CI regression scripts retained including the new replay.",
+  "limitation": "Both dynamic recordings are now in-sample regressions. Synthetic negative cases are not independent physical moving-single-finger validation. Wheel queue acceptance is not host OS acknowledgement."
+}

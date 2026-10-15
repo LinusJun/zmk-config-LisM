@@ -174,6 +174,8 @@ bool xiao147_raw_profile_evaluate(const int32_t *diff, uint8_t channels,
     }
     profile->valley_permille = (uint16_t)(((uint64_t)valley * 1000U) / lesser);
     profile->lesser_peak_permille = (uint16_t)(((uint64_t)lesser * 1000U) / greater);
+    profile->two_peak_ambiguity =
+        (uint64_t)valley * 100U > (uint64_t)lesser * PROFILE_VALLEY_PERCENT;
     if ((uint64_t)valley * 100U <= (uint64_t)lesser * PROFILE_VALLEY_PERCENT) {
         /* Select the middle of an equally deep valley plateau. Split supports
          * stay ordered by physical long axis, never by relative peak strength.
@@ -290,6 +292,8 @@ void xiao147_shadow_gesture_cancel(struct xiao147_shadow_gesture *gesture)
         gesture->tap_anchor_valid = false;
         gesture->tail_one = false;
         gesture->pending = false;
+        gesture->weak_release = false;
+        gesture->reacquiring = false;
         gesture->association_valid = false;
         gesture->two_frames = 0;
         gesture->release_frames = 0;
@@ -351,6 +355,14 @@ struct xiao147_shadow_result xiao147_shadow_gesture_observe(
         return result;
     }
 
+    if (gesture->weak_release &&
+        (now_ms - gesture->weak_release_since_ms > LIFT_TAIL_MS ||
+         (hypothesis != XIAO147_RAW_PENDING && hypothesis != XIAO147_RAW_NONE))) {
+        xiao147_shadow_gesture_cancel(gesture);
+        result.cancelled = true;
+        return result;
+    }
+
     if (gesture->pending && now_ms - gesture->pending_since_ms >
         XIAO147_SHADOW_PENDING_MS) {
         xiao147_shadow_gesture_cancel(gesture);
@@ -358,6 +370,16 @@ struct xiao147_shadow_result xiao147_shadow_gesture_observe(
         return result;
     }
     if (hypothesis == XIAO147_RAW_PENDING) {
+        if (!gesture->blocked && gesture->qualified_two && gesture->active &&
+            gesture->release_frames == 0) {
+            /* Weak signal is not release, and its coordinates are undefined.
+             * Wait briefly for two real NONEs without advancing motion. */
+            if (!gesture->weak_release) {
+                gesture->weak_release = true;
+                gesture->weak_release_since_ms = now_ms;
+            }
+            return result;
+        }
         if (gesture->blocked || gesture->active || gesture->two_frames != 0) {
             xiao147_shadow_gesture_cancel(gesture);
             result.cancelled = true;
@@ -398,6 +420,8 @@ struct xiao147_shadow_result xiao147_shadow_gesture_observe(
         gesture->tap_anchor_valid = false;
         gesture->tail_one = false;
         gesture->pending = false;
+        gesture->weak_release = false;
+        gesture->reacquiring = false;
         gesture->association_valid = false;
         gesture->two_frames = 0;
         gesture->remainder_x = gesture->remainder_y = 0;
@@ -545,6 +569,37 @@ struct xiao147_shadow_result xiao147_shadow_gesture_observe_profile(
     enum xiao147_raw_hypothesis hypothesis = profile == NULL ?
         XIAO147_RAW_UNKNOWN : profile->hypothesis;
     bool associated = true;
+    if (gesture != NULL) {
+        bool timely = !gesture->have_time ||
+            (now_ms != gesture->last_ms &&
+             now_ms - gesture->last_ms <= XIAO147_SHADOW_MAX_GAP_MS &&
+             orientation == gesture->orientation);
+        bool in_window = !gesture->reacquiring ||
+            now_ms - gesture->reacquire_since_ms <= XIAO147_SHADOW_PENDING_MS;
+        if (valid && profile != NULL && timely && orientation <= 3U &&
+            in_window && !gesture->blocked && !gesture->weak_release &&
+            !gesture->tail_one && gesture->release_frames == 0 &&
+            hypothesis == XIAO147_RAW_UNKNOWN && profile->two_peak_ambiguity) {
+            uint32_t since = gesture->reacquiring ? gesture->reacquire_since_ms : now_ms;
+            /* Not a TWO frame. Forget the entire motion segment; do not
+             * bridge unknown coordinates, preserve a click, or reset timeout. */
+            xiao147_shadow_gesture_cancel(gesture);
+            gesture->blocked = false;
+            gesture->reacquiring = true;
+            gesture->reacquire_since_ms = since;
+            gesture->tap_disqualified = true;
+            gesture->last_ms = now_ms;
+            gesture->have_time = true;
+            gesture->orientation = orientation;
+            return (struct xiao147_shadow_result){.cancelled = true};
+        }
+        if (gesture->reacquiring && (!in_window ||
+            (hypothesis != XIAO147_RAW_TWO_SEPARATED_LOBES &&
+             hypothesis != XIAO147_RAW_NONE))) {
+            xiao147_shadow_gesture_cancel(gesture);
+            return (struct xiao147_shadow_result){.cancelled = true};
+        }
+    }
     if (valid && hypothesis == XIAO147_RAW_ONE_LOBE && gesture != NULL &&
         !gesture->blocked && gesture->qualified_two && gesture->tap_anchor_valid) {
         /* A disappearing lobe can move the pair mean, so never scroll here.
@@ -596,6 +651,7 @@ struct xiao147_shadow_result xiao147_shadow_gesture_observe_profile(
     struct xiao147_shadow_result result = xiao147_shadow_gesture_observe(
         gesture, associated ? hypothesis : XIAO147_RAW_UNKNOWN,
         valid && profile != NULL && associated, logical_x, logical_y, orientation, now_ms);
+    if (gesture != NULL && gesture->qualified_two) { gesture->reacquiring = false; }
     if (gesture != NULL && !gesture->blocked &&
         hypothesis == XIAO147_RAW_TWO_SEPARATED_LOBES && associated &&
         gesture->two_frames != 0) {
