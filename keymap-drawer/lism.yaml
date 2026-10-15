@@ -55,10 +55,10 @@ layers:
   - D
   - ''
   - LEFT SHIFT
-  - '&stick_scroll MOVE_Y(-25)'
-  - '&stick_scroll MOVE_X(-25)'
-  - '&stick_scroll MOVE_Y(25)'
-  - '&stick_scroll MOVE_X(25)'
+  - ↑
+  - →
+  - ↓
+  - ←
   Game:
   - ESC
   - Q
@@ -173,10 +173,10 @@ layers:
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
   - {t: ▽, type: trans}
-  - ↑
-  - →
-  - ↓
-  - ←
+  - '&stick_scroll MOVE_Y(-25)'
+  - '&stick_scroll MOVE_X(-25)'
+  - '&stick_scroll MOVE_Y(25)'
+  - '&stick_scroll MOVE_X(25)'
   Mark:
   - '!'
   - '@'
