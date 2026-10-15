@@ -263,11 +263,19 @@ static void baseline_and_candidates(void) {
      * as a substitute for spatial movement. USB-left +X -> negative pan. */
     two_stations(2,5,280,280,280,280);samples(1);
     assert(state.shadow_scrolls>=1&&strstr(latest_shadow,"pan=-")&&!hid_events);
-    /* Both lobes keep their sites and coherently shift their column ratio.
-     * This synthetic +Y feature -> negative wheel, not hardware calibration. */
+    assert(state.shadow.scroll_axis==XIAO147_SCROLL_HORIZONTAL);
+    scrolls=state.shadow_scrolls;
+    /* This gesture is locked to horizontal; turning into the secondary axis
+     * cannot accumulate or later flush hidden wheel movement. */
     two_stations(2,5,200,360,200,360);samples(1);
-    assert(state.shadow_scrolls>=2&&strstr(latest_shadow,"wheel=-")&&!hid_events);
+    assert(state.shadow_scrolls==scrolls&&state.shadow.remainder_y==0&&!hid_events);
     quiet();samples(2);assert(state.shadow_taps==1); /* Scroll cancels tap. */
+    assert(state.shadow.scroll_axis==XIAO147_SCROLL_NONE);
+    two_stations(2,5,280,280,280,280);samples(2);
+    two_stations(2,5,200,360,200,360);samples(1);
+    assert(state.shadow_scrolls>scrolls&&strstr(latest_shadow,"wheel=-")&&!hid_events);
+    assert(state.shadow.scroll_axis==XIAO147_SCROLL_VERTICAL);
+    quiet();samples(2);assert(state.shadow_taps==1);
 
     two(120,120,440,440);samples(2);
     assert(state.shadow_last_hypothesis==XIAO147_RAW_ONE_LOBE); /* Weak lobe below 35%, not a count. */

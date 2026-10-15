@@ -104,6 +104,13 @@ struct xiao147_shadow_result {
     int16_t candidate_hwheel;
 };
 
+enum xiao147_scroll_axis {
+    XIAO147_SCROLL_NONE,
+    XIAO147_SCROLL_HORIZONTAL,
+    XIAO147_SCROLL_VERTICAL,
+    XIAO147_SCROLL_BOTH,
+};
+
 struct xiao147_shadow_gesture {
     uint32_t last_ms;
     uint32_t started_ms;
@@ -123,7 +130,26 @@ struct xiao147_shadow_gesture {
     bool blocked;
     bool active;
     bool qualified_two;
+    /* moving permanently invalidates this gesture's tap when either net
+     * coordinate exceeds 12 from the first credible TWO anchor. A scroll
+     * activates then, even if the excess is too small for an 8-pixel tick.
+     */
     bool moving;
+    bool scroll_activated;
+    bool scroll_x_started;
+    bool scroll_y_started;
+    bool scroll_x_emitted;
+    bool scroll_y_emitted;
+    enum xiao147_scroll_axis scroll_axis;
+    /* Equal pair motion can hide opposing individual-lobe movement. The full
+     * profile path separately disqualifies tap if either provisional native
+     * lobe moves >12 from its fixed FIRST-TWO anchor, even if it returns.
+     * This is not scroll activation and does not cancel valid net scrolling.
+     */
+    bool tap_disqualified;
+    bool tap_anchor_valid;
+    uint16_t tap_short_anchor[2];
+    uint16_t tap_long_anchor[2];
     bool tail_one;
     bool pending;
     bool association_valid;
@@ -143,6 +169,14 @@ void xiao147_shadow_gesture_cancel(struct xiao147_shadow_gesture *gesture);
  * frames already unblocked the tracker. It emits nothing, starts no tap clock
  * and is bounded to 100 ms. PENDING after ONE/TWO cancels until full release.
  * A right-tap candidate requires a <=240 ms stationary gesture and full lift.
+ * Net displacement <=12 cannot accumulate scroll jitter. On first >12,
+ * scroll activates permanently and only the excess beyond 12 is consumed.
+ * A >=2:1 dominant axis locks H/V for this gesture; otherwise BOTH is fixed.
+ * Before an axis emits its first tick, its remainder is recomputed from net
+ * excess so a threshold excursion returning to origin cannot scroll backward.
+ * After that first tick, incremental motion follows normally on that axis.
+ * BOTH applies this independently to each axis.
+ * Suppressed axes never retain hidden remainder; lift is required to reselect.
  * A short <=60 ms ONE_LOBE lift tail never becomes a left click; longer or
  * rejoined tails cancel. No left-click candidate exists in this interface.
  */
@@ -155,6 +189,10 @@ struct xiao147_shadow_result xiao147_shadow_gesture_observe(
  * disjoint lobe supports, ordered/strong peaks, valley geometry and bounded
  * per-frame association changes before the legacy shadow transition logic.
  * Merged, invalid or abruptly swapped partitions cancel the whole gesture.
+ * Each first-TWO lobe coordinate is also a fixed tap-only anchor. A >12
+ * cumulative native offset on either lobe permanently disqualifies tap,
+ * without changing the net-motion scroll/axis policy. Native units are not
+ * physically calibrated; pressure-shape variation may conservatively miss taps.
  * logical_x/y are the caller's four-pose transform of the equal-weight pair.
  * The old observe() remains for isolated synthetic state/sign tests only.
  */

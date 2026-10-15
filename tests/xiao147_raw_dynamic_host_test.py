@@ -199,6 +199,22 @@ static struct replay_counts replay(enum xiao147_orientation pose,
         assert(result.candidate_wheel >= -127 && result.candidate_wheel <= 127);
         assert(result.candidate_hwheel >= -127 && result.candidate_hwheel <= 127);
         if (result.cancelled) { no_candidate(result); }
+        if (result.cancelled || (profile.hypothesis == XIAO147_RAW_NONE &&
+                                 gesture.release_frames == 2)) {
+            assert(gesture.scroll_axis == XIAO147_SCROLL_NONE);
+            assert(!gesture.scroll_activated && !gesture.scroll_x_started &&
+                   !gesture.scroll_y_started);
+            assert(!gesture.scroll_x_emitted && !gesture.scroll_y_emitted);
+            assert(!gesture.remainder_x && !gesture.remainder_y);
+        }
+        if (gesture.scroll_axis == XIAO147_SCROLL_HORIZONTAL) {
+            assert(!result.candidate_wheel && !gesture.remainder_y &&
+                   !gesture.scroll_y_started);
+        }
+        if (gesture.scroll_axis == XIAO147_SCROLL_VERTICAL) {
+            assert(!result.candidate_hwheel && !gesture.remainder_x &&
+                   !gesture.scroll_x_started);
+        }
         if (!armed || !valid || profile.hypothesis == XIAO147_RAW_UNKNOWN ||
             profile.hypothesis == XIAO147_RAW_PENDING) { no_candidate(result); }
         if (was_active && (profile.hypothesis == XIAO147_RAW_UNKNOWN ||
@@ -217,6 +233,9 @@ static struct replay_counts replay(enum xiao147_orientation pose,
         if (result.candidate_wheel || result.candidate_hwheel) {
             assert(armed && valid && profile.hypothesis == XIAO147_RAW_TWO_SEPARATED_LOBES);
             assert(gesture.qualified_two && gesture.association_valid && gesture.moving);
+            assert(gesture.scroll_activated && gesture.scroll_axis != XIAO147_SCROLL_NONE);
+            if (result.candidate_wheel) { assert(gesture.scroll_y_started); }
+            if (result.candidate_hwheel) { assert(gesture.scroll_x_started); }
         }
         counts.shape[profile.hypothesis]++;
         counts.taps += result.candidate_right_tap;

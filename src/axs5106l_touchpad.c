@@ -102,6 +102,9 @@ struct axs_touch_data {
 #ifdef CONFIG_LISM_XIAO147_RAW_GESTURE_HID_TEST
     bool experimental_hid_active;
     bool experimental_button_down;
+    bool experimental_uart_quarantine;
+    bool experimental_uart_saw_low;
+    bool experimental_uart_low_drained;
     uint32_t experimental_release_log_ms;
 #endif
 #endif
@@ -257,11 +260,55 @@ static bool axs_experimental_release(struct axs_touch_data *data)
         return true;
     }
     data->input_errors++;
+    if (!data->experimental_uart_quarantine) {
+        data->experimental_uart_quarantine = true;
+        data->experimental_uart_saw_low = false;
+        data->experimental_uart_low_drained = false;
+    }
+    data->control = (struct xiao147_raw_control){0};
+    data->info_stage = 0;
+    data->info_valid = false;
     if (k_uptime_get_32() - data->experimental_release_log_ms >= 1000) {
         LOG_ERR("AXS_GESTURE right-button release retry failed %d; normal input remains isolated", ret);
         data->experimental_release_log_ms = k_uptime_get_32();
     }
     return false;
+}
+
+static bool axs_experimental_discard_commands(struct axs_touch_data *data,
+                                              bool known_low, bool known_high)
+{
+    if (!data->experimental_uart_quarantine) { return false; }
+    /* An empty RX poll is not a session boundary: old USB OUT fragments may
+     * arrive later. Keep discarding until a verified DTR-low/drained state
+     * followed by DTR-high, an idle engine and an accepted button release.
+     * Console/query errors cannot prove DTR-low or an empty receive queue.
+     */
+    data->control = (struct xiao147_raw_control){0};
+    data->info_stage = 0;
+    data->info_valid = false;
+    if (known_low) { data->experimental_uart_saw_low = true; }
+    bool empty = false;
+    if (device_is_ready(capture_console)) {
+        for (unsigned i = 0; i < 32; i++) {
+            uint8_t ignored;
+            int ret = uart_poll_in(capture_console, &ignored);
+            if (ret != 0) {
+                empty = ret == -1;
+                break;
+            }
+        }
+    }
+    if (known_low) { data->experimental_uart_low_drained = empty; }
+    if (known_high && data->experimental_uart_saw_low &&
+        data->experimental_uart_low_drained && empty &&
+        !data->experimental_button_down && !xiao147_raw_capture_active(&data->capture)) {
+        data->experimental_uart_quarantine = false;
+        data->experimental_uart_saw_low = false;
+        data->experimental_uart_low_drained = false;
+        LOG_INF("AXS_GESTURE command quarantine cleared after DTR reconnect; fresh INFO required");
+    }
+    return true; /* Never parse bytes in the same tick that drains isolation. */
 }
 
 static void axs_experimental_abort(struct axs_touch_data *data)
@@ -491,9 +538,16 @@ static void axs_raw_command(struct axs_touch_data *data, enum xiao147_raw_comman
 static bool axs_raw_poll(struct axs_touch_data *data)
 {
     bool was_active = xiao147_raw_capture_active(&data->capture);
+    uint32_t dtr = 0;
+    int dtr_result = device_is_ready(capture_console) ?
+        uart_line_ctrl_get(capture_console, UART_LINE_CTRL_DTR, &dtr) : -ENODEV;
+    bool connected = dtr_result == 0 && dtr != 0;
+    bool discard_commands = false;
 #ifdef CONFIG_LISM_XIAO147_RAW_GESTURE_HID_TEST
     bool was_button_down = data->experimental_button_down;
     axs_experimental_release(data);
+    discard_commands = axs_experimental_discard_commands(data,
+        dtr_result == 0 && dtr == 0, connected);
     if (data->experimental_button_down && !was_active) {
         atomic_set(&capture_gate, 1);
         return true;
@@ -502,9 +556,6 @@ static bool axs_raw_poll(struct axs_touch_data *data)
         LOG_INF("AXS_RAW_INPUT restored; right-button release accepted, waiting for real touch release");
     }
 #endif
-    uint32_t dtr = 0;
-    bool connected = device_is_ready(capture_console) &&
-        uart_line_ctrl_get(capture_console, UART_LINE_CTRL_DTR, &dtr) == 0 && dtr != 0;
     if (!connected) {
 #ifdef CONFIG_LISM_XIAO147_RAW_GESTURE_HID_TEST
         data->experimental_hid_active = false;
@@ -514,7 +565,7 @@ static bool axs_raw_poll(struct axs_touch_data *data)
         data->info_stage = 0;
         data->info_valid = false;
         if (was_active) { xiao147_raw_capture_stop(&data->capture, k_uptime_get_32()); }
-    } else {
+    } else if (!discard_commands) {
         /* Pinned legacy Zephyr CDC ACM queues USB OUT to its RX ring even with
          * RX IRQ disabled; poll_in drains that ring. Do not replace console
          * TX/IRQ callbacks. Kconfig excludes competing shell/input handlers. */
@@ -600,7 +651,7 @@ static bool axs_raw_poll(struct axs_touch_data *data)
 #ifdef CONFIG_LISM_XIAO147_RAW_GESTURE_HID_TEST
                 hid_supported = true;
 #endif
-                LOG_INF("AXS_RAW_INFO ID=%02x%02x%02x FW=%04x valid=%d HOST=3 EXPERIMENTAL_HID=%d", data->info_id[0],
+                LOG_INF("AXS_RAW_INFO ID=%02x%02x%02x FW=%04x valid=%d HOST=4 EXPERIMENTAL_HID=%d", data->info_id[0],
                         data->info_id[1], data->info_id[2], data->info_fw, data->info_valid, hid_supported);
             } else { LOG_WRN("AXS_RAW_INFO FW read failed %d", ret); }
             data->info_stage = 0;
@@ -805,9 +856,9 @@ static int axs_touch_init(const struct device *dev)
         .event = axs_raw_event, .sample = axs_raw_sample,
     };
     xiao147_raw_capture_init(&data->capture, &ops, data);
-    LOG_INF("AXS_RAW_READY v3: INFO then START <FWhex>, STOP; 60s limit, failure requires power cycle");
+    LOG_INF("AXS_RAW_READY v4: INFO then START <FWhex>, STOP; 60s limit, failure requires power cycle");
 #ifdef CONFIG_LISM_XIAO147_GESTURE_SHADOW
-    LOG_INF("AXS_SHADOW_READY v2: SHADOW_START <FWhex> requires hands off/status/IMU off; balanced lobes/pending, HID=0");
+    LOG_INF("AXS_SHADOW_READY v3: SHADOW_START <FWhex>; net12 axis lock/lobe tap guards; HID=0");
 #ifdef CONFIG_LISM_XIAO147_RAW_GESTURE_HID_TEST
     LOG_WRN("AXS_GESTURE_READY experimental: only GESTURE_START <FWhex> enables <=60s right/wheel/pan; blank test page only, possible misclicks; default OFF");
 #endif

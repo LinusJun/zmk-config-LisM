@@ -315,6 +315,223 @@ static void independent_lobe_tests(void)
     assert(xiao147_shadow_gesture_observe_profile(&g, NULL, true, 100, 100, 0, 120).cancelled);
 }
 
+static void activation_and_axis_tests(void)
+{
+    struct xiao147_shadow_gesture g;
+    struct xiao147_shadow_result r;
+    for (int net = 11; net <= 13; net++) {
+        xiao147_shadow_gesture_init(&g); release(&g, 0); qualify(&g, 40);
+        no_output(step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 100 + net, 100, 0, 80));
+        assert(g.moving == (net > 12) && g.scroll_activated == (net > 12));
+        assert(g.scroll_axis == (net > 12 ? XIAO147_SCROLL_HORIZONTAL : XIAO147_SCROLL_NONE));
+        assert(g.remainder_x == (net > 12 ? 1 : 0) && g.remainder_y == 0);
+        no_output(step(&g, XIAO147_RAW_NONE, 0, 0, 0, 100));
+        r = step(&g, XIAO147_RAW_NONE, 0, 0, 0, 120);
+        assert(r.candidate_right_tap == (net <= 12));
+        assert(!g.scroll_activated && g.scroll_axis == XIAO147_SCROLL_NONE &&
+               !g.scroll_x_started && !g.scroll_y_started && !g.remainder_x && !g.remainder_y);
+    }
+    /* Repeated travel inside the deadzone must not accumulate path distance
+     * or jitter remainders. Net offset stays <=7; stationary tap survives. */
+    xiao147_shadow_gesture_init(&g); release(&g, 0); qualify(&g, 40);
+    for (unsigned t = 80; t <= 180; t += 20) {
+        int x = ((t / 20) & 1U) ? 100 : 107;
+        no_output(step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, x, 100, 0, t));
+        assert(!g.scroll_activated && !g.moving && !g.remainder_x && !g.remainder_y);
+    }
+    no_output(step(&g, XIAO147_RAW_NONE, 0, 0, 0, 200));
+    assert(step(&g, XIAO147_RAW_NONE, 0, 0, 0, 220).candidate_right_tap);
+
+    /* Crossing on the qualification frame cancels tap permanently, even if
+     * the excess is less than a tick and the pointer returns to the anchor. */
+    xiao147_shadow_gesture_init(&g); release(&g, 0);
+    no_output(step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 100, 100, 0, 40));
+    no_output(step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 113, 100, 0, 60));
+    assert(g.qualified_two && g.moving && g.scroll_activated && g.remainder_x == 1);
+    r = step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 100, 100, 0, 80);
+    no_output(r);
+    assert(!r.candidate_right_tap && g.moving && g.scroll_activated);
+    assert(!g.remainder_x && !g.scroll_x_emitted);
+    no_output(step(&g, XIAO147_RAW_NONE, 0, 0, 0, 100));
+    no_output(step(&g, XIAO147_RAW_NONE, 0, 0, 0, 120));
+
+    /* Before the first tick, excursions beyond the activation threshold must
+     * not build an artificial reverse offset. Verify both signs and axes,
+     * repeated return-to-origin and crossing to the opposite side. */
+    for (unsigned axis = 0; axis < 2; axis++) for (int sign = -1; sign <= 1; sign += 2) {
+        xiao147_shadow_gesture_init(&g); release(&g, 0); qualify(&g, 40);
+        const int offsets[] = {13, 0, 19, 0, -13, 0, -19, 0};
+        for (unsigned i = 0; i < sizeof(offsets) / sizeof(offsets[0]); i++) {
+            int net = sign * offsets[i];
+            no_output(step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES,
+                100 + (axis == 0 ? net : 0), 100 + (axis == 1 ? net : 0), 0, 80 + i * 20));
+            assert(!g.scroll_x_emitted && !g.scroll_y_emitted);
+            if (net == 0) { assert(!g.remainder_x && !g.remainder_y); }
+        }
+        r = step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES,
+            100 + (axis == 0 ? sign * 20 : 0), 100 + (axis == 1 ? sign * 20 : 0), 0, 240);
+        assert((axis == 0 ? r.candidate_hwheel : r.candidate_wheel) == -sign);
+        assert((axis == 0 ? g.scroll_x_emitted : g.scroll_y_emitted));
+        r = step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES,
+            100 + (axis == 0 ? sign * 12 : 0), 100 + (axis == 1 ? sign * 12 : 0), 0, 260);
+        assert((axis == 0 ? r.candidate_hwheel : r.candidate_wheel) == sign);
+        release(&g, 280);
+        assert(!g.scroll_x_emitted && !g.scroll_y_emitted);
+    }
+
+    /* BOTH axes independently remain anchored until each emits a real tick. */
+    xiao147_shadow_gesture_init(&g); release(&g, 0); qualify(&g, 40);
+    no_output(step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 113, 113, 0, 80));
+    no_output(step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 100, 100, 0, 100));
+    assert(!g.remainder_x && !g.remainder_y);
+    r = step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 120, 113, 0, 120);
+    assert(r.candidate_hwheel == -1 && !r.candidate_wheel);
+    no_output(step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 120, 100, 0, 140));
+    assert(g.scroll_x_emitted && !g.scroll_y_emitted && !g.remainder_y);
+
+    /* First 32-pixel displacement sends only 32-12=20, not a retroactive
+     * four-tick onset jump. Axis stays locked through a later right-angle turn.
+     */
+    xiao147_shadow_gesture_init(&g); release(&g, 0); qualify(&g, 40);
+    r = step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 132, 100, 0, 80);
+    assert(r.candidate_hwheel == -2 && !r.candidate_wheel && g.remainder_x == 4);
+    assert(g.scroll_axis == XIAO147_SCROLL_HORIZONTAL && g.scroll_x_started && !g.scroll_y_started);
+    no_output(step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 132, 132, 0, 100));
+    no_output(step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 132, 100, 0, 120));
+    assert(g.remainder_y == 0 && !g.scroll_y_started && g.scroll_axis == XIAO147_SCROLL_HORIZONTAL);
+    r = step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 148, 140, 0, 140);
+    assert(r.candidate_hwheel == -2 && !r.candidate_wheel && g.remainder_y == 0);
+    release(&g, 160); assert(g.scroll_axis == XIAO147_SCROLL_NONE);
+    qualify(&g, 200);
+    r = step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 100, 132, 0, 240);
+    assert(r.candidate_wheel == -2 && !r.candidate_hwheel && g.scroll_axis == XIAO147_SCROLL_VERTICAL);
+    no_output(step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 132, 132, 0, 260));
+    assert(g.remainder_x == 0 && !g.scroll_x_started);
+    assert(step(&g, XIAO147_RAW_UNKNOWN, 0, 0, 0, 280).cancelled);
+    assert(g.scroll_axis == XIAO147_SCROLL_NONE && !g.scroll_activated &&
+           !g.remainder_x && !g.remainder_y && !g.scroll_x_started && !g.scroll_y_started);
+
+    const int vectors[][3] = {
+        {26,13,XIAO147_SCROLL_HORIZONTAL}, {13,26,XIAO147_SCROLL_VERTICAL},
+        {25,13,XIAO147_SCROLL_BOTH}, {13,25,XIAO147_SCROLL_BOTH},
+        {28,28,XIAO147_SCROLL_BOTH}, {-26,13,XIAO147_SCROLL_HORIZONTAL},
+        {13,-26,XIAO147_SCROLL_VERTICAL}, {-28,-28,XIAO147_SCROLL_BOTH},
+    };
+    for (unsigned i = 0; i < sizeof(vectors) / sizeof(vectors[0]); i++) {
+        xiao147_shadow_gesture_init(&g); release(&g, 0); qualify(&g, 40);
+        r = step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 100 + vectors[i][0],
+                 100 + vectors[i][1], 0, 80);
+        assert(g.scroll_axis == (enum xiao147_scroll_axis)vectors[i][2] &&
+               g.scroll_activated && g.moving);
+        if (g.scroll_axis == XIAO147_SCROLL_HORIZONTAL) {
+            assert(!r.candidate_wheel && !g.remainder_y && !g.scroll_y_started);
+        } else if (g.scroll_axis == XIAO147_SCROLL_VERTICAL) {
+            assert(!r.candidate_hwheel && !g.remainder_x && !g.scroll_x_started);
+        } else if (vectors[i][0] == vectors[i][1]) {
+            assert(r.candidate_hwheel == (vectors[i][0] > 0 ? -2 : 2));
+            assert(r.candidate_wheel == r.candidate_hwheel);
+        }
+    }
+    /* BOTH does not accumulate its second axis before that axis crosses 12.
+     * Each axis consumes the one-time deadzone independently, then follows
+     * normal increments without reapplying the deadzone on every sample. */
+    xiao147_shadow_gesture_init(&g); release(&g, 0); qualify(&g, 40);
+    no_output(step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 113, 111, 0, 80));
+    assert(g.scroll_axis == XIAO147_SCROLL_BOTH && g.scroll_x_started &&
+           !g.scroll_y_started && g.remainder_x == 1 && g.remainder_y == 0);
+    no_output(step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 114, 112, 0, 100));
+    assert(!g.scroll_y_started && g.remainder_x == 2 && g.remainder_y == 0);
+    no_output(step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 115, 113, 0, 120));
+    assert(g.scroll_y_started && g.remainder_x == 3 && g.remainder_y == 1);
+    r = step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 120, 120, 0, 140);
+    assert(r.candidate_hwheel == -1 && r.candidate_wheel == -1 &&
+           !g.remainder_x && !g.remainder_y && g.scroll_axis == XIAO147_SCROLL_BOTH);
+}
+
+static void individual_lobe_tap_tests(void)
+{
+    const int32_t a_values[12] = {0,0,280,280,0,0,0,0,280,280,0,0};
+    const int32_t b_values[12] = {160,160,280,280,0,0,0,0,280,280,160,160};
+    struct xiao147_raw_profile a, b, lifted;
+    assert(xiao147_raw_profile_evaluate(a_values, 12, NULL, &a));
+    assert(xiao147_raw_profile_evaluate(b_values, 12, NULL, &b));
+    assert(xiao147_raw_profile_evaluate(quiet, 12, NULL, &lifted));
+    assert(a.partition_valid && b.partition_valid &&
+           a.native_short_x == b.native_short_x && a.native_long_y == b.native_long_y);
+    assert(a.lobes[0].native_long_y == 63 && b.lobes[0].native_long_y == 41 &&
+           a.lobes[1].native_long_y == 255 && b.lobes[1].native_long_y == 277);
+    struct xiao147_shadow_gesture g;
+    xiao147_shadow_gesture_init(&g);
+    no_output(profile_step(&g, &lifted, 0)); no_output(profile_step(&g, &lifted, 20));
+    no_output(profile_step(&g, &a, 40)); no_output(profile_step(&g, &a, 60));
+    assert(g.tap_anchor_valid && !g.tap_disqualified);
+    no_output(profile_step(&g, &b, 80));
+    assert(g.tap_disqualified && !g.blocked && !g.scroll_activated && !g.moving);
+    no_output(profile_step(&g, &a, 100));
+    assert(g.tap_disqualified); /* Returning both lobes never restores tap. */
+    no_output(profile_step(&g, &lifted, 120)); no_output(profile_step(&g, &lifted, 140));
+    assert(!g.tap_anchor_valid && !g.tap_disqualified);
+
+    /* Exact per-lobe 12/13 native-unit boundary, with unchanged pair mean.
+     * Added outer support 85 -> +/-12, 91 -> +/-13 from the FIRST anchor. */
+    for (unsigned outer = 85; outer <= 91; outer += 6) {
+        int32_t v[12]; memcpy(v, a_values, sizeof(v));
+        v[0] = v[1] = v[10] = v[11] = (int32_t)outer;
+        assert(xiao147_raw_profile_evaluate(v, 12, NULL, &b));
+        int offset = (int)a.lobes[0].native_long_y - b.lobes[0].native_long_y;
+        assert(offset == (outer == 85 ? 12 : 13));
+        assert((int)b.lobes[1].native_long_y - a.lobes[1].native_long_y == offset);
+        xiao147_shadow_gesture_init(&g);
+        no_output(profile_step(&g, &lifted, 0)); no_output(profile_step(&g, &lifted, 20));
+        no_output(profile_step(&g, &a, 40)); no_output(profile_step(&g, &a, 60));
+        no_output(profile_step(&g, &b, 80));
+        assert(g.tap_disqualified == (offset > 12) && !g.scroll_activated && !g.blocked);
+        no_output(profile_step(&g, &lifted, 100));
+        assert(profile_step(&g, &lifted, 120).candidate_right_tap == (offset <= 12));
+    }
+
+    /* Slow opposing increments also disqualify from a FIXED anchor. No
+     * individual frame moves >4, so an accidentally updated anchor would fail. */
+    const unsigned outer_steps[] = {41, 60, 79, 91};
+    xiao147_shadow_gesture_init(&g);
+    no_output(profile_step(&g, &lifted, 0)); no_output(profile_step(&g, &lifted, 20));
+    no_output(profile_step(&g, &a, 40)); no_output(profile_step(&g, &a, 60));
+    uint16_t previous_left = a.lobes[0].native_long_y;
+    uint16_t previous_right = a.lobes[1].native_long_y;
+    for (unsigned step_index = 0; step_index < 4; step_index++) {
+        int32_t v[12]; memcpy(v, a_values, sizeof(v));
+        v[0] = v[1] = v[10] = v[11] = (int32_t)outer_steps[step_index];
+        assert(xiao147_raw_profile_evaluate(v, 12, NULL, &b));
+        assert(previous_left - b.lobes[0].native_long_y <= 4 &&
+               b.lobes[1].native_long_y - previous_right <= 4);
+        no_output(profile_step(&g, &b, 80 + 20U * step_index));
+        assert(!g.blocked && !g.scroll_activated && !g.moving);
+        assert(g.tap_long_anchor[0] == a.lobes[0].native_long_y &&
+               g.tap_long_anchor[1] == a.lobes[1].native_long_y);
+        previous_left = b.lobes[0].native_long_y;
+        previous_right = b.lobes[1].native_long_y;
+    }
+    assert(g.tap_disqualified);
+    no_output(profile_step(&g, &a, 160));
+    no_output(profile_step(&g, &lifted, 180)); no_output(profile_step(&g, &lifted, 200));
+
+    /* Tap-only disqualification must not block subsequent coherent net
+     * scrolling or accidentally set moving before the net deadzone crosses. */
+    const int32_t shifted_values[12] = {0,0,0,0,280,280,0,0,0,0,280,280};
+    struct xiao147_raw_profile shifted;
+    assert(xiao147_raw_profile_evaluate(shifted_values, 12, NULL, &shifted));
+    xiao147_shadow_gesture_init(&g);
+    no_output(profile_step(&g, &lifted, 0)); no_output(profile_step(&g, &lifted, 20));
+    no_output(profile_step(&g, &a, 40)); no_output(profile_step(&g, &a, 60));
+    no_output(profile_step(&g, &b, 80)); /* b is the slow sequence's last +/-13. */
+    assert(g.tap_disqualified && !g.moving && !g.scroll_activated);
+    struct xiao147_shadow_result r = profile_step(&g, &shifted, 100);
+    assert(!r.cancelled && !g.blocked && g.tap_disqualified && g.moving &&
+           g.scroll_activated && g.scroll_axis == XIAO147_SCROLL_HORIZONTAL &&
+           r.candidate_hwheel == -6 && !r.candidate_wheel);
+    no_output(profile_step(&g, &lifted, 120)); no_output(profile_step(&g, &lifted, 140));
+}
+
 static void gesture_tests(void)
 {
     struct xiao147_shadow_gesture g;
@@ -359,8 +576,8 @@ static void gesture_tests(void)
         for (int sign = -1; sign <= 1; sign += 2) {
             xiao147_shadow_gesture_init(&g); release(&g, 0); qualify(&g, 40);
             r = step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES,
-                     100 + (axis == 0 ? sign * 16 : 0),
-                     100 + (axis == 1 ? sign * 16 : 0), 0, 80);
+                     100 + (axis == 0 ? sign * 28 : 0),
+                     100 + (axis == 1 ? sign * 28 : 0), 0, 80);
             assert(r.candidate_hwheel == (axis == 0 ? -2 * sign : 0));
             assert(r.candidate_wheel == (axis == 1 ? -2 * sign : 0));
             assert(!r.candidate_right_tap);
@@ -372,7 +589,8 @@ static void gesture_tests(void)
      * synthetic vector checks cannot claim physical short-axis calibration. */
     for (uint8_t pose = 0; pose < 4; pose++) {
         struct xiao147_xy a = xiao147_touch_to_logical(pose, 70, 150);
-        struct xiao147_xy b = xiao147_touch_to_logical(pose, 86, 166);
+        struct xiao147_xy b = xiao147_touch_to_logical(pose, 98, 178);
+        /* Each raw axis moves 28; the initial one-time 12 deadzone leaves 16. */
         struct xiao147_xy expected = xiao147_vector_to_logical(pose, 16, 16);
         xiao147_shadow_gesture_init(&g);
         no_output(step(&g, XIAO147_RAW_NONE, 0, 0, pose, 0));
@@ -480,10 +698,13 @@ static void actual_scene_replay(void)
 int main(void)
 {
     profile_tests(); baseline_tests(); pending_tests(); independent_lobe_tests();
+    activation_and_axis_tests(); individual_lobe_tap_tests();
     gesture_tests(); actual_scene_replay();
     puts("PASS: actual C signed DIFF morphology (4 in-sample scenes only), "
          "fresh-lift baseline gate, independently normalised/equal lobes, "
          "bounded weak onset PENDING, partition association guards, "
+         "net12 activation/no jitter backlog, fixed2:1 axes/true diagonal, "
+         "fixed individual-lobe tap-only guard/opposed-motion cancellation, "
          "shadow right-tap/natural-scroll signs, "
          "two-to-one release tail, uncertainty/gap/pose cancellation, "
          "no left-click API, no HID calls, integer bounds and uptime wrap. "

@@ -280,6 +280,14 @@ void xiao147_shadow_gesture_cancel(struct xiao147_shadow_gesture *gesture)
         gesture->active = false;
         gesture->qualified_two = false;
         gesture->moving = false;
+        gesture->scroll_activated = false;
+        gesture->scroll_x_started = false;
+        gesture->scroll_y_started = false;
+        gesture->scroll_x_emitted = false;
+        gesture->scroll_y_emitted = false;
+        gesture->scroll_axis = XIAO147_SCROLL_NONE;
+        gesture->tap_disqualified = false;
+        gesture->tap_anchor_valid = false;
         gesture->tail_one = false;
         gesture->pending = false;
         gesture->association_valid = false;
@@ -296,6 +304,22 @@ static int16_t scroll_candidate(int *remainder)
     if (ticks < -127) { ticks = -127; }
     *remainder -= ticks * SCROLL_STEP;
     return (int16_t)-ticks;
+}
+
+static int deadzone_excess(int net)
+{
+    if (net > TAP_MOVE) { return net - TAP_MOVE; }
+    if (net < -TAP_MOVE) { return net + TAP_MOVE; }
+    return 0;
+}
+
+static int activated_axis_remainder(bool *started, bool emitted,
+                                    int net, int delta, int remainder)
+{
+    if (magnitude(net) > TAP_MOVE) { *started = true; }
+    /* Until an actual tick, retain net excess, not an offset path that could
+     * turn a 0 -> 13 -> 0 excursion into an unintended reverse tick. */
+    return emitted ? remainder + delta : deadzone_excess(net);
 }
 
 struct xiao147_shadow_result xiao147_shadow_gesture_observe(
@@ -354,7 +378,8 @@ struct xiao147_shadow_result xiao147_shadow_gesture_observe(
         if (gesture->release_frames < 2U) { gesture->release_frames++; }
         if (gesture->release_frames < 2U) { return result; }
         if (!gesture->blocked && gesture->active && gesture->qualified_two &&
-            !gesture->moving && gesture->first_release_ms - gesture->started_ms <= TAP_MS &&
+            !gesture->moving && !gesture->tap_disqualified &&
+            gesture->first_release_ms - gesture->started_ms <= TAP_MS &&
             (!gesture->tail_one ||
              gesture->first_release_ms - gesture->one_since_ms <= LIFT_TAIL_MS)) {
             result.candidate_right_tap = true;
@@ -363,6 +388,14 @@ struct xiao147_shadow_result xiao147_shadow_gesture_observe(
         gesture->active = false;
         gesture->qualified_two = false;
         gesture->moving = false;
+        gesture->scroll_activated = false;
+        gesture->scroll_x_started = false;
+        gesture->scroll_y_started = false;
+        gesture->scroll_x_emitted = false;
+        gesture->scroll_y_emitted = false;
+        gesture->scroll_axis = XIAO147_SCROLL_NONE;
+        gesture->tap_disqualified = false;
+        gesture->tap_anchor_valid = false;
         gesture->tail_one = false;
         gesture->pending = false;
         gesture->association_valid = false;
@@ -421,26 +454,54 @@ struct xiao147_shadow_result xiao147_shadow_gesture_observe(
         result.cancelled = true;
         return result;
     }
-    if (magnitude(logical_x - gesture->start_x) > TAP_MOVE ||
-        magnitude(logical_y - gesture->start_y) > TAP_MOVE) {
-        gesture->moving = true;
-    }
+    int net_x = logical_x - gesture->start_x;
+    int net_y = logical_y - gesture->start_y;
     gesture->previous_x = logical_x;
     gesture->previous_y = logical_y;
     if (!gesture->qualified_two) {
         gesture->two_frames = 2;
         gesture->qualified_two = true;
-        return result; /* No onset jump sent as scroll. */
     }
-    int rx = gesture->remainder_x + dx;
-    int ry = gesture->remainder_y + dy;
+
+    if (!gesture->scroll_activated) {
+        int nx = magnitude(net_x), ny = magnitude(net_y);
+        if (nx <= TAP_MOVE && ny <= TAP_MOVE) {
+            gesture->remainder_x = gesture->remainder_y = 0;
+            return result; /* Net intent, not accumulated path/jitter length. */
+        }
+        gesture->moving = true; /* Permanent tap cancellation, even no tick. */
+        gesture->scroll_activated = true;
+        if (nx > TAP_MOVE && nx >= 2 * ny) {
+            gesture->scroll_axis = XIAO147_SCROLL_HORIZONTAL;
+        } else if (ny > TAP_MOVE && ny >= 2 * nx) {
+            gesture->scroll_axis = XIAO147_SCROLL_VERTICAL;
+        } else {
+            gesture->scroll_axis = XIAO147_SCROLL_BOTH;
+        }
+    }
+    bool allow_x = gesture->scroll_axis == XIAO147_SCROLL_HORIZONTAL ||
+                   gesture->scroll_axis == XIAO147_SCROLL_BOTH;
+    bool allow_y = gesture->scroll_axis == XIAO147_SCROLL_VERTICAL ||
+                   gesture->scroll_axis == XIAO147_SCROLL_BOTH;
+    int rx = 0, ry = 0;
+    if (allow_x) {
+        rx = activated_axis_remainder(&gesture->scroll_x_started, gesture->scroll_x_emitted,
+                                      net_x, dx, gesture->remainder_x);
+    } else {
+        gesture->scroll_x_started = false;
+    }
+    if (allow_y) {
+        ry = activated_axis_remainder(&gesture->scroll_y_started, gesture->scroll_y_emitted,
+                                      net_y, dy, gesture->remainder_y);
+    } else {
+        gesture->scroll_y_started = false;
+    }
     result.candidate_hwheel = scroll_candidate(&rx);
     result.candidate_wheel = scroll_candidate(&ry);
+    if (result.candidate_hwheel != 0) { gesture->scroll_x_emitted = true; }
+    if (result.candidate_wheel != 0) { gesture->scroll_y_emitted = true; }
     gesture->remainder_x = (int16_t)rx;
     gesture->remainder_y = (int16_t)ry;
-    if (result.candidate_hwheel != 0 || result.candidate_wheel != 0) {
-        gesture->moving = true; /* Any scrolling cancels subsequent tap. */
-    }
     return result;
 }
 
@@ -500,6 +561,20 @@ struct xiao147_shadow_result xiao147_shadow_gesture_observe_profile(
                 }
             }
         }
+        if (associated && gesture != NULL && !gesture->blocked &&
+            gesture->tap_anchor_valid) {
+            for (unsigned i = 0; i < 2; i++) {
+                const struct xiao147_raw_lobe *lobe = &profile->lobes[i];
+                if (magnitude((int)lobe->native_short_x - gesture->tap_short_anchor[i]) > TAP_MOVE ||
+                    magnitude((int)lobe->native_long_y - gesture->tap_long_anchor[i]) > TAP_MOVE) {
+                    /* Tap-only, cumulative guard: opposing lobe motion must
+                     * not disappear in the equal pair mean. Do not change
+                     * scroll_activated/moving or suppress valid net scrolling.
+                     */
+                    gesture->tap_disqualified = true;
+                }
+            }
+        }
     }
     struct xiao147_shadow_result result = xiao147_shadow_gesture_observe(
         gesture, associated ? hypothesis : XIAO147_RAW_UNKNOWN,
@@ -511,6 +586,13 @@ struct xiao147_shadow_result xiao147_shadow_gesture_observe_profile(
         gesture->previous_valley = profile->valley_station;
         gesture->previous_lobes[0] = profile->lobes[0];
         gesture->previous_lobes[1] = profile->lobes[1];
+        if (!gesture->tap_anchor_valid) {
+            gesture->tap_anchor_valid = true;
+            for (unsigned i = 0; i < 2; i++) {
+                gesture->tap_short_anchor[i] = profile->lobes[i].native_short_x;
+                gesture->tap_long_anchor[i] = profile->lobes[i].native_long_y;
+            }
+        }
     }
     return result;
 }

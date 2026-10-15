@@ -41,6 +41,10 @@ prelude = replace_once(prelude, 'static char latest_shadow[512];', '''static boo
 static char latest_shadow[512];''')
 prelude = replace_once(prelude, 'assert(strstr(latest_shadow,"HID=0"));',
     '''assert(strstr(latest_shadow,host_hid_log_enabled()?"HID=1":"HID=0"));''')
+prelude = replace_once(prelude, 'static int uart_error;', 'static int uart_error, uart_query_error;')
+prelude = replace_once(prelude,
+    'assert(dev==&host_console&&control==UART_LINE_CTRL_DTR);*value=dtr;return 0;',
+    'assert(dev==&host_console&&control==UART_LINE_CTRL_DTR);if(uart_query_error)return uart_query_error;*value=dtr;return 0;')
 prelude = replace_once(prelude, '''static int input_report_key(const struct device *dev,int code,int value,bool sync,int wait) {
     (void)dev;(void)value;assert(sync&&wait==K_NO_WAIT&&!input_must_be_blocked());
     hid_events++;key_events++;last_key=code;return 0;
@@ -95,6 +99,9 @@ hardware = replace_once(hardware,
     input_used=release_attempts=press_attempts=scroll_attempts=release_attempts_this_poll=0;
     queue_right_down=explicit_window_requested=false;
     fail_press=fail_release=fail_scroll=0;fail_scroll_code=-1;''')
+hardware = replace_once(hardware,
+    'atomic_set(&capture_gate,0);dtr=console_ready=true;uart_error=0;',
+    'atomic_set(&capture_gate,0);dtr=console_ready=true;uart_error=uart_query_error=0;')
 hardware += r'''
 static void record_input(bool relative,int code,int value,int result,bool sync) {
     assert(input_used<sizeof(input_events)/sizeof(input_events[0]));
@@ -258,7 +265,11 @@ static void stop(void) {feed("AXS_RAW_STOP\n");drain();restore_engine();}
 static void shadow_never_hid(void) {
     prepare(false);arm();tap();assert(state.shadow_taps==1&&!hid_events);
     two(1,4,280,280);samples(2);two(2,5,280,280);samples(1);
-    two(2,5,200,360);samples(1);assert(state.shadow_scrolls>=2&&!hid_events);
+    unsigned scrolls=state.shadow_scrolls;
+    two(2,5,200,360);samples(1);
+    assert(state.shadow_scrolls==scrolls&&state.shadow.scroll_axis==XIAO147_SCROLL_HORIZONTAL&&!hid_events);
+    quiet();samples(2);two(2,5,280,280);samples(2);two(2,5,200,360);samples(1);
+    assert(state.shadow_scrolls>scrolls&&state.shadow.scroll_axis==XIAO147_SCROLL_VERTICAL&&!hid_events);
 #if HID_MODE
     uint32_t started=state.capture.started_ms;
     feed("AXS_GESTURE_START 0101\n");drain();
@@ -342,10 +353,56 @@ static void exact_tap_and_natural_scroll(void) {
         assert(input_events[0].value*sign<0); /* Negated logical feature delta. */
         quiet();samples(2);assert(!key_events);stop();assert(hid_events==1);
     }
-    prepare(true);arm();two(1,4,280,280);samples(2);two(2,5,200,360);samples(1);
+    /* Comparable net movement on both axes stays diagonal, unlike64/26
+     * which deliberately locks horizontal at the2:1 threshold. */
+    prepare(true);arm();two(1,4,280,280);samples(2);two(2,5,80,480);samples(1);
     assert(input_used==2&&input_events[0].code==INPUT_REL_HWHEEL&&input_events[1].code==INPUT_REL_WHEEL);
     assert(input_events[0].sync&&input_events[1].sync&&input_events[0].value<0&&input_events[1].value<0);
     unsigned emitted=hid_events;stop();for(unsigned i=0;i<10;i++)poll();assert(hid_events==emitted);
+}
+
+static void release_fault_command_quarantine(void) {
+    prepare(true);arm();fail_release=100;tap();
+    assert(state.experimental_button_down&&state.experimental_uart_quarantine);
+    feed("AXS_RAW_INFO\n");for(unsigned i=0;i<64;i++)feed("\n");
+    feed("AXS_GESTURE_START 0101\n");
+    restore_engine();assert(state.experimental_button_down&&queue_right_down);
+    fail_release=0;poll();
+    assert(!state.experimental_button_down&&!queue_right_down&&!xiao147_touch_capture_active());
+    assert(state.experimental_uart_quarantine&&!state.info_valid&&page_enters==1);
+    unsigned reads=ordinary_reads;
+    for(unsigned i=0;i<6;i++)poll();
+    assert(ordinary_reads>reads); /* UART isolation does not block ordinary touch. */
+
+    /* Empty polls between old USB fragments cannot end quarantine. */
+    feed("AXS_RAW_IN");drain();for(unsigned i=0;i<6;i++)poll();
+    feed("FO\n");drain();for(unsigned i=0;i<8;i++)poll();
+    feed("AXS_GESTURE_STA");drain();for(unsigned i=0;i<6;i++)poll();
+    feed("RT 0101\n");drain();for(unsigned i=0;i<6;i++)poll();
+    assert(state.experimental_uart_quarantine&&!state.experimental_hid_active&&page_enters==1);
+    assert(!state.info_valid&&!state.control.length&&!xiao147_touch_capture_active());
+
+    /* A failed DTR query is not a verified low transition. */
+    uart_query_error=-EIO;dtr=false;poll();
+    assert(state.experimental_uart_quarantine&&!state.experimental_uart_saw_low);
+    uart_query_error=0;dtr=true;poll();assert(state.experimental_uart_quarantine);
+    /* RX error also cannot prove the queue drained during low. */
+    dtr=false;uart_error=-EIO;poll();
+    assert(state.experimental_uart_saw_low&&!state.experimental_uart_low_drained);
+    uart_error=0;dtr=true;poll();assert(state.experimental_uart_quarantine);
+
+    dtr=false;feed("AXS_RAW_INFO\n");for(unsigned i=0;i<64;i++)feed("\n");
+    feed("AXS_GESTURE_START 0101\n");drain();poll();
+    assert(state.experimental_uart_saw_low&&state.experimental_uart_low_drained);
+    dtr=true;poll();assert(!state.experimental_uart_quarantine&&!state.info_valid);
+    feed("AXS_GESTURE_START 0101\n");drain();request_rejected();
+    hands_off();info();request(true);until_phase(XIAO147_RAW_SCAN_START,50);
+    assert(page_enters==2&&state.experimental_hid_active);
+    feed("AXS_RAW_STOP\n");drain();
+    for(unsigned i=0;xiao147_raw_capture_active(&state.capture)&&i<200;i++)poll();
+    assert(!xiao147_touch_capture_active()&&!factory_page&&normal_validation_reads==2);
+    assert(!state.experimental_hid_active&&!state.experimental_uart_quarantine);
+    assert(accepted(INPUT_BTN_1,1)==1&&accepted(INPUT_BTN_1,0)==1);
 }
 static void emission_bounds_and_conflicts(void) {
     prepare(true);arm();until_phase(XIAO147_RAW_READ_SAMPLE,30);
@@ -417,7 +474,7 @@ static void scroll_failures(void) {
     for(unsigned axis=0;axis<2;axis++){
         prepare(true);arm();two(1,4,280,280);samples(2);
         fail_scroll=1;fail_scroll_code=axis==0?INPUT_REL_HWHEEL:INPUT_REL_WHEEL;
-        two(2,5,200,360);samples(1);
+        two(2,5,80,480);samples(1);
         assert(!state.experimental_hid_active&&state.shadow.blocked&&state.input_errors==1);
         assert(!state.shadow.remainder_x&&!state.shadow.remainder_y);
         assert(state.capture.phase==XIAO147_RAW_RESTORE_WRITE);
@@ -480,7 +537,7 @@ int main(void) {
 #endif
 #if HID_MODE
     gates_and_parser();exact_tap_and_natural_scroll();emission_bounds_and_conflicts();
-    press_and_release_failures();scroll_failures();interruption_and_deadline();
+    press_and_release_failures();release_fault_command_quarantine();scroll_failures();interruption_and_deadline();
     puts("PASS: explicit bounded experimental GESTURE_START actual C, right press/release retries, both natural-scroll axes, error/disconnect/deadline isolation; queue acceptance only, NOT OS/hardware validation");
 #else
     puts("PASS: non-functional configuration cannot activate GESTURE_START; normal behavior preserved and SHADOW never emits HID");

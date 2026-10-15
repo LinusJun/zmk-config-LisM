@@ -44,7 +44,7 @@ assert "result = display_write" in rotation and "report_write(result)" in rotati
 assert "write_errors % 100" in rotation and "xiao147_display_hold_flush()" in rotation
 test_matrix = read("build-display-test.yaml")
 assert re.findall(r"artifact-name:\s*(\S+)", test_matrix) == [
-    "lism_dongle_xiao147_raw_gesture_shadow_v2_test", "lism_dongle_xiao147_raw_gesture_function_test"]
+    "lism_dongle_xiao147_stability_shadow_test", "lism_dongle_xiao147_stability_test"]
 assert test_matrix.count("CONFIG_LISM_XIAO147_RAW_GESTURE_HID_TEST=y") == 1
 assert "CONFIG_LISM_XIAO147_GESTURE_SHADOW=y" in test_matrix
 assert "CONFIG_LISM_XIAO147_RAW_CAPTURE=y" in test_matrix
