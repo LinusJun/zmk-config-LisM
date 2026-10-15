@@ -86,7 +86,8 @@ assert "portrait ? 164 : 300" in native_layout
 assert "portrait ? 55 : 65" in native_layout
 assert "LV_LAYOUT_NONE" in native_layout and "portrait ? 50 : 24" in native_layout
 assert "portrait && index == 4" in native_layout
-assert "lv_txt_get_size(&size, lv_label_get_text(label), &FG_Medium_20," in native_layout
+assert "lv_text_get_size(&size, lv_label_get_text(label), &FG_Medium_20," in native_layout
+assert "lv_txt_get_size(" not in ui  # v8 alias is absent in this pinned LVGL build
 assert "const int columns = portrait ? 3 : 6;" in native_layout
 assert "const int row_width = portrait ? 162 : 300;" in native_layout
 assert "if (spare < 0) { spare = 0; }" in native_layout

@@ -310,7 +310,7 @@ static void layout_status(bool portrait)
             for (int column = 0; column < columns; column++) {
                 lv_obj_t *label = lv_obj_get_child(modifiers, (row * columns + column) * 2);
                 lv_point_t size;
-                lv_txt_get_size(&size, lv_label_get_text(label), &FG_Medium_20,
+                lv_text_get_size(&size, lv_label_get_text(label), &FG_Medium_20,
                                 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
                 widths[column] = size.x;
                 total += size.x;
