@@ -1,7 +1,7 @@
 /* Copyright (c) 2024 carrefinho
  * SPDX-License-Identifier: MIT
  * XIAO-only fork of prospector-zmk-module ed98221f3b52b7066dbb10ba3af8a29150b93a5a.
- * See PROSPECTOR_LICENSE.txt. Widget geometry, fonts and colors are unchanged.
+ * See PROSPECTOR_LICENSE.txt. Geometry/fonts are unchanged; vivid XIAO colors.
  */
 #include "output.h"
 
@@ -13,7 +13,7 @@
 #include <zmk/ble.h>
 
 #include <fonts.h>
-#include "display_colors.h"
+#include "xiao147_operator_colors.h"
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 
@@ -63,6 +63,11 @@ static void set_slot_active(lv_obj_t *slot, bool active) {
         lv_obj_set_style_bg_color(slot, lv_color_hex(DISPLAY_COLOR_SLOT_ACTIVE_BG), LV_PART_MAIN);
     } else {
         lv_obj_set_style_bg_color(slot, lv_color_hex(DISPLAY_COLOR_SLOT_INACTIVE_BG), LV_PART_MAIN);
+    }
+    lv_obj_t *label = lv_obj_get_child(slot, 0);
+    if (label) {
+        lv_obj_set_style_text_color(label, lv_color_hex(active ?
+            DISPLAY_COLOR_OUTPUT_ACTIVE_TEXT : DISPLAY_COLOR_SLOT_TEXT), LV_PART_MAIN);
     }
 }
 
@@ -137,7 +142,7 @@ static lv_obj_t *create_slot_btn(lv_obj_t *parent, int index, int x, int width, 
         snprintf(text, sizeof(text), "%d", index + 1);
         lv_label_set_text(label, text);
         lv_obj_set_style_text_font(label, &FG_Medium_20, LV_PART_MAIN);
-        lv_obj_set_style_text_color(label, lv_color_hex(0x000000), LV_PART_MAIN);
+        lv_obj_set_style_text_color(label, lv_color_hex(DISPLAY_COLOR_SLOT_TEXT), LV_PART_MAIN);
         lv_obj_center(label);
         lv_obj_set_style_translate_y(label, 1, LV_PART_MAIN);
     }

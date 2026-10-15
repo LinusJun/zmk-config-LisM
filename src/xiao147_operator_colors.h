@@ -1,0 +1,41 @@
+#pragma once
+
+/* XIAO-only vivid version of the pinned OPERATOR palette. Neutral backgrounds
+ * stay neutral; active colors retain their roles and brighter original hues.
+ * The stock dongle continues to include its upstream display_colors.h. */
+#define XIAO147_ACCENT_BLUE 0x0a84ff
+
+#define DISPLAY_COLOR_MOD_ACTIVE       0x69e3ff
+#define DISPLAY_COLOR_MOD_INACTIVE     0x4a8fff
+#define DISPLAY_COLOR_MOD_SEPARATOR    0x606060
+#define DISPLAY_COLOR_MOD_CAPS_WORD    0xffcc00
+
+#define DISPLAY_COLOR_WPM_BAR_ACTIVE   0xff4f78
+#define DISPLAY_COLOR_WPM_BAR_INACTIVE 0x242424
+#define DISPLAY_COLOR_WPM_TEXT         0xff6b8e
+
+#define DISPLAY_COLOR_LAYER_TEXT         0xffffff
+#define DISPLAY_COLOR_LAYER_DOT_ACTIVE   0xe0e0e0
+#define DISPLAY_COLOR_LAYER_DOT_INACTIVE 0x575757
+
+#define DISPLAY_COLOR_BATTERY_FILL       0x00cc66
+#define DISPLAY_COLOR_BATTERY_RING       0x2a4036
+#define DISPLAY_COLOR_BATTERY_BG         0x505050
+#define DISPLAY_COLOR_BATTERY_LABEL      0xffffff
+#define DISPLAY_COLOR_BATTERY_DISCONNECTED_FILL  0x383c42
+#define DISPLAY_COLOR_BATTERY_DISCONNECTED_RING  0x282c30
+#define DISPLAY_COLOR_BATTERY_DISCONNECTED_LABEL 0x000000
+#define DISPLAY_COLOR_BATTERY_LOW_FILL   0xff8800
+#define DISPLAY_COLOR_BATTERY_LOW_RING   0x584028
+
+#define DISPLAY_COLOR_USB_ACTIVE_BG        0xffe184
+#define DISPLAY_COLOR_USB_INACTIVE_BG      0x4f4f40
+#define DISPLAY_COLOR_BLE_ACTIVE_BG        XIAO147_ACCENT_BLUE
+#define DISPLAY_COLOR_BLE_INACTIVE_BG      0x353f40
+#define DISPLAY_COLOR_OUTPUT_ACTIVE_TEXT   0x000000
+#define DISPLAY_COLOR_OUTPUT_INACTIVE_TEXT 0x7b7d93
+
+/* Preserve the original 0x7b7d93 lavender hue, rather than BLE blue. */
+#define DISPLAY_COLOR_SLOT_ACTIVE_BG   0xb6bbff
+#define DISPLAY_COLOR_SLOT_INACTIVE_BG 0x353640
+#define DISPLAY_COLOR_SLOT_TEXT        0xffffff

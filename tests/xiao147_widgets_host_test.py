@@ -16,6 +16,8 @@ prelude = r"""
 #include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
+#include "xiao147_operator_colors.h"
+#include "xiao147_battery_colors.h"
 #define CONFIG_PROSPECTOR_LAYER_NAME_UPPERCASE 1
 #define IS_ENABLED(x) (x)
 #define WPM_BAR_COUNT 26
@@ -42,7 +44,8 @@ static bool sys_slist_is_empty(sys_slist_t *l) { return !l->head; }
 static void sys_slist_append(sys_slist_t *l,sys_snode_t *n) {
     n->next=NULL; if(l->tail) l->tail->next=n; else l->head=n; l->tail=n;
 }
-typedef struct lv_obj { struct lv_obj *child; char text[40]; int x; } lv_obj_t;
+typedef struct lv_obj { struct lv_obj *child; char text[40]; int x;
+    unsigned bg_color,text_color,border_color; int bg_opa; } lv_obj_t;
 typedef unsigned lv_color_t;
 static bool display_context;
 static lv_obj_t objects[160];
@@ -57,8 +60,8 @@ static lv_obj_t *lv_label_create(lv_obj_t *p) { return lv_obj_create(p); }
 static lv_obj_t *lv_obj_get_child(lv_obj_t *p,int i) { gui(); assert(i==0); return p->child; }
 static lv_color_t lv_color_hex(unsigned c) { return c; }
 #define STYLE2(name) static void name(lv_obj_t *o,int a,int part) {(void)o;(void)a;(void)part;gui();}
-STYLE2(lv_obj_set_style_bg_color)
-STYLE2(lv_obj_set_style_bg_opa)
+static void lv_obj_set_style_bg_color(lv_obj_t *o,int v,int part) {(void)part;o->bg_color=v;gui();}
+static void lv_obj_set_style_bg_opa(lv_obj_t *o,int v,int part) {(void)part;o->bg_opa=v;gui();}
 STYLE2(lv_obj_set_style_border_width)
 STYLE2(lv_obj_set_style_pad_all)
 STYLE2(lv_obj_set_style_radius)
@@ -66,8 +69,8 @@ STYLE2(lv_obj_set_style_pad_hor)
 STYLE2(lv_obj_set_style_pad_ver)
 STYLE2(lv_obj_set_style_pad_top)
 STYLE2(lv_obj_set_style_pad_bottom)
-STYLE2(lv_obj_set_style_text_color)
-STYLE2(lv_obj_set_style_border_color)
+static void lv_obj_set_style_text_color(lv_obj_t *o,int v,int part) {(void)part;o->text_color=v;gui();}
+static void lv_obj_set_style_border_color(lv_obj_t *o,int v,int part) {(void)part;o->border_color=v;gui();}
 STYLE2(lv_obj_set_style_translate_y)
 static void lv_obj_set_style_text_font(lv_obj_t *o,const int *f,int p) {(void)o;(void)f;(void)p;gui();}
 static void lv_obj_set_pos(lv_obj_t *o,int x,int y) {o->x=x;(void)y;gui();}
@@ -81,17 +84,6 @@ static void lv_label_set_text(lv_obj_t *o,const char *s) {
     gui(); snprintf(o->text,sizeof(o->text),"%s",s);
 }
 static int FR_Medium_32,DINishExpanded_Light_36,FG_Medium_20;
-#define DISPLAY_COLOR_WPM_BAR_ACTIVE 1
-#define DISPLAY_COLOR_WPM_BAR_INACTIVE 2
-#define DISPLAY_COLOR_WPM_TEXT 3
-#define DISPLAY_COLOR_LAYER_TEXT 4
-#define DISPLAY_COLOR_USB_ACTIVE_BG 5
-#define DISPLAY_COLOR_USB_INACTIVE_BG 6
-#define DISPLAY_COLOR_BLE_ACTIVE_BG 7
-#define DISPLAY_COLOR_BLE_INACTIVE_BG 8
-#define DISPLAY_COLOR_OUTPUT_ACTIVE_TEXT 9
-#define DISPLAY_COLOR_SLOT_ACTIVE_BG 10
-#define DISPLAY_COLOR_SLOT_INACTIVE_BG 11
 struct zmk_widget_wpm_meter {
     sys_snode_t node; lv_obj_t *obj,*bars[WPM_BAR_COUNT],*peak_indicator,*wpm_label,*layer_label;
 };
@@ -165,6 +157,9 @@ int main(void) {
     wpm_smooth_work.work.handler(&wpm_smooth_work.work);
     assert(wpm_smooth_work.pending && wpm_smooth_work.queue==&display_queue);
     assert(displayed_wpm>0 && displayed_wpm<target_wpm);
+    assert(first.bars[0]->bg_color==0xff4f78);
+    assert(first.bars[WPM_BAR_COUNT-1]->bg_color==0x242424);
+    assert(first.wpm_label->text_color==0xff6b8e);
     display_context=false;
     /* Empty output list is safe during diagnostic stages. Event context never
      * mutates LVGL; endpoint/profile updates are deferred and coalesced.
@@ -180,9 +175,25 @@ int main(void) {
     widget_output_async_cb(&profile); assert(gui_calls==before);
     dispatch(&widget_output_async_work);
     assert(active_profile_index==2 && active_transport==ZMK_TRANSPORT_BLE && gui_calls>before);
+    assert(output.ble_btn->bg_color==0x0a84ff&&output.ble_btn->bg_opa==255);
+    assert(output.usb_btn->bg_opa==0&&output.usb_btn->border_color==0x4f4f40);
+    for(int i=0;i<5;i++){
+        assert(output.slots[i]->bg_color==(i==2?0xb6bbff:0x353640));
+        assert(output.slots[i]->child->text_color==(i==2?0x000000:0xffffff));
+    }
     before=gui_calls;mock_transport=ZMK_TRANSPORT_USB;
     widget_output_async_cb(NULL); assert(gui_calls==before);
     dispatch(&widget_output_async_work); assert(active_transport==ZMK_TRANSPORT_USB);
+    assert(output.usb_btn->bg_color==0xffe184&&output.usb_btn->bg_opa==255);
+    assert(output.ble_btn->bg_opa==0&&output.ble_btn->border_color==0x353f40);
+    for(int i=0;i<5;i++){
+        assert(output.slots[i]->bg_color==(i==0?0xb6bbff:0x353640));
+        assert(output.slots[i]->child->text_color==(i==0?0x000000:0xffffff));
+    }
+    const unsigned levels[]={0,20,21,49,50,74,75,100};
+    const unsigned colors[]={0xff3333,0xff3333,0xff8800,0xff8800,
+                             0xffcc00,0xffcc00,0x00cc66,0x00cc66};
+    for(unsigned i=0;i<8;i++)assert(xiao147_battery_color(levels[i])==colors[i]);
     puts("PASS: actual OPERATOR WPM early-event safety, init-before-schedule, single work initialization, display-only animation and deferred USB/BLE GUI updates");
 }
 """
@@ -195,5 +206,5 @@ with tempfile.TemporaryDirectory(prefix="xiao147-widget-test-") as directory:
     c.write_text(joined)
     binary=folder/"test"
     subprocess.run(["cc","-std=gnu11","-Wall","-Wextra","-Werror",
-                    "-Wno-unused-parameter","-fsanitize=address,undefined",str(c),"-o",str(binary)],check=True)
+                    "-Wno-unused-parameter","-fsanitize=address,undefined","-I"+str(root/"src"),str(c),"-o",str(binary)],check=True)
     subprocess.run([str(binary)],check=True)

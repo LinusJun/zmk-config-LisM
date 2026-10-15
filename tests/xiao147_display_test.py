@@ -69,6 +69,21 @@ assert 'battery_known || usb_display ? xiao147_battery_color(dongle_level)' in u
 assert 'i < active_segments ? dongle_color : 0x282c30' in ui
 assert 'lv_obj_set_style_text_color(dongle_battery_label, lv_color_hex(dongle_color)' in ui
 assert 'device_charge_icons[row]' in ui and 'lism_charge_level(charge' in ui
+assert 'lv_color_hex(xiao147_battery_color(100))' in ui
+assert '#define COLOR_ACCENT XIAO147_ACCENT_BLUE' in ui
+# The pinned module's modifier/layer color changes are XIAO-only copies, not
+# writes to upstream files or changes to the original dongle's display path.
+color_hook = cmake[cmake.index('  foreach(_widget modifier_indicator layer_display)'):
+                   cmake.index('  foreach(_widget wpm_meter output)')]
+assert 'if(NOT _color_match_count EQUAL 1)' in color_hook
+assert 'PROPERTIES HEADER_FILE_ONLY ON' in color_hook
+assert 'zephyr_library_sources("${_color_copy}")' in color_hook
+assert 'file(WRITE "${_color_src}"' not in color_hook
+for widget in ('src/xiao147_wpm_meter.c', 'src/xiao147_output.c'):
+    assert '#include "xiao147_operator_colors.h"' in read(widget)
+lock_colors = read('src/prospector_lock_indicators.c')
+assert '#ifdef CONFIG_LISM_XIAO147_TOUCH' in lock_colors
+assert '#else\n#define COLOR_INACTIVE 0x3b527c' in lock_colors
 charge_matrix = read("build-charge-peripherals.yaml")
 for peripheral in ("left_4waystick", "right_trackball", "jp19", "circlepad"):
     assert f"artifact-name: lism_{peripheral}\n" in charge_matrix

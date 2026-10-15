@@ -27,6 +27,7 @@
 #include "xiao147_battery_rings.h"
 #include "xiao147_rssi.h"
 #include "xiao147_battery_colors.h"
+#include "xiao147_operator_colors.h"
 #include "lism_charge.h"
 
 LV_FONT_DECLARE(FG_Medium_20);
@@ -40,10 +41,10 @@ LOG_MODULE_REGISTER(xiao147_ui, LOG_LEVEL_INF);
 #define SCREEN_H 172
 #define COLOR_BG 0x10151e
 #define COLOR_CARD 0x1a2432
-#define COLOR_TEXT 0xe4ebf6
+#define COLOR_TEXT 0xffffff
 #define COLOR_MUTED 0x8295ae
-#define COLOR_ACCENT 0x39bdec
-#define COLOR_GREEN 0x78c79c
+#define COLOR_ACCENT XIAO147_ACCENT_BLUE
+#define COLOR_GREEN 0x00cc66
 #define OFF_AFTER_MS 300000
 #define TOUCH_BATCH_LIMIT 8
 #define TOUCH_FRAME_MS 33
@@ -133,7 +134,7 @@ static void style_switch(lv_obj_t *sw)
     lv_obj_set_style_bg_color(sw, lv_color_hex(0x3a3a3c), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(sw, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_radius(sw, 12, LV_PART_INDICATOR);
-    lv_obj_set_style_bg_color(sw, lv_color_hex(0x34c759), LV_PART_INDICATOR | LV_STATE_CHECKED);
+    lv_obj_set_style_bg_color(sw, lv_color_hex(COLOR_GREEN), LV_PART_INDICATOR | LV_STATE_CHECKED);
     lv_obj_set_style_bg_opa(sw, LV_OPA_COVER, LV_PART_INDICATOR);
     lv_obj_set_style_radius(sw, LV_RADIUS_CIRCLE, LV_PART_KNOB);
     lv_obj_set_style_bg_color(sw, lv_color_hex(0xffffff), LV_PART_KNOB);
@@ -675,7 +676,7 @@ static void create_ui(struct k_work *work)
     lv_obj_set_style_radius(dongle_battery_bar, 3, LV_PART_MAIN);
     lv_obj_set_style_radius(dongle_battery_bar, 3, LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(dongle_battery_bar, lv_color_hex(0x282c30), LV_PART_MAIN);
-    lv_obj_set_style_bg_color(dongle_battery_bar, lv_color_hex(0x54806c), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(dongle_battery_bar, lv_color_hex(xiao147_battery_color(100)), LV_PART_INDICATOR);
     lv_obj_set_style_bg_opa(dongle_battery_bar, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(dongle_battery_bar, LV_OPA_COVER, LV_PART_INDICATOR);
     dongle_battery_label = make_label(screen, 166, 150, 35, "--%", COLOR_GREEN);
@@ -736,7 +737,7 @@ static void create_ui(struct k_work *work)
     lv_obj_set_pos(settings_slider, 14, 52);
     lv_obj_set_size(settings_slider, 287, 6);
     lv_obj_set_style_bg_color(settings_slider, lv_color_hex(0x3a3a3c), LV_PART_MAIN);
-    lv_obj_set_style_bg_color(settings_slider, lv_color_hex(0x007aff), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(settings_slider, lv_color_hex(COLOR_ACCENT), LV_PART_INDICATOR);
     lv_obj_set_style_bg_opa(settings_slider, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(settings_slider, LV_OPA_COVER, LV_PART_INDICATOR);
     lv_obj_set_style_radius(settings_slider, 3, LV_PART_MAIN);
@@ -757,7 +758,7 @@ static void create_ui(struct k_work *work)
         lv_obj_set_style_bg_opa(device_cards[i], LV_OPA_COVER, LV_PART_MAIN);
         lv_obj_set_style_border_width(device_cards[i], 1, LV_PART_MAIN);
         lv_obj_set_style_border_color(device_cards[i],
-                     lv_color_hex(i == 0 ? 0x4a90e2 : 0x303c4b), LV_PART_MAIN);
+                     lv_color_hex(i == 0 ? COLOR_ACCENT : 0x303c4b), LV_PART_MAIN);
         lv_obj_set_style_radius(device_cards[i], 6, LV_PART_MAIN);
         lv_obj_set_style_pad_all(device_cards[i], 0, LV_PART_MAIN);
         lv_obj_clear_flag(device_cards[i], LV_OBJ_FLAG_SCROLLABLE);

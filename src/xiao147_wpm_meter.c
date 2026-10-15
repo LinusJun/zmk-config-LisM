@@ -1,7 +1,7 @@
 /* Copyright (c) 2024 carrefinho
  * SPDX-License-Identifier: MIT
  * XIAO-only fork of prospector-zmk-module ed98221f3b52b7066dbb10ba3af8a29150b93a5a.
- * See PROSPECTOR_LICENSE.txt. Widget geometry, fonts and colors are unchanged.
+ * See PROSPECTOR_LICENSE.txt. Geometry/fonts are unchanged; vivid XIAO colors.
  */
 #include "wpm_meter.h"
 
@@ -15,7 +15,7 @@
 #include <zmk/keymap.h>
 
 #include <fonts.h>
-#include "display_colors.h"
+#include "xiao147_operator_colors.h"
 
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 static struct k_work_delayable wpm_smooth_work;

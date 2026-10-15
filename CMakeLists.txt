@@ -110,6 +110,26 @@ if(CONFIG_LISM_XIAO147_TOUCH)
   # Preserve OPERATOR geometry but fix widget startup and LVGL thread ownership.
   zephyr_library_include_directories("${_prospector_shield_dir}/include"
                                     "${_prospector_shield_dir}/src/layouts/operator")
+  # Recompile these pinned widgets with an XIAO-only palette. Keep upstream
+  # files intact, and replace precisely one include rather than relying on
+  # include-path precedence (quoted includes prefer the source directory).
+  foreach(_widget modifier_indicator layer_display)
+    set(_color_src "${_prospector_shield_dir}/src/layouts/operator/${_widget}.c")
+    file(READ "${_color_src}" _color_code)
+    string(REGEX MATCHALL "#include \"display_colors.h\"" _color_matches "${_color_code}")
+    list(LENGTH _color_matches _color_match_count)
+    if(NOT _color_match_count EQUAL 1)
+      message(FATAL_ERROR "Pinned OPERATOR ${_widget} color include moved")
+    endif()
+    string(REPLACE "#include \"display_colors.h\""
+      "#include \"${CMAKE_CURRENT_LIST_DIR}/src/xiao147_operator_colors.h\""
+      _color_code "${_color_code}")
+    set(_color_copy "${CMAKE_CURRENT_BINARY_DIR}/xiao147_${_widget}.c")
+    file(WRITE "${_color_copy}" "${_color_code}")
+    set_source_files_properties("${_color_src}"
+      DIRECTORY "${_prospector_shield_dir}" PROPERTIES HEADER_FILE_ONLY ON)
+    zephyr_library_sources("${_color_copy}")
+  endforeach()
   foreach(_widget wpm_meter output)
     set(_widget_src "${_prospector_shield_dir}/src/layouts/operator/${_widget}.c")
     if(NOT EXISTS "${_widget_src}")
