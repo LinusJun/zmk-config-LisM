@@ -27,6 +27,7 @@
 #include "xiao147_battery_rings.h"
 #include "xiao147_rssi.h"
 #include "xiao147_battery_colors.h"
+#include "lism_charge.h"
 
 LV_FONT_DECLARE(FG_Medium_20);
 LV_FONT_DECLARE(FR_Medium_32);
@@ -252,8 +253,9 @@ static void draw_devices(void)
         uint8_t level = 0;
         bool known = false;
         if (row == 0) {
-            level = usb_powered ? 100 : zmk_battery_state_of_charge();
-            known = true;
+            struct lism_charge_state charge = lism_charge_local();
+            level = charge.percent;
+            known = (charge.flags & LISM_CHARGE_LEVEL_VALID) != 0;
         } else if (active && copy.seen[source_slot]) {
             level = copy.battery[source_slot];
             known = true;
@@ -389,9 +391,8 @@ static void layout_status(bool portrait)
     xiao147_battery_rings_set_portrait(portrait);
     lv_obj_set_pos(dongle_battery_bar, 10, 160);
     lv_obj_set_size(dongle_battery_bar, 140, 6);
-    lv_obj_set_pos(dongle_battery_label, portrait ? 123 : 166,
-                   portrait ? 288 : usb_powered ? 136 : 150);
-    lv_obj_set_width(dongle_battery_label, portrait ? 42 : 35);
+    lv_obj_set_pos(dongle_battery_label, portrait ? 112 : 153, portrait ? 288 : 150);
+    lv_obj_set_width(dongle_battery_label, portrait ? 53 : 49);
     lv_obj_set_style_text_align(dongle_battery_label,
                                 portrait ? LV_TEXT_ALIGN_RIGHT : LV_TEXT_ALIGN_LEFT,
                                 LV_PART_MAIN);
@@ -455,10 +456,11 @@ static void redraw(struct k_work *work)
             draw_devices();
         }
     }
-    /* UI supply indicator only: leave the real battery/GATT state untouched. */
-    uint8_t dongle_level = usb_powered ? 100 : zmk_battery_state_of_charge();
+    struct lism_charge_state charge = lism_charge_local();
+    bool battery_known = (charge.flags & LISM_CHARGE_LEVEL_VALID) != 0;
+    uint8_t dongle_level = battery_known ? charge.percent : 0;
     lv_bar_set_value(dongle_battery_bar, dongle_level, LV_ANIM_OFF);
-    uint32_t dongle_color = xiao147_battery_color(dongle_level);
+    uint32_t dongle_color = battery_known ? xiao147_battery_color(dongle_level) : 0x8295ae;
     lv_obj_set_style_bg_color(dongle_battery_bar, lv_color_hex(dongle_color),
                               LV_PART_INDICATOR);
     uint8_t active_segments = (dongle_level * DONGLE_BATTERY_SEGMENTS + 99) / 100;
@@ -470,9 +472,14 @@ static void redraw(struct k_work *work)
     lv_obj_set_style_text_color(dongle_battery_label, lv_color_hex(dongle_color),
                                 LV_PART_MAIN);
     char text[16];
-    snprintf(text, sizeof(text), usb_powered ?
-             (portrait ? "100%%\nUSB" : "USB\n100%%") : "%u%%", dongle_level);
+    if (battery_known) {
+        snprintf(text, sizeof(text), lism_charge_show_bolt(charge) ?
+                 LV_SYMBOL_CHARGE " %u%%" : "%u%%", dongle_level);
+    } else {
+        snprintf(text, sizeof(text), "%s", usb_powered ? "USB" : "--%");
+    }
     lv_label_set_text(dongle_battery_label, text);
+    xiao147_battery_rings_refresh_charge();
     apply_brightness();
     xiao147_display_note_ui(131);
 }

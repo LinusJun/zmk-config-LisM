@@ -1,5 +1,24 @@
-if(CONFIG_LISM_PROSPECTOR_LOCK_INDICATORS OR CONFIG_LISM_XIAO147_TOUCH OR CONFIG_LISM_RESISTIVE_JOYSTICK)
+if(CONFIG_LISM_PROSPECTOR_LOCK_INDICATORS OR CONFIG_LISM_XIAO147_TOUCH OR CONFIG_LISM_RESISTIVE_JOYSTICK OR CONFIG_LISM_CHARGE_TELEMETRY)
   zephyr_library()
+  zephyr_library_sources_ifdef(CONFIG_LISM_CHARGE_TELEMETRY src/lism_charge.c)
+  if(CONFIG_LISM_CHARGE_TELEMETRY)
+    # Add a completion observer to the pinned, sole ZMK battery sampling worker.
+    # Never run a second ADC sampler alongside it or infer freshness from cached get.
+    set(_battery_src "${APPLICATION_SOURCE_DIR}/src/battery.c")
+    file(READ "${_battery_src}" _battery_code)
+    set(_battery_hook "    int rc = zmk_battery_update(battery);")
+    string(FIND "${_battery_code}" "${_battery_hook}" _battery_hook_pos)
+    if(_battery_hook_pos EQUAL -1)
+      message(FATAL_ERROR "Pinned ZMK battery completion hook moved")
+    endif()
+    string(REPLACE "${_battery_hook}"
+      "${_battery_hook}\n    extern void lism_charge_note_battery_sample(int result);\n    lism_charge_note_battery_sample(rc);"
+      _battery_code "${_battery_code}")
+    file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/lism_zmk_battery.c" "${_battery_code}")
+    set_source_files_properties("${_battery_src}"
+      DIRECTORY "${APPLICATION_SOURCE_DIR}" PROPERTIES HEADER_FILE_ONLY ON)
+    zephyr_library_sources("${CMAKE_CURRENT_BINARY_DIR}/lism_zmk_battery.c")
+  endif()
   zephyr_library_sources_ifdef(CONFIG_LISM_PROSPECTOR_LOCK_INDICATORS src/prospector_lock_indicators.c)
   zephyr_library_sources_ifdef(CONFIG_LISM_XIAO147_TOUCH src/axs5106l_touchpad.c)
   zephyr_library_sources_ifdef(CONFIG_LISM_XIAO147_RAW_CAPTURE src/xiao147_raw_capture.c)

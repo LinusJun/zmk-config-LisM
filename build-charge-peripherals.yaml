@@ -1,0 +1,20 @@
+# Installation-specific companions: battery physically connected, switch ON.
+# Do not use this declaration for a USB-only / disconnected-battery device.
+# No serial-diagnostic or settings-reset images.
+include:
+  - board: xiao_ble//zmk
+    shield: lism_left rgbled_adapter
+    artifact-name: lism_left_4waystick_battery_connected
+    cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=n -DCONFIG_LISM_CHARGE_BATTERY_CONNECTED=y
+  - board: xiao_ble//zmk
+    shield: lism_right rgbled_adapter
+    artifact-name: lism_right_trackball_battery_connected
+    cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=n -DCONFIG_LISM_CHARGE_BATTERY_CONNECTED=y
+  - board: xiao_ble//zmk
+    shield: lism_joystick
+    artifact-name: lism_jp19_battery_connected
+    cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=n -DCONFIG_LISM_CHARGE_BATTERY_CONNECTED=y
+  - board: xiao_ble//zmk
+    shield: lism_circlepad
+    artifact-name: lism_circlepad_battery_connected
+    cmake-args: -DCONFIG_ZMK_SPLIT=y -DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=n -DCONFIG_LISM_CHARGE_BATTERY_CONNECTED=y

@@ -215,7 +215,7 @@ static void request_rejected(void) {
 #endif
 }
 static void normal_release_quarantine_all_raw(void) {
-    fixture();hands_off();info();
+    fixture();hands_off();info();hands_off();
     contact(1,40,70);poll();fail_normal_release=3;contact(0,40,70);poll();
     assert(state.pending_button&&state.experimental_uart_quarantine);
     feed("AXS_RAW_INFO\n");for(unsigned i=0;i<64;i++){feed("\n");}
@@ -392,7 +392,7 @@ static void exact_tap_and_natural_scroll(void) {
 }
 
 static void normal_release_blocks_experiment(void) {
-    fixture();hands_off();info();
+    fixture();hands_off();info();hands_off();
     contact(1,40,70);poll();fail_normal_release=4;contact(0,40,70);poll();
     assert(state.pending_button==INPUT_BTN_0&&xiao147_touch_button_pending());
     assert(state.experimental_uart_quarantine&&!state.experimental_hid_active);

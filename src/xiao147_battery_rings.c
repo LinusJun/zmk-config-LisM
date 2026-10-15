@@ -22,6 +22,7 @@
 #include "xiao147_peripheral_roles.h"
 #include "xiao147_rotation.h"
 #include "xiao147_ui.h"
+#include "lism_charge.h"
 
 #define RING_COUNT 3
 #define RING_SIZE 46
@@ -32,6 +33,7 @@ static lv_obj_t *ring_obj[RING_COUNT];
 static lv_obj_t *ring_row;
 static lv_obj_t *ring_badge[RING_COUNT];
 static lv_obj_t *ring_badge_text[RING_COUNT];
+static lv_obj_t *ring_charge[RING_COUNT];
 static uint8_t battery_level[XIAO147_PERIPHERAL_COUNT];
 static bool battery_seen[XIAO147_PERIPHERAL_COUNT];
 static bool connected[XIAO147_PERIPHERAL_COUNT];
@@ -67,6 +69,14 @@ static void render_ring(uint8_t slot) {
     lv_obj_set_style_text_color(ring_badge_text[slot],
                                 lv_color_hex(known ? 0x000000 : 0x999999),
                                 LV_PART_MAIN);
+    bool charging = active && lism_charge_show_bolt(lism_charge_peripheral(source_slot));
+    if (charging) { lv_obj_clear_flag(ring_charge[slot], LV_OBJ_FLAG_HIDDEN); }
+    else { lv_obj_add_flag(ring_charge[slot], LV_OBJ_FLAG_HIDDEN); }
+}
+
+void xiao147_battery_rings_refresh_charge(void) {
+    /* Called only from the display queue, never a Bluetooth callback. */
+    for (uint8_t slot = 0; slot < RING_COUNT; ++slot) { render_ring(slot); }
 }
 
 static bool create_ring_row(void) {
@@ -118,6 +128,11 @@ static bool create_ring_row(void) {
         /* Keep three-digit 100 inside the compact badge as well. */
         lv_obj_set_style_text_letter_space(value, -2, LV_PART_MAIN);
         lv_obj_align(value, LV_ALIGN_CENTER, 0, 0);
+        ring_charge[slot] = lv_label_create(ring);
+        lv_label_set_text(ring_charge[slot], LV_SYMBOL_CHARGE);
+        lv_obj_set_style_text_font(ring_charge[slot], &lv_font_montserrat_14, LV_PART_MAIN);
+        lv_obj_set_style_text_color(ring_charge[slot], lv_color_hex(0xffd54f), LV_PART_MAIN);
+        lv_obj_align(ring_charge[slot], LV_ALIGN_CENTER, 0, 0);
         render_ring(slot);
     }
 

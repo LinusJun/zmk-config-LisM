@@ -44,6 +44,7 @@ assert "result = display_write" in rotation and "report_write(result)" in rotati
 assert "write_errors % 100" in rotation and "xiao147_display_hold_flush()" in rotation
 test_matrix = read("build-display-test.yaml")
 assert re.findall(r"artifact-name:\s*(\S+)", test_matrix) == [
+    "lism_dongle_xiao147_battery_connected",
     "lism_dongle_xiao147_release_candidate",
     "lism_dongle_xiao147_stability_shadow_test", "lism_dongle_xiao147_stability_test"]
 release_matrix = test_matrix.split("artifact-name: lism_dongle_xiao147_release_candidate", 1)[1].split("  - board:", 1)[0]
@@ -64,8 +65,9 @@ assert "CONFIG_LISM_XIAO147_DISPLAY_SELFTEST=n" in test_matrix
 assert "settings_reset" not in test_matrix
 ui = read("src/xiao147_ui.c")
 assert "xiao147_display_layout_ready();" in ui[ui.index("static void create_ui"):ui.index("static void init_retry")]
-assert "usb_powered ? 100 : zmk_battery_state_of_charge()" in ui
-assert "DONGLE USB" in ui and '"USB\\n100%%"' in ui
+assert "usb_powered ? 100 : zmk_battery_state_of_charge()" not in ui
+assert "DONGLE USB" in ui and 'LV_SYMBOL_CHARGE " %u%%"' in ui
+assert "lism_charge_local()" in ui and "xiao147_battery_rings_refresh_charge()" in ui
 assert "gpio_pin_get_raw" in ui and "NRF_P1->PIN_CNF[usr1.pin]" in ui
 native_layout = ui[ui.index("static void layout_status"):ui.index("static void redraw(struct k_work *work)\n{")]
 assert "portrait ? 164 : 300" in native_layout

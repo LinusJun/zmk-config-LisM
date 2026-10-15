@@ -1,3 +1,21 @@
+config LISM_CHARGE_TELEMETRY
+    bool "Verified XIAO charger status telemetry"
+    depends on BT && ZMK_BATTERY_REPORTING
+    select GPIO
+    help
+      Read-only P0.17 charger monitoring for the configured XIAO nRF52840
+      boards. Adds encrypted peripheral telemetry, not a battery protection BMS.
+
+config LISM_CHARGE_BATTERY_CONNECTED
+    bool "Battery physically connected and battery switch ON"
+    depends on LISM_CHARGE_TELEMETRY
+    default n
+    help
+      Installation declaration, not automatic battery detection. Enable only
+      for a device with a connected battery and closed battery switch. USB
+      plus CHG LOW cannot distinguish an absent cell on this hardware. When
+      disabled USB operation shows USB/unknown and no charging lightning.
+
 config LISM_PROSPECTOR_LOCK_INDICATORS
     bool "Compact OPERATOR modifiers with Caps/Num Lock indicators"
     default y
