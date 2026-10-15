@@ -15,7 +15,9 @@ struct xiao147_air_motion {
     int16_t gravity[3];
     unsigned samples;
     uint32_t started, last_ms, gravity_ms, stable_since;
+    uint32_t calibration_ms;
     bool calibrating, bias_valid, have_time, have_gravity, gravity_stable;
+    bool have_calibration_time;
 };
 
 static inline void xiao147_air_clear(struct xiao147_air_motion *s)
@@ -32,6 +34,7 @@ static inline void xiao147_air_begin(struct xiao147_air_motion *s, uint32_t now)
     s->started = now;
     s->calibrating = true; /* Keep the last valid bias until a stable replacement. */
     s->have_gravity = false;
+    s->have_calibration_time = false;
 }
 
 /* Fresh accelerometer support is required for zero learning, never as a
@@ -63,17 +66,26 @@ static inline struct xiao147_xy xiao147_air_sample(struct xiao147_air_motion *s,
         }
         if (s->calibrating || !s->bias_valid) {
             bool stable = s->have_gravity && s->gravity_stable && now - s->gravity_ms <= 40;
+            /* Duplicate/stalled polls cannot manufacture a stationary window. */
+            if (s->have_calibration_time &&
+                (now == s->calibration_ms || now - s->calibration_ms > 80)) {
+                s->samples = 0; stable = false;
+            }
+            s->have_calibration_time = true; s->calibration_ms = now;
             for (int i = 0; i < 3; i++) {
                 /* Calibration assumes the user holds the device still on
                  * enabling. Gyro alone cannot distinguish true bias from
                  * perfectly constant rotation. Use a conservative admission
                  * bound and never silently move an established zero far. */
-                if (abs(raw[i]) > 160 ||
-                    (s->bias_valid && abs((int)raw[i] - s->bias[i]) > 32)) {
+                /* This panel's observed stationary bias reaches -524 counts.
+                 * 160 rejected every sample forever. 800 is an empirical
+                 * admission bound, not an IC specification or motion proof. */
+                if (abs(raw[i]) > 800 ||
+                    (s->bias_valid && abs((int)raw[i] - s->bias[i]) > 256)) {
                     stable = false;
                 }
-                if (s->samples && (abs((int)raw[i] - s->minimum[i]) > 80 ||
-                                   abs((int)raw[i] - s->maximum[i]) > 80)) {
+                if (s->samples && (abs((int)raw[i] - s->minimum[i]) > 320 ||
+                                   abs((int)raw[i] - s->maximum[i]) > 320)) {
                     stable = false;
                 }
             }
@@ -86,7 +98,7 @@ static inline struct xiao147_xy xiao147_air_sample(struct xiao147_air_motion *s,
                     s->sum[i] += raw[i];
                 }
                 if (!s->samples) { s->stable_since = now; }
-                if (++s->samples >= 40 && now - s->stable_since >= 980) {
+                if (++s->samples >= 80 && now - s->stable_since >= 1980) {
                     for (int i = 0; i < 3; i++) { s->bias[i] = s->sum[i] / (int)s->samples; }
                     s->bias_valid = true;
                     s->calibrating = false;

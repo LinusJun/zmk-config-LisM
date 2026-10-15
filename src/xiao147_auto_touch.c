@@ -8,6 +8,7 @@ static void auto_cancel(struct xiao147_auto_touch *s)
     s->one_active = s->one_releasing = false;
     s->one_frames = s->release_frames = 0;
     s->pair_seen = false;
+    s->air_quiet_frames = 0;
     xiao147_shadow_gesture_cancel(&s->pair);
 }
 
@@ -71,6 +72,9 @@ static void auto_sample(void *ctx, enum xiao147_raw_type type, uint8_t channels,
     s->frame_at = s->now;
     s->have_frame = true;
     enum xiao147_raw_hypothesis h = profile.hypothesis;
+    if (h == XIAO147_RAW_NONE) {
+        if (s->air_quiet_frames < 2) { s->air_quiet_frames++; }
+    } else { s->air_quiet_frames = 0; }
     struct xiao147_xy p = xiao147_touch_to_logical(s->orientation,
         profile.native_short_x, profile.native_long_y);
     struct xiao147_auto_output out = {0};
@@ -111,7 +115,8 @@ static void auto_sample(void *ctx, enum xiao147_raw_type type, uint8_t channels,
             s->pair.tap_disqualified |= forbid_pair_tap;
         }
         out.right = r.candidate_right_tap;
-        out.wheel = r.candidate_wheel; out.pan = r.candidate_hwheel;
+        /* Empirical host correction: vertical only. Horizontal stays as tested. */
+        out.wheel = -r.candidate_wheel; out.pan = r.candidate_hwheel;
         /* Entire TWO->ONE tail remains pair-owned, never pointer or left. */
         if (h == XIAO147_RAW_NONE) {
             if (++s->release_frames >= 2) {
@@ -132,7 +137,7 @@ static void auto_sample(void *ctx, enum xiao147_raw_type type, uint8_t channels,
             if (!s->one_releasing) { s->one_release_at = s->now; s->one_releasing = true; }
             if (++s->release_frames >= 2) {
                 out.left = s->one_frames >= 2 && !s->one_moved &&
-                           s->one_release_at - s->one_since <= 240;
+                           s->one_release_at - s->one_since <= 300;
                 s->one_active = s->one_releasing = false;
                 s->one_frames = s->release_frames = 0;
             }
@@ -156,7 +161,12 @@ static void auto_sample(void *ctx, enum xiao147_raw_type type, uint8_t channels,
         }
         /* Require three credible frames before relative movement. The first
          * two establish an anchor, not a jump from the preceding gesture. */
-        if (s->one_frames >= 3) { out.dx = dx; out.dy = dy; }
+        if (s->one_frames == 3) {
+            /* Preserve confirmed onset displacement instead of discarding the
+             * second frame. A second finger/unknown still cancels this anchor. */
+            out.dx = p.x - s->one_anchor.x;
+            out.dy = p.y - s->one_anchor.y;
+        } else if (s->one_frames > 3) { out.dx = dx; out.dy = dy; }
         s->one_previous = p;
     }
 emit:
@@ -177,6 +187,15 @@ void xiao147_auto_init(struct xiao147_auto_touch *s, const struct xiao147_auto_o
     };
     xiao147_raw_capture_init(&s->capture, &raw, s);
     auto_cancel(s);
+}
+
+bool xiao147_auto_air_idle(const struct xiao147_auto_touch *s, uint32_t now)
+{
+    return s->allowed && !s->disabled && !s->cooldown && !s->blocked &&
+           s->baseline.armed && s->have_frame && now - s->frame_at <= 100 &&
+           s->air_quiet_frames >= 2 && !s->one_active && !s->pair_seen &&
+           s->capture.phase >= XIAO147_RAW_SELECT_TYPE &&
+           s->capture.phase <= XIAO147_RAW_PAIR_WAIT;
 }
 
 void xiao147_auto_normal(struct xiao147_auto_touch *s, bool valid, uint8_t count, uint32_t now)

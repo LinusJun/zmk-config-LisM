@@ -14,7 +14,7 @@ static struct xiao147_xy sample(struct xiao147_air_motion *s,uint32_t t,int x,in
 }
 static void calibrate(struct xiao147_air_motion *s,uint32_t start){
  xiao147_air_begin(s,start);
- for(unsigned i=0;i<55;i++){struct xiao147_xy p=sample(s,start+i*20,100,-100,50);assert(!p.x&&!p.y);}
+ for(unsigned i=0;i<110;i++){struct xiao147_xy p=sample(s,start+i*20,100,-100,50);assert(!p.x&&!p.y);}
  assert(s->bias_valid&&!s->calibrating&&s->bias[0]==100&&s->bias[1]==-100);
 }
 static int movement(unsigned interval,int sign){
@@ -27,7 +27,7 @@ int main(void){
  xiao147_air_begin(&s,0);
  for(unsigned t=0;t<10000;t+=20){struct xiao147_xy p=sample(&s,t,2000,1000,0);assert(!p.x&&!p.y);}
  assert(!s.bias_valid); /* moving past 3 seconds never becomes zero-bias output */
- for(unsigned t=10000;t<11500;t+=20)sample(&s,t,100,-100,50);
+ for(unsigned t=10000;t<12500;t+=20)sample(&s,t,100,-100,50);
  assert(s.bias_valid); /* retries without toggling or serial intervention */
  s=(struct xiao147_air_motion){0};calibrate(&s,0);
  int16_t slow[3]={200,-100,50};int plus=0,minus=0;
@@ -58,6 +58,19 @@ int main(void){
  s=(struct xiao147_air_motion){0};xiao147_air_begin(&s,0);
  int16_t still[3]={100,0,0};
  for(unsigned t=0;t<5000;t+=20)xiao147_air_sample(&s,t,0,still);
+ assert(!s.bias_valid);
+ /* Synthetic stationary noise bounded by the observed device log: its
+  * -358..-524 Y bias must calibrate, never be forced to a zero bias. */
+ s=(struct xiao147_air_motion){0};xiao147_air_begin(&s,0);
+ const int measured_y[10]={-523,-457,-524,-427,-358,-505,-440,-457,-510,-483};
+ for(unsigned i=0;i<120;i++)sample(&s,i*20,180,measured_y[i%10],-24);
+ assert(s.bias_valid&&!s.calibrating&&s.bias[1]<-400&&s.bias[1]>-510);
+ /* A changing/large rotation, duplicated clock or missing gravity must
+  * not be accepted merely because the calibration deadline elapsed. */
+ s=(struct xiao147_air_motion){0};xiao147_air_begin(&s,0);
+ for(unsigned t=0;t<5000;t+=20)sample(&s,t,(t/20)%2?700:-700,0,0);
+ assert(!s.bias_valid);
+ for(unsigned i=0;i<200;i++)sample(&s,5000,180,-480,-24);
  assert(!s.bias_valid);
  s=(struct xiao147_air_motion){0};calibrate(&s,UINT_MAX-500);
  puts("PASS: air mouse no-bias fail closed, automatic retry, fresh gravity, actual dt, all poses, subpixel symmetry, gap/reset and no overspeed backlog");

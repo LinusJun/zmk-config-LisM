@@ -182,7 +182,7 @@ void xiao147_shadow_gesture_cancel(struct xiao147_shadow_gesture *gesture);
  * and is bounded to 100 ms. After qualified TWO it may wait up to 60 ms for
  * two NONE frames: no motion/release is inferred from PENDING, no tap clock
  * extension, and any renewed contact cancels. Unqualified contact cancels.
- * A right-tap candidate requires a <=240 ms stationary gesture and full lift.
+ * A right-tap candidate requires a <=300 ms stationary gesture and full lift.
  * Net displacement <=12 cannot accumulate scroll jitter. On first >12,
  * scroll activates permanently and only the excess beyond 12 is consumed.
  * A >=2:1 dominant axis locks H/V for this gesture; otherwise BOTH is fixed.

@@ -9,11 +9,13 @@ root=Path(__file__).resolve().parents[1]
 tree=ast.parse((root/'tests/xiao147_raw_integration_host_test.py').read_text())
 prelude=next(ast.literal_eval(n.value) for n in tree.body if isinstance(n,ast.Assign)
              and any(isinstance(t,ast.Name) and t.id=='prelude' for t in n.targets))
-prelude=prelude.replace('assert(delay==16)','assert(delay==16||delay==4)')
+prelude=prelude.replace('assert(delay==16)','assert(delay==16||delay==4||delay==20)')
+prelude=prelude.replace('assert(delay==1000)','assert(delay==1000||delay==20)')
 prelude=prelude.replace('static uint32_t now;', '''
 #define CONFIG_LISM_XIAO147_AUTO_TOUCH 1
 #define CONFIG_I2C_NRFX_TRANSFER_TIMEOUT 100
 #include "xiao147_auto_touch.h"
+#include "xiao147_air_motion.h"
 static bool screen_sleeping,imu_enabled,factory_page,block_restore,wrong_id;
 static unsigned read_error,release_error,press_error,rel_error;
 static int endpoint;
@@ -24,6 +26,21 @@ static int rel_x,rel_y,wheel,pan,button_down;
 static int32_t profile_values[12];
 static bool xiao147_ui_is_sleeping(void){return screen_sleeping;}
 static bool xiao147_ui_imu_enabled(void){return imu_enabled;}
+static bool xiao147_ui_auto_rotate_enabled(void){return false;}
+static bool xiao147_ui_wake_on_motion(void){return false;}
+static void xiao147_ui_set_auto_orientation(enum xiao147_orientation p){(void)p;}
+static int16_t gyro_raw[3]={180,-480,-24};
+static unsigned gyro_starts;
+static int imu_test_write(const struct i2c_dt_spec *bus,const uint8_t *p,size_t n){
+ (void)bus;assert(n==2);if(p[0]==0x11&&p[1]==0x40)gyro_starts++;return 0;
+}
+static int imu_test_read(const struct i2c_dt_spec *bus,const uint8_t *p,size_t n,uint8_t *out,size_t len){
+ (void)bus;assert(n==1);
+ if(*p==0x0f){assert(len==1);out[0]=0x6a;return 0;}
+ assert(len==6);int16_t gravity[3]={0,0,16384};
+ const int16_t *v=*p==0x22?gyro_raw:gravity;
+ for(int i=0;i<3;i++){out[2*i]=(uint16_t)v[i]&255;out[2*i+1]=(uint16_t)v[i]>>8;}return 0;
+}
 static uint32_t now;''')
 a=prelude.index('static int input_report_key(')
 b=prelude.index('static enum xiao147_page xiao147_ui_page',a)
@@ -45,10 +62,15 @@ static int input_report_rel(const struct device *dev,int code,int value,bool syn
 }
 '''+prelude[b:]
 driver=re.sub(r'^#include .*$', '',(root/'src/axs5106l_touchpad.c').read_text(),flags=re.M)
+imu=re.sub(r'^#(?:include|define DT_DRV_COMPAT).*$', '',(root/'src/lsm6ds3_air_mouse.c').read_text(),flags=re.M)
+imu=imu.replace('i2c_write_dt(', 'imu_test_write(').replace('i2c_write_read_dt(', 'imu_test_read(')
 hardware=r'''
 static struct axs_touch_data state;
 static const struct axs_touch_config config={0};
 static struct device touch_device={&state,&config};
+static struct imu_data air_state;
+static const struct imu_config air_config={0};
+static struct device air_device={&air_state,&air_config};
 static bool input_must_be_blocked(void){return factory_page;}
 static int i2c_write_dt(const struct i2c_dt_spec *bus,const void *bytes,size_t len){
  assert(bus==&config.bus);const uint8_t *b=bytes;
@@ -82,7 +104,7 @@ static int i2c_read_dt(const struct i2c_dt_spec *bus,void *bytes,size_t len){
  }
  return 0;
 }
-static void poll(void){now+=4;axs_poll(&state.poll_work.work);}
+static void poll(void){now+=4;axs_poll(&state.poll_work.work);if(now%20==0)imu_poll(&air_state.poll_work.work);}
 static void wait_ms(unsigned ms){for(unsigned i=0;i<ms;i+=4)poll();}
 static void values(const int32_t *v,unsigned ms){memcpy(profile_values,v,sizeof(profile_values));wait_ms(ms);}
 static const int32_t quiet[12]={0};
@@ -96,6 +118,9 @@ static void fixture(void){
  enters=restores=left_clicks=right_clicks=rel_count=0;rel_x=rel_y=wheel=pan=button_down=0;
  hid_events=ordinary_reads=menu_samples=menu_cancels=normal_validation_reads=0;
  atomic_set(&capture_gate,0);atomic_set(&normal_button_gate,0);
+ atomic_set(&air_gate,1);atomic_set(&air_frame_at,0);
+ memset(&air_state,0,sizeof(air_state));gyro_raw[0]=180;gyro_raw[1]=-480;gyro_raw[2]=-24;gyro_starts=0;
+ assert(imu_init(&air_device)==0);
  assert(axs_touch_init(&touch_device)==0);
 }
 static void ready(void){wait_ms(600);assert(factory_page&&state.automatic.baseline.armed&&!state.automatic.blocked);}
@@ -122,10 +147,29 @@ int main(void){
  /* Native menu uses actual absolute coordinates, never raw-profile ratios. */
  page=1;restored();sensor[1]=1;sensor[3]=40;sensor[5]=70;wait_ms(60);assert(menu_samples);
  sensor[1]=0;wait_ms(60);page=0;ready();
- imu_enabled=true;restored();imu_enabled=false;ready();
+ /* AUTO remains usable with IMU on. Touch suppresses output, never sensor
+  * power or calibration; sustained uncertain contact must not yield. */
+ imu_enabled=true;wait_ms(2400);assert(factory_page&&air_state.motion.bias_valid);
+ assert(!xiao147_touch_blocks_air()&&gyro_starts==1);
+ unsigned clicks=left_clicks,rc=right_clicks;
+ tap(one);tap(two);assert(left_clicks==clicks+1&&right_clicks==rc+1);
+ assert(gyro_starts==1&&!air_state.motion.calibrating);
+ values(unknown,200);assert(xiao147_touch_blocks_air());
+ int before_air=rel_count;gyro_raw[0]=1480;wait_ms(500);
+ assert(rel_count==(unsigned)before_air&&gyro_starts==1);
+ int32_t weak[12]={0,0,35,35,20,20,0,0,0,0,0,0};
+ values(weak,300);assert(xiao147_touch_blocks_air()&&rel_count==(unsigned)before_air);
+ values(quiet,160);assert(!xiao147_touch_blocks_air()&&rel_count>(unsigned)before_air);
+ gyro_raw[0]=180;imu_enabled=false;wait_ms(400);ready();
+ /* Slightly slower taps remain clicks; true holds and movement do not. */
+ clicks=left_clicks;rc=right_clicks;
+ values(one,260);values(quiet,100);assert(left_clicks==clicks+1);
+ values(two,260);values(quiet,100);assert(right_clicks==rc+1);
+ values(two,400);values(quiet,100);assert(right_clicks==rc+1);
+ unsigned retained_left=left_clicks;
  screen_sleeping=true;restored();screen_sleeping=false;ready();
  endpoint=-1;restored();endpoint=1;ready();
- values(one,60);pose=1;values(one,60);values(quiet,100);assert(left_clicks==1);
+ values(one,60);pose=1;values(one,60);values(quiet,100);assert(left_clicks==retained_left);
  /* Failed release still runs cleanup, retries once/tick, and cannot drag. */
  release_error=100;tap(two);assert(button_down==257&&state.pending_button==257);
  wait_ms(500);assert(!button_down&&!state.pending_button&&!factory_page);
@@ -140,11 +184,31 @@ int main(void){
  fixture();wrong_id=true;wait_ms(2000);assert(!enters&&state.automatic.disabled);
  fixture();ready();now+=500;poll();wait_ms(200);assert(!factory_page); /* stale frame lease */
  fixture();now=UINT32_MAX-300;ready();wait_ms(1000);tap(one);assert(left_clicks==1);
+ /* Quiet authorization expires even if the touch work item stops running. */
+ fixture();ready();imu_enabled=true;wait_ms(2400);gyro_raw[0]=1480;
+ now+=101;before_air=rel_count;imu_poll(&air_state.poll_work.work);
+ assert(xiao147_touch_blocks_air()&&rel_count==(unsigned)before_air);
+ /* Third confirmed single frame includes displacement from frame two. */
+ fixture();ready();
+ const int32_t shift1[12]={0,0,80,80,150,150,70,70,0,0,0,0};
+ const int32_t shift2[12]={0,0,60,60,150,150,90,90,0,0,0,0};
+ const int32_t *onset[3]={one,shift1,shift2};
+ struct xiao147_raw_profile first,last;
+ assert(xiao147_raw_profile_evaluate(one,12,state.automatic.baseline.values,&first));
+ assert(xiao147_raw_profile_evaluate(shift2,12,state.automatic.baseline.values,&last));
+ for(unsigned i=0;i<3;i++){
+  now+=20;state.automatic.now=now;
+  state.automatic.capture.ops.sample(&state.automatic,XIAO147_RAW_DIFF,12,onset[i],0);
+  if(i<2)assert(!rel_count);
+ }
+ assert(rel_x==(int)last.native_long_y-first.native_long_y);
+ assert(rel_y==(int)last.native_short_x-first.native_short_x);
+ assert(rel_count>0&&!left_clicks&&!right_clicks);
  puts("PASS: actual automatic driver no UART/60s gate, held startup, single/double taps, native menus, IMU/sleep/pose transitions, failed release cleanup, bounded retry/fault and wrap");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='xiao147-auto-') as directory:
-    c=Path(directory)/'test.c';c.write_text(prelude+driver+hardware)
+    c=Path(directory)/'test.c';c.write_text(prelude+driver+imu+hardware)
     exe=c.with_suffix('')
     subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-DRAW_MODE=0',
                     '-fsanitize=address,undefined','-I'+str(root/'src'),str(c),

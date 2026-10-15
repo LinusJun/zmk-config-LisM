@@ -17,6 +17,9 @@
 #if defined(CONFIG_LISM_XIAO147_RAW_CAPTURE) || defined(CONFIG_LISM_XIAO147_AUTO_TOUCH)
 extern bool xiao147_touch_capture_active(void);
 #endif
+#ifdef CONFIG_LISM_XIAO147_AUTO_TOUCH
+extern bool xiao147_touch_blocks_air(void);
+#endif
 
 LOG_MODULE_REGISTER(lism_air_mouse, LOG_LEVEL_INF);
 
@@ -59,7 +62,9 @@ static bool imu_output_permitted(int endpoint)
         xiao147_ui_is_sleeping() || xiao147_ui_page() != XIAO147_PAGE_STATUS) {
         return false;
     }
-#if defined(CONFIG_LISM_XIAO147_RAW_CAPTURE) || defined(CONFIG_LISM_XIAO147_AUTO_TOUCH)
+#ifdef CONFIG_LISM_XIAO147_AUTO_TOUCH
+    if (xiao147_touch_blocks_air()) { return false; }
+#elif defined(CONFIG_LISM_XIAO147_RAW_CAPTURE)
     if (xiao147_touch_capture_active()) { return false; }
 #endif
     return true;
@@ -70,13 +75,13 @@ static void imu_poll(struct k_work *work)
     struct imu_data *data = CONTAINER_OF(k_work_delayable_from_work(work),
                                          struct imu_data, poll_work);
     const struct imu_config *cfg = data->dev->config;
-    bool enabled = xiao147_ui_imu_enabled() && !xiao147_touch_button_pending();
-#if defined(CONFIG_LISM_XIAO147_RAW_CAPTURE) || defined(CONFIG_LISM_XIAO147_AUTO_TOUCH)
+    /* Touch ownership gates output, not sensor power or calibration. */
+    bool enabled = xiao147_ui_imu_enabled();
+#if defined(CONFIG_LISM_XIAO147_RAW_CAPTURE) && !defined(CONFIG_LISM_XIAO147_AUTO_TOUCH)
     enabled = enabled && !xiao147_touch_capture_active();
 #endif
     int endpoint = xiao147_pointer_endpoint();
-    bool output_allowed = enabled && endpoint >= 0 && !xiao147_ui_is_sleeping() &&
-                          xiao147_ui_page() == XIAO147_PAGE_STATUS;
+    bool output_allowed = enabled && imu_output_permitted(endpoint);
     if (data->output_allowed != output_allowed || data->endpoint != endpoint) {
         xiao147_air_clear(&data->motion);
         data->motion.samples = 0;
@@ -141,6 +146,7 @@ static void imu_poll(struct k_work *work)
             }
             struct xiao147_xy motion = xiao147_air_sample(&data->motion, k_uptime_get_32(), pose, raw);
             int dx = motion.x, dy = motion.y;
+            if (!output_allowed) { xiao147_air_clear(&data->motion); dx = dy = 0; }
             if (k_uptime_get_32() - data->last_gyro_trace >= 2000) {
                 LOG_INF("IMU raw %d %d %d, bias %ld %ld, valid %d calibrating %d, mouse %d %d",
                         raw[0], raw[1], raw[2], (long)data->motion.bias[0],

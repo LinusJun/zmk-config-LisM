@@ -348,10 +348,10 @@ static void weak_release_tests(void)
     r=step(&g,XIAO147_RAW_TWO_SEPARATED_LOBES,128,100,0,80);
     assert(r.candidate_hwheel==-2);
     no_output(step(&g,XIAO147_RAW_PENDING,0,0,0,100)); release(&g,120);
-    /* Weak tail must not extend the original 240-ms tap clock. */
+    /* Weak tail must not extend the 300-ms tap clock. */
     xiao147_shadow_gesture_init(&g); release(&g,0); qualify(&g,40);
-    for(unsigned t=80;t<=260;t+=20) no_output(step(&g,XIAO147_RAW_TWO_SEPARATED_LOBES,100,100,0,t));
-    no_output(step(&g,XIAO147_RAW_PENDING,0,0,0,280)); release(&g,300);
+    for(unsigned t=80;t<=320;t+=20) no_output(step(&g,XIAO147_RAW_TWO_SEPARATED_LOBES,100,100,0,t));
+    no_output(step(&g,XIAO147_RAW_PENDING,0,0,0,340)); release(&g,360);
     for(unsigned wrap=0;wrap<2;wrap++) for(unsigned over=0;over<2;over++) {
         uint32_t base=wrap?UINT32_MAX-120U:0U;
         xiao147_shadow_gesture_init(&g); release(&g,base); qualify(&g,base+40U);
@@ -854,10 +854,18 @@ static void gesture_tests(void)
     release(&g, 280); /* No left-click API, even for confirmed ONE morphology. */
 
     xiao147_shadow_gesture_init(&g); release(&g, 0); qualify(&g, 40);
-    for (unsigned t = 80; t <= 320; t += 20) {
+    for (unsigned t = 80; t <= 340; t += 20) {
         no_output(step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 100, 100, 0, t));
     }
-    release(&g, 340); /* Long hold does not right click on lift. */
+    release(&g, 360); /* >300 ms hold does not right click on lift. */
+    for (unsigned over = 0; over < 2; over++) {
+        xiao147_shadow_gesture_init(&g); release(&g, 0); qualify(&g, 40);
+        for (unsigned t = 80; t <= 320; t += 20)
+            no_output(step(&g, XIAO147_RAW_TWO_SEPARATED_LOBES, 100, 100, 0, t));
+        no_output(step(&g, XIAO147_RAW_NONE, 0, 0, 0, 340 + over));
+        r = step(&g, XIAO147_RAW_NONE, 0, 0, 0, 360 + over);
+        assert(r.candidate_right_tap == !over);
+    }
     xiao147_shadow_gesture_init(&g);
     uint32_t start = UINT32_MAX - 90U;
     release(&g, start); qualify(&g, start + 40U);

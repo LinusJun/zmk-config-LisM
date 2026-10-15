@@ -500,7 +500,7 @@ static void redraw(struct k_work *work)
     /* Full USB bar is a source indicator, NEVER a fabricated cell reading. */
     uint8_t dongle_level = battery_known ? charge.percent : usb_display ? 100 : 0;
     lv_bar_set_value(dongle_battery_bar, dongle_level, LV_ANIM_OFF);
-    uint32_t dongle_color = battery_known ? xiao147_battery_color(dongle_level) : 0x8295ae;
+    uint32_t dongle_color = battery_known || usb_display ? xiao147_battery_color(dongle_level) : 0x8295ae;
     lv_obj_set_style_bg_color(dongle_battery_bar, lv_color_hex(dongle_color),
                               LV_PART_INDICATOR);
     uint8_t active_segments = (dongle_level * DONGLE_BATTERY_SEGMENTS + 99) / 100;

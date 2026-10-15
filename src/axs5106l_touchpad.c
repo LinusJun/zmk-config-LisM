@@ -306,6 +306,16 @@ static int axs_read_register(const struct i2c_dt_spec *bus, uint8_t reg,
 
 #if defined(CONFIG_LISM_XIAO147_RAW_CAPTURE) || defined(CONFIG_LISM_XIAO147_AUTO_TOUCH)
 static atomic_t capture_gate;
+#ifdef CONFIG_LISM_XIAO147_AUTO_TOUCH
+static atomic_t air_gate = 1;
+static atomic_t air_frame_at;
+
+bool xiao147_touch_blocks_air(void)
+{
+    return atomic_get(&air_gate) != 0 ||
+           k_uptime_get_32() - (uint32_t)atomic_get(&air_frame_at) > 100;
+}
+#endif
 
 bool xiao147_touch_capture_active(void)
 {
@@ -790,7 +800,7 @@ static bool axs_raw_poll(struct axs_touch_data *data)
 static bool axs_auto_output(void *context, struct xiao147_auto_output out)
 {
     struct axs_touch_data *data = context;
-    if (xiao147_ui_page() != XIAO147_PAGE_STATUS || xiao147_ui_imu_enabled() ||
+    if (xiao147_ui_page() != XIAO147_PAGE_STATUS ||
         xiao147_ui_is_sleeping() || data->pending_button || data->automatic_endpoint < 0 ||
         data->automatic_endpoint != xiao147_pointer_endpoint()) { return false; }
     if (out.activity && xiao147_ui_wake_on_touch()) { return false; }
@@ -811,10 +821,13 @@ static bool axs_auto_poll(struct axs_touch_data *data, bool permit)
     if (endpoint != data->automatic_endpoint) { permit = false; data->automatic_endpoint = endpoint; }
     bool active = xiao147_raw_capture_active(&data->automatic.capture);
     bool consumed = xiao147_auto_tick(&data->automatic, k_uptime_get_32(), permit &&
-        xiao147_ui_page() == XIAO147_PAGE_STATUS && !xiao147_ui_imu_enabled() &&
+        xiao147_ui_page() == XIAO147_PAGE_STATUS &&
         !xiao147_ui_is_sleeping() && !data->pending_button && endpoint >= 0, xiao147_rotation_get());
     bool still_active = xiao147_raw_capture_active(&data->automatic.capture);
     atomic_set(&capture_gate, still_active || data->pending_button);
+    atomic_set(&air_frame_at, data->automatic.frame_at);
+    atomic_set(&air_gate, data->pending_button ||
+               !xiao147_auto_air_idle(&data->automatic, k_uptime_get_32()));
     if (consumed || active) { cancel_contact(data); data->swallow_until_release = true; }
     return consumed;
 }

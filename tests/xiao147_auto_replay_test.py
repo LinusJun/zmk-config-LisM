@@ -47,5 +47,5 @@ with tempfile.TemporaryDirectory(prefix='xiao147-auto-replay-') as d:
         print(scene['id'],result.stdout,flush=True)
         totals=list(map(int,result.stdout.split('TOTAL ')[1].strip().split()))
         assert totals=={'click_only':[0,17,0,0,0,0,0],
-                       'independent_scroll':[0,0,8,9,7,7,0],
-                       'mixed':[0,2,4,5,6,5,0]}[scene['id']]
+                       'independent_scroll':[0,0,9,8,7,7,0],
+                       'mixed':[0,2,5,4,6,5,0]}[scene['id']]

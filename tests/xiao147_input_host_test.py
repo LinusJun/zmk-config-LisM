@@ -285,11 +285,11 @@ static void ordinary_failure_tests(void) {
         assert(hid_reports==before+i);
         imu_mode=1;id.gyro_on=true;
     }
-    /* A touch release outstanding disables air motion even if its switch is on. */
+    /* Touch gates output but must not power-cycle or recalibrate the gyro. */
     atomic_set(&normal_button_gate,1);int before=hid_reports;
-    now+=20;imu_poll(&id.poll_work.work);assert(!id.gyro_on&&hid_reports==before);
+    now+=20;imu_poll(&id.poll_work.work);assert(id.gyro_on&&hid_reports==before);
     atomic_set(&normal_button_gate,0);now+=20;imu_poll(&id.poll_work.work);
-    assert(id.gyro_on&&id.motion.calibrating&&hid_reports==before);
+    assert(id.gyro_on&&!id.motion.calibrating&&id.motion.bias_valid&&hid_reports==before);
     puts("PASS: normal press/release failures, page/bus-independent retry, discontinuity cancellation, complete pointer/wheel/IMU events and no stale movement replay");
 }
 static void interrupted_contact_tests(void) {

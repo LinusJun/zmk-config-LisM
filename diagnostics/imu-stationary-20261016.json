@@ -1,0 +1,11 @@
+{
+  "method": "Passive CDC read, no sampling or control commands; user confirmed IMU enabled on status page and device resting",
+  "firmware_lineage": "d66e03d / 1466fdd (same five normal UF2 hashes)",
+  "sampling_note": "Existing logs publish one gyro sample about every 2 seconds, not the full-rate stream. They prove rejection by the old absolute 160-count admission bound, not full-rate variance or calibration success.",
+  "raw_xyz": [[191,-523,-26],[179,-457,-26],[197,-524,-29],[173,-427,-24],[152,-358,-12],[191,-505,-24],[186,-440,-20],[183,-457,-24],[186,-510,-22],[187,-483,-20]],
+  "all_reported_bias_valid": false,
+  "all_reported_calibrating": true,
+  "all_reported_mouse_xy": [0,0],
+  "fix": "Empirical 800-count bias admission, 2-second/80-sample fresh gravity-supported stable window, 320-count range. No uncalibrated zero-bias fallback.",
+  "limitation": "Constant slow yaw can resemble stationary bias; the user must rest the device during calibration. Thresholds are not manufacturer specifications or proof of perfect hardware behavior."
+}

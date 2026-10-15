@@ -65,6 +65,9 @@ assert 'portrait ? "%s\\nUSB" : "%s USB"' in ui and 'LV_SYMBOL_CHARGE " %u%%"' i
 assert "lism_charge_local()" in ui and "xiao147_battery_rings_refresh_charge()" in ui
 assert 'usb_display ? "USB 100%" : "--%"' in ui
 assert 'battery_known ? charge.percent : usb_display ? 100 : 0' in ui
+assert 'battery_known || usb_display ? xiao147_battery_color(dongle_level)' in ui
+assert 'i < active_segments ? dongle_color : 0x282c30' in ui
+assert 'lv_obj_set_style_text_color(dongle_battery_label, lv_color_hex(dongle_color)' in ui
 assert 'device_charge_icons[row]' in ui and 'lism_charge_level(charge' in ui
 charge_matrix = read("build-charge-peripherals.yaml")
 for peripheral in ("left_4waystick", "right_trackball", "jp19", "circlepad"):

@@ -24,7 +24,7 @@ struct xiao147_auto_touch {
     uint32_t now, quiet_since, normal_at, cooldown_since, frame_at, one_since;
     uint32_t one_release_at;
     struct xiao147_xy one_anchor, one_previous;
-    uint8_t orientation, one_frames, release_frames, failures;
+    uint8_t orientation, one_frames, release_frames, failures, air_quiet_frames;
     bool quiet, cooldown, disabled, have_frame, blocked, pair_seen;
     bool one_active, one_moved, one_releasing, allowed;
 };
@@ -33,6 +33,8 @@ void xiao147_auto_init(struct xiao147_auto_touch *, const struct xiao147_auto_op
  * count-zero grants automatic entry. No DTR/serial/host activation involved. */
 void xiao147_auto_normal(struct xiao147_auto_touch *, bool valid, uint8_t count, uint32_t now);
 /* True means this tick belongs to the factory owner (including restoration).
- * allowed = status && awake && !IMU && !pending button release. */
+ * allowed = status && awake && !pending button release. IMU may coexist. */
 bool xiao147_auto_tick(struct xiao147_auto_touch *, uint32_t now, bool allowed,
                        enum xiao147_orientation orientation);
+/* Fresh genuine empty frames only; unknown/weak contact never yields the pointer. */
+bool xiao147_auto_air_idle(const struct xiao147_auto_touch *, uint32_t now);
