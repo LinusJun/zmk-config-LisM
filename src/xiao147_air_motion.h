@@ -5,7 +5,9 @@
 #include "xiao147_orientation.h"
 
 /* Rate-based relative air mouse, not accelerometer position integration.
- * Raw counts at 245 dps; 6500 count*ms/pixel retains the old 20ms/325 gain.
+ * Raw counts at 245 dps; 6500 count*ms/HID-unit retains precision at low speed.
+ * Faster motion ramps continuously to 4x with one shared vector gain.
+ * HID units are not physical screen pixels; host acceleration/scaling applies.
  * Filtering and integration both use actual elapsed time. */
 struct xiao147_air_motion {
     int32_t bias[3], sum[3];
@@ -25,6 +27,14 @@ static inline void xiao147_air_clear(struct xiao147_air_motion *s)
     s->remainder[0] = s->remainder[1] = 0;
     s->filtered[0] = s->filtered[1] = 0;
     s->have_time = false;
+}
+
+static inline int32_t xiao147_air_gain_q8(int32_t speed_q8)
+{
+    const int32_t low = 500 * 256, high = 6000 * 256;
+    if (speed_q8 <= low) { return 256; }
+    if (speed_q8 >= high) { return 1024; }
+    return 256 + (int32_t)((int64_t)(speed_q8 - low) * 768 / (high - low));
 }
 
 static inline void xiao147_air_begin(struct xiao147_air_motion *s, uint32_t now)
@@ -120,22 +130,33 @@ static inline struct xiao147_xy xiao147_air_sample(struct xiao147_air_motion *s,
     struct xiao147_xy v = xiao147_gyro_to_logical(pose, raw[0] - s->bias[0],
                                                 raw[1] - s->bias[1]);
     int32_t values[2] = {v.x, v.y};
-    int steps[2];
     for (int i = 0; i < 2; i++) {
         /* Soft deadband plus immediate rest cutoff: no filtered drift tail. */
         if (abs(values[i]) <= 80) {
-            s->remainder[i] = s->filtered[i] = 0; steps[i] = 0; continue;
+            s->remainder[i] = s->filtered[i] = 0; continue;
         }
         values[i] += values[i] > 0 ? -80 : 80;
         int32_t target = values[i] * 256;
         s->filtered[i] += (int32_t)(((int64_t)target - s->filtered[i]) * dt / (30 + dt));
-        int64_t integrated = s->remainder[i] + (int64_t)s->filtered[i] * dt;
+    }
+    int32_t speed = abs(s->filtered[0]);
+    if (abs(s->filtered[1]) > speed) { speed = abs(s->filtered[1]); }
+    int32_t gain = xiao147_air_gain_q8(speed);
+    int64_t velocity[2] = {(int64_t)s->filtered[0] * gain / 256,
+                           (int64_t)s->filtered[1] * gain / 256};
+    int64_t peak = llabs(velocity[0]);
+    if (llabs(velocity[1]) > peak) { peak = llabs(velocity[1]); }
+    const int64_t ceiling = 6500LL * 256 * 1500 / 1000;
+    if (peak > ceiling) {
+        /* Limit the vector before integration, not each axis independently:
+         * fast diagonals retain direction and no excess becomes a backlog. */
+        for (int i = 0; i < 2; i++) { velocity[i] = velocity[i] * ceiling / peak; }
+    }
+    int steps[2];
+    for (int i = 0; i < 2; i++) {
+        int64_t integrated = s->remainder[i] + velocity[i] * dt;
         steps[i] = integrated / (6500 * 256);
         s->remainder[i] = integrated % (6500 * 256);
-        /* Time-proportional velocity ceiling, no backlog after fast gestures. */
-        int limit = (int)(250 * dt / 1000); if (limit < 1) { limit = 1; }
-        if (steps[i] > limit) { steps[i] = limit; s->remainder[i] = 0; }
-        if (steps[i] < -limit) { steps[i] = -limit; s->remainder[i] = 0; }
     }
     return (struct xiao147_xy){steps[0], steps[1]};
 }

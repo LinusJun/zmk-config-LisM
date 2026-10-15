@@ -5,11 +5,26 @@
 static void auto_cancel(struct xiao147_auto_touch *s)
 {
     s->blocked = true;
-    s->one_active = s->one_releasing = false;
+    s->one_active = s->one_releasing = s->one_weak_tail = false;
     s->one_frames = s->release_frames = 0;
     s->pair_seen = false;
     s->air_quiet_frames = 0;
     xiao147_shadow_gesture_cancel(&s->pair);
+}
+
+/* A weak centroid is undefined. Preserve only an already qualified stationary
+ * tap while every electrode is non-growing, then require two real NONEs.
+ * Never bridge a renewed contact or learn motion from this release tail. */
+static bool single_tail_fades(const struct xiao147_auto_touch *s,
+                              const struct xiao147_raw_profile *p)
+{
+    uint64_t total = 0, previous = 0;
+    for (unsigned i = 0; i < XIAO147_PROFILE_CHANNELS; i++) {
+        if (p->positive[i] > s->one_positive[i]) { return false; }
+        total += p->positive[i]; previous += s->one_positive[i];
+    }
+    return total > 0 && previous > 0 &&
+           (s->one_weak_tail || total * 2U <= previous);
 }
 
 static int auto_read(void *ctx, uint8_t reg, uint8_t *buf, size_t len)
@@ -68,7 +83,9 @@ static void auto_sample(void *ctx, enum xiao147_raw_type type, uint8_t channels,
     if (!xiao147_raw_profile_evaluate(values, channels, s->baseline.values, &profile)) {
         auto_stop(s); return;
     }
-    if (s->have_frame && s->now - s->frame_at > 100) { auto_cancel(s); }
+    if (s->have_frame && (s->now == s->frame_at || s->now - s->frame_at > 100)) {
+        auto_cancel(s);
+    }
     s->frame_at = s->now;
     s->have_frame = true;
     enum xiao147_raw_hypothesis h = profile.hypothesis;
@@ -95,6 +112,11 @@ static void auto_sample(void *ctx, enum xiao147_raw_type type, uint8_t channels,
         goto emit;
     }
 
+    if (s->one_weak_tail &&
+        (s->now - s->one_weak_at > 60 ||
+         (h != XIAO147_RAW_PENDING && h != XIAO147_RAW_NONE))) {
+        auto_cancel(s); goto emit;
+    }
     bool pair_started = h == XIAO147_RAW_TWO_SEPARATED_LOBES && !s->pair_seen;
     bool carry_single = pair_started && s->one_active;
     bool forbid_pair_tap = carry_single && (s->one_moved || s->one_releasing);
@@ -128,8 +150,16 @@ static void auto_sample(void *ctx, enum xiao147_raw_type type, uint8_t channels,
     }
     if (h == XIAO147_RAW_UNKNOWN) { auto_cancel(s); goto emit; }
     if (h == XIAO147_RAW_PENDING) {
-        /* Never call weak evidence a release or normalise a weak centroid. */
-        if (s->one_active) { auto_cancel(s); }
+        if (s->one_active) {
+            if (s->one_frames < 2 || s->one_moved || s->one_releasing ||
+                !single_tail_fades(s, &profile)) {
+                auto_cancel(s); goto emit;
+            }
+            if (!s->one_weak_tail) { s->one_weak_at = s->now; }
+            s->one_weak_tail = true;
+            memcpy(s->one_positive, profile.positive, sizeof(s->one_positive));
+        }
+        /* No output, confirmation frame, release or tap-clock extension. */
         goto emit;
     }
     if (h == XIAO147_RAW_NONE) {
@@ -138,7 +168,7 @@ static void auto_sample(void *ctx, enum xiao147_raw_type type, uint8_t channels,
             if (++s->release_frames >= 2) {
                 out.left = s->one_frames >= 2 && !s->one_moved &&
                            s->one_release_at - s->one_since <= 300;
-                s->one_active = s->one_releasing = false;
+                s->one_active = s->one_releasing = s->one_weak_tail = false;
                 s->one_frames = s->release_frames = 0;
             }
         }
@@ -147,6 +177,7 @@ static void auto_sample(void *ctx, enum xiao147_raw_type type, uint8_t channels,
     if (h == XIAO147_RAW_ONE_LOBE) {
         if (s->one_releasing) { auto_cancel(s); goto emit; }
         s->release_frames = 0;
+        memcpy(s->one_positive, profile.positive, sizeof(s->one_positive));
         if (!s->one_active) {
             s->one_active = true; s->one_moved = false;
             s->one_frames = 1; s->one_since = s->now;

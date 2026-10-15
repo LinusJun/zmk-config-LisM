@@ -22,11 +22,12 @@ struct xiao147_auto_touch {
     struct xiao147_auto_ops ops;
     void *context;
     uint32_t now, quiet_since, normal_at, cooldown_since, frame_at, one_since;
-    uint32_t one_release_at;
+    uint32_t one_release_at, one_weak_at;
+    uint32_t one_positive[XIAO147_PROFILE_CHANNELS];
     struct xiao147_xy one_anchor, one_previous;
     uint8_t orientation, one_frames, release_frames, failures, air_quiet_frames;
     bool quiet, cooldown, disabled, have_frame, blocked, pair_seen;
-    bool one_active, one_moved, one_releasing, allowed;
+    bool one_active, one_moved, one_releasing, one_weak_tail, allowed;
 };
 void xiao147_auto_init(struct xiao147_auto_touch *, const struct xiao147_auto_ops *, void *);
 /* Driver submits every native read, including errors. Only a fresh stable

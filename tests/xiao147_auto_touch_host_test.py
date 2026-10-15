@@ -125,6 +125,10 @@ static void fixture(void){
 }
 static void ready(void){wait_ms(600);assert(factory_page&&state.automatic.baseline.armed&&!state.automatic.blocked);}
 static void tap(const int32_t *v){values(v,80);values(quiet,100);}
+static void frame(const int32_t *v,unsigned ms){
+ now+=ms;state.automatic.now=now;
+ state.automatic.capture.ops.sample(&state.automatic,XIAO147_RAW_DIFF,12,v,0);
+}
 static void restored(void){wait_ms(300);assert(!factory_page&&!xiao147_touch_capture_active()&&normal_validation_reads);}
 int main(void){
  fixture();sensor[1]=1;wait_ms(1000);assert(!enters&&!hid_events);
@@ -204,6 +208,53 @@ int main(void){
  assert(rel_x==(int)last.native_long_y-first.native_long_y);
  assert(rel_y==(int)last.native_short_x-first.native_short_x);
  assert(rel_count>0&&!left_clicks&&!right_clicks);
+ /* A qualified stationary single may fade briefly before two genuine NONEs.
+  * Weak/ambiguous data itself is never a click, motion, release or air-idle. */
+ const int32_t weak_tail[12]={0,0,35,35,40,40,25,25,0,0,0,0};
+ const int32_t weaker[12]={0,0,25,25,30,30,20,20,0,0,0,0};
+ for(int orientation=0;orientation<4;orientation++){
+  fixture();pose=orientation;ready();
+  frame(one,20);frame(one,20);frame(weak_tail,20);
+  assert(state.automatic.one_weak_tail&&!left_clicks&&!rel_count);
+  assert(!xiao147_auto_air_idle(&state.automatic,now));
+  frame(weaker,20);frame(quiet,20);assert(!left_clicks);
+  frame(quiet,20);assert(left_clicks==1&&!right_clicks&&!rel_count&&!button_down);
+  frame(quiet,20);assert(left_clicks==1);
+  frame(one,20);frame(one,20);frame(quiet,20);frame(quiet,20);
+  assert(left_clicks==2); /* no seconds-long inter-tap lockout */
+ }
+ /* Never rescue weak-only, one unconfirmed frame, moving or long gestures. */
+ fixture();ready();frame(weak_tail,20);frame(weaker,20);frame(quiet,20);frame(quiet,20);
+ assert(!left_clicks);
+ frame(one,20);frame(weak_tail,20);frame(quiet,20);frame(quiet,20);assert(!left_clicks);
+ frame(one,20);frame(shifted_one,20);frame(weak_tail,20);frame(quiet,20);frame(quiet,20);
+ assert(!left_clicks);
+ for(unsigned i=0;i<16;i++)frame(one,20);
+ frame(weak_tail,20);frame(quiet,20);frame(quiet,20);assert(!left_clicks);
+ /* Reappearance, growth, a new electrode, a second lobe, unknown shapes,
+  * NONE bounce and timeout are not releases or restartable tap clocks. */
+ const int32_t moved_weak[12]={25,0,35,35,40,40,25,25,0,0,0,0};
+ const int32_t *reject[5]={one,two,unknown,weak_tail,moved_weak};
+ for(unsigned i=0;i<5;i++){
+  fixture();ready();frame(one,20);frame(one,20);frame(weak_tail,20);frame(weaker,20);
+  frame(reject[i],10);frame(quiet,20);frame(quiet,20);assert(!left_clicks&&!right_clicks);
+ }
+ fixture();ready();frame(one,20);frame(one,20);frame(weak_tail,20);frame(quiet,20);
+ frame(weaker,10);frame(quiet,10);frame(quiet,10);assert(!left_clicks);
+ fixture();ready();frame(one,20);frame(one,20);frame(weak_tail,20);frame(quiet,40);
+ frame(quiet,21);assert(!left_clicks); /* 61ms even when second NONE would qualify */
+ fixture();ready();frame(one,20);frame(one,20);frame(weak_tail,20);frame(quiet,0);
+ frame(quiet,20);assert(!left_clicks); /* duplicate sample clock */
+ fixture();ready();frame(one,20);frame(one,20);frame(weak_tail,20);frame(quiet,101);
+ frame(quiet,20);assert(!left_clicks);
+ /* Existing TWO ownership and UI/endpoint transitions remain fail-closed. */
+ fixture();ready();frame(two,20);frame(two,20);frame(weak_tail,20);
+ frame(quiet,20);frame(quiet,20);assert(!left_clicks);
+ for(unsigned transition=0;transition<3;transition++){
+  fixture();ready();frame(one,20);frame(one,20);frame(weak_tail,20);
+  if(transition==0)page=1;else if(transition==1)endpoint=-1;else screen_sleeping=true;
+  values(quiet,100);assert(!left_clicks&&!right_clicks);
+ }
  puts("PASS: actual automatic driver no UART/60s gate, held startup, single/double taps, native menus, IMU/sleep/pose transitions, failed release cleanup, bounded retry/fault and wrap");
 }
 '''

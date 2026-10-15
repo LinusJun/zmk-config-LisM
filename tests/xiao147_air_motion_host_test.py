@@ -22,6 +22,26 @@ static int movement(unsigned interval,int sign){
  for(unsigned t=0;t<=2000;t+=interval){sum+=sample(&s,t,sign*1000,0,0).x;}
  return sum;
 }
+static struct xiao147_xy vector_movement(unsigned interval,int x,int y,int pose){
+ struct xiao147_air_motion s={.bias_valid=true};struct xiao147_xy sum={0};
+ int16_t raw[3]={x,y,0};
+ for(unsigned t=0;t<=2000;t+=interval){
+  struct xiao147_xy p=xiao147_air_sample(&s,t,pose,raw);sum.x+=p.x;sum.y+=p.y;
+ }
+ return sum;
+}
+/* Independent old low-speed filter/integrator; no new gain helper here. */
+static int precision_reference(unsigned interval,int raw){
+ int filtered=0,remainder=0,sum=0;
+ for(unsigned t=interval;t<=2000;t+=interval){
+  int corrected=raw;if(abs(corrected)<=80){filtered=remainder=0;continue;}
+  corrected+=corrected>0?-80:80;
+  filtered+=(int)(((int64_t)corrected*256-filtered)*interval/(30+interval));
+  int64_t integrated=remainder+(int64_t)filtered*interval;
+  sum+=integrated/(6500*256);remainder=integrated%(6500*256);
+ }
+ return sum;
+}
 int main(void){
  struct xiao147_air_motion s={0};
  xiao147_air_begin(&s,0);
@@ -52,7 +72,7 @@ int main(void){
   assert((p.x>0)==(pose==0||pose==1));assert((p.y>0)==(pose==1||pose==2));
  }
  s=(struct xiao147_air_motion){.bias_valid=true};
- for(unsigned t=0;t<1000;t+=20){p=sample(&s,t,32767,-32768,0);assert(abs(p.x)<=5&&abs(p.y)<=5);}
+ for(unsigned t=0;t<1000;t+=20){p=sample(&s,t,32767,-32768,0);assert(abs(p.x)<=30&&abs(p.y)<=30);}
  for(unsigned t=1000;t<2000;t+=20){p=sample(&s,t,0,0,0);assert(!p.x&&!p.y&&!s.remainder[0]);}
  /* Missing/flat-zero/stale acceleration must not establish a bias. */
  s=(struct xiao147_air_motion){0};xiao147_air_begin(&s,0);
@@ -73,6 +93,49 @@ int main(void){
  for(unsigned i=0;i<200;i++)sample(&s,5000,180,-480,-24);
  assert(!s.bias_valid);
  s=(struct xiao147_air_motion){0};calibrate(&s,UINT_MAX-500);
+ /* Low-speed precision is bit-identical to the old curve, including signed
+  * fractions, deadband and multiple actual polling intervals. */
+ for(unsigned dt=10;dt<=40;dt*=2)for(int v=-580;v<=580;v+=20){
+  struct xiao147_xy sum=vector_movement(dt,v,0,0);
+  assert(sum.x==precision_reference(dt,v)&&sum.y==0);
+ }
+ int previous=256;
+ for(int v=0;v<=8000*256;v+=17){
+  int gain=xiao147_air_gain_q8(v);assert(gain>=previous&&gain>=256&&gain<=1024);previous=gain;
+ }
+ assert(xiao147_air_gain_q8(500*256)==256&&xiao147_air_gain_q8(6000*256)==1024);
+ struct xiao147_xy mid=vector_movement(20,3080,0,0),fast=vector_movement(20,6080,0,0);
+ assert(mid.x>2*precision_reference(20,3080));
+ assert(fast.x>5*500&&fast.x<=3000); /* old hard cap <=500 units per 2 seconds */
+ int prior=0;
+ for(int v=100;v<=32700;v+=100){
+  struct xiao147_xy plus=vector_movement(20,v,0,0),minus=vector_movement(20,-v,0,0);
+  assert(plus.x>=prior&&plus.x==-minus.x);prior=plus.x;
+ }
+ struct xiao147_xy diagonal=vector_movement(20,3080,1580,0);
+ assert(abs(diagonal.x+2*diagonal.y)<=3); /* common gain preserves direction */
+ for(int orientation=1;orientation<4;orientation++){
+  struct xiao147_xy rotated=vector_movement(20,3080,1580,orientation);
+  assert(abs(rotated.x)==abs(orientation%2?diagonal.y:diagonal.x));
+  assert(abs(rotated.y)==abs(orientation%2?diagonal.x:diagonal.y));
+ }
+ /* High-gain diagonals hitting the speed ceiling must not turn 2:1 into 1:1. */
+ for(int sign=-1;sign<=1;sign+=2)for(int orientation=0;orientation<4;orientation++){
+  struct xiao147_xy capped=vector_movement(20,sign*6080,sign*3080,orientation);
+  int major=orientation%2?abs(capped.y):abs(capped.x);
+  int minor=orientation%2?abs(capped.x):abs(capped.y);
+  assert(major>2500&&major<=3000&&abs(major-2*minor)<=3);
+  assert((capped.x>0)==((orientation==0||orientation==1)==(sign>0)));
+  assert((capped.y>0)==((orientation==1||orientation==2)==(sign>0)));
+ }
+ struct xiao147_xy fast10=vector_movement(10,6080,0,0),fast40=vector_movement(40,6080,0,0);
+ assert(abs(fast10.x-fast.x)<=30&&abs(fast40.x-fast.x)<=30);
+ s=(struct xiao147_air_motion){.bias_valid=true};
+ for(unsigned t=0;t<1000;t+=20)sample(&s,t,32767,32767,0);
+ xiao147_air_clear(&s);p=sample(&s,1000,0,0,0);assert(!p.x&&!p.y);
+ p=sample(&s,1020,0,0,0);assert(!p.x&&!p.y&&!s.remainder[0]&&!s.remainder[1]);
+ printf("Air units over 2s: precision=%d medium=%d fast=%d (old hard ceiling 500)\n",
+        precision_reference(20,500),mid.x,fast.x);
  puts("PASS: air mouse no-bias fail closed, automatic retry, fresh gravity, actual dt, all poses, subpixel symmetry, gap/reset and no overspeed backlog");
 }
 '''
