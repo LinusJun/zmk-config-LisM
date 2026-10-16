@@ -1166,7 +1166,7 @@
     "config/west.yml": "a6e4d93b8aca42dcd85f45aeaf05e71d967b57669905e8b5ae3ad901a7e938bc",
     "src/kscan_resistive_joystick.c": "20f28d12254c5692c37f0f00af255bb50233e50bdcdf53ebb7ec87f0774c09a6",
     "src/joystick_sector.h": "68fd8b13c90c1d6f14b94562896ca8f6ece41ecad50581acb73a399ad4a18ef6",
-    "src/xiao147_ui.c": "0e2c1c4914ed8f8125097bdbe33373688d9c2c30424b2e54e02317f56164a6d5",
+    "src/xiao147_ui.c": "af383c70ed67467673431c1fea1ad873dff33d9483082a6c8490ec8546cb4544",
     "src/xiao147_battery_rings.c": "b4d116a769d803271ad4ce8414fc1543dffaa624657b69954223f8b00e3ef8d9",
     "src/xiao147_rssi.c": "25ad196092037437677bff32bf8f095e48d825d67a8db9a704c3d6335392c1d2",
     "src/xiao147_peripheral_roles.h": "874800756dbfe3fef574b45d6c06e94148836c1f0605545a4b383819aa87e196"

@@ -1,7 +1,7 @@
 /* Copyright (c) 2024 carrefinho
  * SPDX-License-Identifier: MIT
  * XIAO-only fork of prospector-zmk-module ed98221f3b52b7066dbb10ba3af8a29150b93a5a.
- * See PROSPECTOR_LICENSE.txt. Geometry/fonts are unchanged; vivid XIAO colors.
+ * See PROSPECTOR_LICENSE.txt. Geometry/fonts unchanged; original hues brightened.
  */
 #include "output.h"
 

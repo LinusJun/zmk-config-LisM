@@ -157,9 +157,9 @@ int main(void) {
     wpm_smooth_work.work.handler(&wpm_smooth_work.work);
     assert(wpm_smooth_work.pending && wpm_smooth_work.queue==&display_queue);
     assert(displayed_wpm>0 && displayed_wpm<target_wpm);
-    assert(first.bars[0]->bg_color==0xff4f78);
+    assert(first.bars[0]->bg_color==0xfc6b8a);
     assert(first.bars[WPM_BAR_COUNT-1]->bg_color==0x242424);
-    assert(first.wpm_label->text_color==0xff6b8e);
+    assert(first.wpm_label->text_color==0xfc6b8a);
     display_context=false;
     /* Empty output list is safe during diagnostic stages. Event context never
      * mutates LVGL; endpoint/profile updates are deferred and coalesced.
@@ -175,25 +175,42 @@ int main(void) {
     widget_output_async_cb(&profile); assert(gui_calls==before);
     dispatch(&widget_output_async_work);
     assert(active_profile_index==2 && active_transport==ZMK_TRANSPORT_BLE && gui_calls>before);
-    assert(output.ble_btn->bg_color==0x0a84ff&&output.ble_btn->bg_opa==255);
+    assert(output.ble_btn->bg_color==0x70cfd9&&output.ble_btn->bg_opa==255);
     assert(output.usb_btn->bg_opa==0&&output.usb_btn->border_color==0x4f4f40);
     for(int i=0;i<5;i++){
-        assert(output.slots[i]->bg_color==(i==2?0xb6bbff:0x353640));
+        assert(output.slots[i]->bg_color==(i==2?0xa0a3bf:0x353640));
         assert(output.slots[i]->child->text_color==(i==2?0x000000:0xffffff));
     }
     before=gui_calls;mock_transport=ZMK_TRANSPORT_USB;
     widget_output_async_cb(NULL); assert(gui_calls==before);
     dispatch(&widget_output_async_work); assert(active_transport==ZMK_TRANSPORT_USB);
-    assert(output.usb_btn->bg_color==0xffe184&&output.usb_btn->bg_opa==255);
+    assert(output.usb_btn->bg_color==0xf1f1d9&&output.usb_btn->bg_opa==255);
     assert(output.ble_btn->bg_opa==0&&output.ble_btn->border_color==0x353f40);
     for(int i=0;i<5;i++){
-        assert(output.slots[i]->bg_color==(i==0?0xb6bbff:0x353640));
+        assert(output.slots[i]->bg_color==(i==0?0xa0a3bf:0x353640));
         assert(output.slots[i]->child->text_color==(i==0?0x000000:0xffffff));
     }
     const unsigned levels[]={0,20,21,49,50,74,75,100};
-    const unsigned colors[]={0xff3333,0xff3333,0xff8800,0xff8800,
-                             0xffcc00,0xffcc00,0x00cc66,0x00cc66};
+    const unsigned colors[]={0xff7070,0xff7070,0xfaa653,0xfaa653,
+                             0xffcc00,0xffcc00,0x6da68c,0x6da68c};
     for(unsigned i=0;i<8;i++)assert(xiao147_battery_color(levels[i])==colors[i]);
+    /* Fixed mappings from the pre-vivid pinned palette, not gains applied to
+     * the 48fd08c replacements. Saturated colors cannot receive full gain. */
+    const unsigned originals[]={0x54806c,0xc08040,0xe46464,0xffcc00,0x569fa7,
+                                0x7b7d93,0xc2526a,0xb1e5f0,0x3b527c,0xb9b9a7};
+    const unsigned brightened[]={0x6da68c,0xfaa653,0xff7070,0xffcc00,0x70cfd9,
+                                 0xa0a3bf,0xfc6b8a,0xbcf3ff,0x4d6ba1,0xf1f1d9};
+    for(unsigned i=0;i<10;i++)assert(xiao147_original_color_brighten30(originals[i])==brightened[i]);
+    assert(DISPLAY_COLOR_MOD_ACTIVE==0xbcf3ff&&DISPLAY_COLOR_MOD_INACTIVE==0x4d6ba1);
+    assert(DISPLAY_COLOR_MOD_SEPARATOR==0x606060&&DISPLAY_COLOR_MOD_CAPS_WORD==0xffbf00);
+    assert(DISPLAY_COLOR_LAYER_DOT_ACTIVE==0xe0e0e0&&DISPLAY_COLOR_LAYER_DOT_INACTIVE==0x575757);
+    assert(DISPLAY_COLOR_BATTERY_DISCONNECTED_FILL==0x383c42);
+    assert(DISPLAY_COLOR_BATTERY_DISCONNECTED_RING==0x282c30&&DISPLAY_COLOR_BATTERY_BG==0x505050);
+    assert(XIAO147_ACCENT_BLUE==0x3eccff&&XIAO147_SLIDER_BLUE==0x007aff);
+    assert(XIAO147_SWITCH_GREEN==0x43ff72&&XIAO147_DEVICE_BORDER==0x53a2ff);
+    for(unsigned gray=0;gray<256;gray++){
+        unsigned neutral=gray*0x010101;assert(xiao147_original_color_brighten30(neutral)==neutral);
+    }
     puts("PASS: actual OPERATOR WPM early-event safety, init-before-schedule, single work initialization, display-only animation and deferred USB/BLE GUI updates");
 }
 """

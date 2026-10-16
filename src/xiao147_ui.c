@@ -44,7 +44,7 @@ LOG_MODULE_REGISTER(xiao147_ui, LOG_LEVEL_INF);
 #define COLOR_TEXT 0xffffff
 #define COLOR_MUTED 0x8295ae
 #define COLOR_ACCENT XIAO147_ACCENT_BLUE
-#define COLOR_GREEN 0x00cc66
+#define COLOR_GREEN DISPLAY_COLOR_BATTERY_FILL
 #define OFF_AFTER_MS 300000
 #define TOUCH_BATCH_LIMIT 8
 #define TOUCH_FRAME_MS 33
@@ -134,7 +134,7 @@ static void style_switch(lv_obj_t *sw)
     lv_obj_set_style_bg_color(sw, lv_color_hex(0x3a3a3c), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(sw, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_radius(sw, 12, LV_PART_INDICATOR);
-    lv_obj_set_style_bg_color(sw, lv_color_hex(COLOR_GREEN), LV_PART_INDICATOR | LV_STATE_CHECKED);
+    lv_obj_set_style_bg_color(sw, lv_color_hex(XIAO147_SWITCH_GREEN), LV_PART_INDICATOR | LV_STATE_CHECKED);
     lv_obj_set_style_bg_opa(sw, LV_OPA_COVER, LV_PART_INDICATOR);
     lv_obj_set_style_radius(sw, LV_RADIUS_CIRCLE, LV_PART_KNOB);
     lv_obj_set_style_bg_color(sw, lv_color_hex(0xffffff), LV_PART_KNOB);
@@ -227,10 +227,10 @@ static uint32_t rssi_color(int8_t value)
      * custom_status_screen.c ks_get_rssi_color colors the signal bar.
      * Apply that palette to dBm text here, with the requested four bands:
      * merge the two green levels; valid weak readings stay red, unknown gray. */
-    if (value >= -60) { return 0x00cc66; }
-    if (value >= -70) { return 0xffcc00; }
-    if (value >= -80) { return 0xff8800; }
-    return 0xff3333;
+    if (value >= -60) { return xiao147_original_color_brighten30(0x00cc66); }
+    if (value >= -70) { return xiao147_original_color_brighten30(0xffcc00); }
+    if (value >= -80) { return xiao147_original_color_brighten30(0xff8800); }
+    return xiao147_original_color_brighten30(0xff3333);
 }
 
 static void draw_devices(void)
@@ -737,7 +737,7 @@ static void create_ui(struct k_work *work)
     lv_obj_set_pos(settings_slider, 14, 52);
     lv_obj_set_size(settings_slider, 287, 6);
     lv_obj_set_style_bg_color(settings_slider, lv_color_hex(0x3a3a3c), LV_PART_MAIN);
-    lv_obj_set_style_bg_color(settings_slider, lv_color_hex(COLOR_ACCENT), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(settings_slider, lv_color_hex(XIAO147_SLIDER_BLUE), LV_PART_INDICATOR);
     lv_obj_set_style_bg_opa(settings_slider, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(settings_slider, LV_OPA_COVER, LV_PART_INDICATOR);
     lv_obj_set_style_radius(settings_slider, 3, LV_PART_MAIN);
@@ -758,7 +758,7 @@ static void create_ui(struct k_work *work)
         lv_obj_set_style_bg_opa(device_cards[i], LV_OPA_COVER, LV_PART_MAIN);
         lv_obj_set_style_border_width(device_cards[i], 1, LV_PART_MAIN);
         lv_obj_set_style_border_color(device_cards[i],
-                     lv_color_hex(i == 0 ? COLOR_ACCENT : 0x303c4b), LV_PART_MAIN);
+                     lv_color_hex(i == 0 ? XIAO147_DEVICE_BORDER : 0x303c4b), LV_PART_MAIN);
         lv_obj_set_style_radius(device_cards[i], 6, LV_PART_MAIN);
         lv_obj_set_style_pad_all(device_cards[i], 0, LV_PART_MAIN);
         lv_obj_clear_flag(device_cards[i], LV_OBJ_FLAG_SCROLLABLE);
