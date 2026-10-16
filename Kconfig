@@ -1,3 +1,16 @@
+config LISM_BLE_HID_BRIDGE
+    bool "Experimental BLE HID relative mouse bridge"
+    depends on LISM_XIAO147_TOUCH && ZMK_SPLIT_ROLE_CENTRAL
+    depends on BT_CENTRAL && BT_SMP && SETTINGS && INPUT_MODE_THREAD
+    select BT_GATT_CLIENT
+    help
+      Explicit screen pairing for one standard BLE HOGP relative mouse.
+      Bridges X/Y, buttons 1..5, Wheel and AC Pan to selected USB/BLE host.
+      No classic Bluetooth, vendor protocols, keyboard/consumer keys or raw
+      multitouch forwarding. Separate experimental build; saved split and host
+      pairings are preserved. Only normal service discovery/security/CCCD and
+      standard HID Protocol Mode writes are used.
+
 config LISM_CHARGE_TELEMETRY
     bool "XIAO read-only power and inferred charger status telemetry"
     depends on BT && ZMK_BATTERY_REPORTING

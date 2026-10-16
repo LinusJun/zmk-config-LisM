@@ -100,7 +100,8 @@ for path, digest in baseline["protected_files"].items():
         data = data.replace(b"CONFIG_LISM_CHARGE_TELEMETRY=y\n", b"")
     if path in ("src/xiao147_ui.c", "src/xiao147_battery_rings.c"):
         # Normalize only the diagnostic-startup gate. UI's reviewed native-pixel
-        # repair/power telemetry UI has an explicitly reviewed protected hash;
+        # repair/power telemetry UI and compile-gated experimental BLE mouse
+        # pairing page have an explicitly reviewed protected hash;
         # right-trackball/joystick hashes remain the original baseline.
         data = data.replace(b'#include "xiao147_display_test.h"\n', b'')
         data = data.replace(

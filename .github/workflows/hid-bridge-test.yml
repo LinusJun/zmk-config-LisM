@@ -1,0 +1,35 @@
+name: Experimental BLE HID mouse bridge
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/cheerdots2-hid-bridge]
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
+        with:
+          repository: zmkfirmware/zmk
+          ref: 9ebbeff0a8b69a42f14aec022cdf16c7a107b9e0
+          path: pinned-zmk
+      - name: Bounded descriptor and source ownership tests
+        run: |
+          python3 tests/lism_hid_parser_host_test.py
+          python3 tests/lism_hid_host_input_test.py
+          python3 tests/cheerdots_hid_probe_test.py
+          python3 tests/lism_hid_central_patch_test.py pinned-zmk/app
+      - name: Existing firmware regressions
+        run: |
+          for test in tests/*_test.py; do
+            case "$test" in
+              *lism_hid_central_patch_test.py|*lism_hid_parser_host_test.py|*lism_hid_host_input_test.py|*cheerdots_hid_probe_test.py) continue ;;
+            esac
+            python3 "$test"
+          done
+  build:
+    needs: regression
+    uses: zmkfirmware/zmk/.github/workflows/build-user-config.yml@9ebbeff0a8b69a42f14aec022cdf16c7a107b9e0
+    with:
+      build_matrix_path: build-hid-bridge.yaml
+      archive_name: experimental-hid-mouse-bridge

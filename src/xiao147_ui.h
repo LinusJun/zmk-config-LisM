@@ -9,6 +9,10 @@ enum xiao147_page {
     XIAO147_PAGE_STATUS = 0,
     XIAO147_PAGE_SETTINGS = 1,
     XIAO147_PAGE_DEVICES = 2,
+#if defined(CONFIG_LISM_BLE_HID_BRIDGE)
+    XIAO147_PAGE_BLE_MOUSE = 3,
+#endif
+    XIAO147_PAGE_COUNT,
 };
 
 /* Safe to call from input and touch polling work queues. */
