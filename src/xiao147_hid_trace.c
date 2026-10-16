@@ -26,17 +26,24 @@ int __real_zmk_endpoint_send_mouse_report(void);
 int __wrap_zmk_endpoint_send_mouse_report(void)
 {
     const struct zmk_hid_mouse_report *report = zmk_hid_get_mouse_report();
-    int x = report->body.d_scroll_x, y = report->body.d_scroll_y;
+    /* Snapshot before forwarding: the real transport may consume the report.
+     * Observe pointer displacement as well as wheels; accepting an input event
+     * in the driver alone does not prove a mouse report reached the transport. */
+    int x = report->body.d_x, y = report->body.d_y;
+    int pan = report->body.d_scroll_x, wheel = report->body.d_scroll_y;
+    unsigned buttons = report->body.buttons;
+    struct zmk_endpoint_instance endpoint = zmk_endpoint_get_selected();
     int ret = __real_zmk_endpoint_send_mouse_report();
-    if (x || y) {
+    if (x || y || pan || wheel || buttons || ret < 0) {
         static atomic_t count, failures, last_trace;
         atomic_inc(&count);
         if (ret < 0) { atomic_inc(&failures); }
         uint32_t now = k_uptime_get_32();
         atomic_val_t before = atomic_get(&last_trace);
         if (now - (uint32_t)before >= 1000 && atomic_cas(&last_trace, before, now)) {
-            LOG_INF("HID endpoint wheel %d %d, send result %d, reports %ld failures %ld",
-                    x, y, ret, (long)atomic_get(&count), (long)atomic_get(&failures));
+            LOG_INF("HID endpoint %d pointer %d %d wheel %d %d buttons 0x%x, send result %d, reports %ld failures %ld",
+                    zmk_endpoint_instance_to_index(endpoint), x, y, pan, wheel, buttons,
+                    ret, (long)atomic_get(&count), (long)atomic_get(&failures));
         }
     }
     return ret;

@@ -1,0 +1,67 @@
+{
+  "baseline_commit": "506c6964c22d025d6b443125388455a9a1b8091a",
+  "integration_base_commit": "2fa7f022cbb3f6b44157a48e2b1dd5c9ef25d1c2",
+  "reported_symptom": "User reports air mouse no longer moves",
+  "device_attached_during_original_reproduction": false,
+  "enabled_motion_log_obtained": false,
+  "confirmed_defect": "Output ownership and logical screen pose transitions discard otherwise valid native sensor calibration samples",
+  "reproduction": {
+    "test": "tests/xiao147_auto_touch_host_test.py",
+    "implementation_under_test": "actual AUTO touch and IMU drivers plus actual motion core; fake hardware and scheduler",
+    "gyro_raw": [180, -480, -24],
+    "gravity_raw": [-16384, 0, 0],
+    "stimulus": "10 repetitions of 120 ms ambiguous touch followed by 140 ms genuine no-touch while gyro remains stationary",
+    "before_fix": "ASAN/UBSAN host regression fails: no valid bias after 2600 ms",
+    "after_fix": "Host regression passes: calibration completes, uncertain touch emits no HID, resumed output starts without accumulated displacement",
+    "additional_checks": [
+      "Logical pose changes every 120 ms do not reset calibration in native sensor axes",
+      "Accelerometer or gyro I2C failure every 200 ms still prevents calibration",
+      "After sensor errors stop, 2400 ms of continuous stable data permits automatic calibration",
+      "Gyro is powered up once throughout output ownership changes"
+    ]
+  },
+  "calibration_limits_changed": false,
+  "air_speed_curve_changed": false,
+  "single_and_pair_gesture_thresholds_changed": false,
+  "touch_output_restrictions_removed": false,
+  "sleep_wake_defect": {
+    "confirmed_defect": "Sleep blocks output, clears integration every poll and restores AUTO RAW; wake was reachable only through already-authorized pointer displacement",
+    "before_fix": "Actual driver host test fails: after 10 seconds asleep, 200 ms corrected gyro movement never wakes the display",
+    "after_fix": "The same test passes: sustained fresh calibrated gyro movement wakes without any pointer report, AUTO independently re-arms and confirms idle before movement resumes",
+    "wake_policy": "Fresh native zero-contact report at most 100 ms old, no capture or pending button, connected endpoint, status page, fresh gravity and calibrated gyro; the SAME three-axis projected yaw or pitch rate used by the pointer must exceed the existing 80-count deadband for 60 ms with sample gaps at most 40 ms",
+    "guards_tested": [
+      "Contact, malformed/failed/stale native reports and pending buttons block gyro wake",
+      "No HID endpoint or non-status page blocks gyro wake",
+      "One 20 ms motion sample followed by rest cannot wake",
+      "First wake frame has no HID and no integration backlog",
+      "Three enable/disable cycles with endpoint transitions retain stationary calibration"
+    ],
+    "scope": "Host reproduction with fake hardware, not evidence of successful physical air mouse behavior"
+  },
+  "follow_up_passive_observation": {
+    "same_verified_dongle_attached": true,
+    "duration_seconds": 12,
+    "commands_sent": 0,
+    "observed": ["IMU ready WHO_AM_I=0x6a", "AXS_AUTO_READY FW0100"],
+    "enabled_gyro_samples_observed": false,
+    "note": "Buffered initialization lines only; neither runtime enable state nor successful physical motion was established. No sampling or flash command was sent."
+  },
+  "three_axis_projection": {
+    "user_confirmed_grips": ["flat screen up with screen top pointing forward", "upright screen facing user with rear pointing forward"],
+    "prior_mapping_defect": "Only gx and gy were used; flat screen-up yaw can be almost entirely gz and was ignored",
+    "model": "UP is trusted normalized support acceleration; horizontalRight is normalized(screenRight - UP * dot(screenRight,UP)); logical rates x=-dot(gyroMinusBias,UP), y=-dot(gyroMinusBias,horizontalRight)",
+    "uses_all_three_gyro_axes": true,
+    "static_tilt_is_not_pointer_velocity": true,
+    "hard_grip_axis_switch": false,
+    "trajectory_regression": "20 ms physical gravity/gyro pairs at 15.75 deg/s pitch, 0 to almost 90 degrees and reverse, with and without simultaneous world yaw, in all four screen orientations",
+    "up_filter_ms": 80,
+    "trusted_accel_raw_norm": [13000,19660],
+    "up_freshness_limit_ms": 100,
+    "horizontal_right_hysteresis": {"leave_below":0.35,"enter_at_or_above":0.5},
+    "mounting_evidence": "Existing empirically confirmed planar gravity/display orientation; front normal -Z is the right-handed inference from native +X down and +Y left, not a new physical Z-axis measurement",
+    "reference_checked": "https://github.com/techiesms/Air-Mouse/blob/4e8ca61e951c9caeb7f734e173534f42a4373e9c/Code/Code.ino",
+    "reference_scope": "Reference uses fixed -gz/gy on its mounting; its hard-coded mapping is NOT copied as a universal orientation model",
+    "physical_grip_direction_validated": false
+  },
+  "limitation": "Host reproduction and analytic motion vectors establish software behavior only. Without enabled-state physical motion logs, neither the sole cause of the user's observed stop nor the real grip direction/feel is established. No physical device flash or HID injection was performed during this investigation."
+}

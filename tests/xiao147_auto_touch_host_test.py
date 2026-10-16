@@ -27,18 +27,24 @@ static int32_t profile_values[12];
 static bool xiao147_ui_is_sleeping(void){return screen_sleeping;}
 static bool xiao147_ui_imu_enabled(void){return imu_enabled;}
 static bool xiao147_ui_auto_rotate_enabled(void){return false;}
-static bool xiao147_ui_wake_on_motion(void){return false;}
+static unsigned motion_wakes;
+static bool xiao147_ui_wake_on_motion(void){
+ bool woke=screen_sleeping;if(woke){screen_sleeping=false;motion_wakes++;}return woke;
+}
 static void xiao147_ui_set_auto_orientation(enum xiao147_orientation p){(void)p;}
 static int16_t gyro_raw[3]={180,-480,-24};
-static unsigned gyro_starts;
+static int16_t accel_raw[3]={-16384,0,0};
+static unsigned gyro_starts,imu_accel_errors,imu_gyro_errors;
 static int imu_test_write(const struct i2c_dt_spec *bus,const uint8_t *p,size_t n){
  (void)bus;assert(n==2);if(p[0]==0x11&&p[1]==0x40)gyro_starts++;return 0;
 }
 static int imu_test_read(const struct i2c_dt_spec *bus,const uint8_t *p,size_t n,uint8_t *out,size_t len){
  (void)bus;assert(n==1);
  if(*p==0x0f){assert(len==1);out[0]=0x6a;return 0;}
- assert(len==6);int16_t gravity[3]={0,0,16384};
- const int16_t *v=*p==0x22?gyro_raw:gravity;
+ if(*p==0x28&&imu_accel_errors){imu_accel_errors--;return -EIO;}
+ if(*p==0x22&&imu_gyro_errors){imu_gyro_errors--;return -EIO;}
+ assert(len==6);
+ const int16_t *v=*p==0x22?gyro_raw:accel_raw;
  for(int i=0;i<3;i++){out[2*i]=(uint16_t)v[i]&255;out[2*i+1]=(uint16_t)v[i]>>8;}return 0;
 }
 static uint32_t now;''')
@@ -119,7 +125,11 @@ static void fixture(void){
  hid_events=ordinary_reads=menu_samples=menu_cancels=normal_validation_reads=0;
  atomic_set(&capture_gate,0);atomic_set(&normal_button_gate,0);
  atomic_set(&air_gate,1);atomic_set(&air_frame_at,0);
+ atomic_set(&air_wake_idle,0);atomic_set(&air_wake_at,0);
  memset(&air_state,0,sizeof(air_state));gyro_raw[0]=180;gyro_raw[1]=-480;gyro_raw[2]=-24;gyro_starts=0;
+ accel_raw[0]=-16384;accel_raw[1]=accel_raw[2]=0;
+ imu_accel_errors=imu_gyro_errors=0;
+ motion_wakes=0;
  assert(imu_init(&air_device)==0);
  assert(axs_touch_init(&touch_device)==0);
 }
@@ -192,6 +202,134 @@ int main(void){
  fixture();ready();imu_enabled=true;wait_ms(2400);gyro_raw[0]=1480;
  now+=101;before_air=rel_count;imu_poll(&air_state.poll_work.work);
  assert(xiao147_touch_blocks_air()&&rel_count==(unsigned)before_air);
+ /* Touch confidence may alternate while the physical device remains still.
+  * Output ownership must not restart the independent stationary calibration. */
+ fixture();ready();imu_enabled=true;
+ uint32_t calibration_started=now;
+ for(unsigned i=0;i<10;i++){
+  values(unknown,120);assert(xiao147_touch_blocks_air()&&!air_state.output_allowed);
+  assert(!hid_events); /* ambiguous contact never authorizes pointer output */
+  values(quiet,140);assert(!xiao147_touch_blocks_air()&&air_state.output_allowed);
+  assert(!hid_events&&gyro_starts==1);
+ }
+ assert(now-calibration_started==2600&&air_state.motion.bias_valid);
+ assert(!air_state.motion.calibrating&&air_state.motion.bias[0]==180);
+ assert(air_state.motion.bias[1]==-480&&air_state.motion.bias[2]==-24);
+ /* Movement held under touch ownership cannot accumulate a release jump.
+  * The first authorized IMU poll anchors time; later polls resume motion. */
+ values(unknown,120);gyro_raw[0]=1480;wait_ms(160);
+ assert(!air_state.output_allowed&&!hid_events&&gyro_starts==1);
+ memcpy(profile_values,quiet,sizeof(profile_values));
+ unsigned resume_deadline=now+200;
+ while(!air_state.output_allowed&&now<resume_deadline){
+  unsigned preceding_reports=rel_count;poll();
+  if(air_state.output_allowed)assert(rel_count==preceding_reports);
+ }
+ assert(air_state.output_allowed&&!air_state.motion.calibrating&&gyro_starts==1);
+ assert(!air_state.motion.remainder[0]&&!air_state.motion.remainder[1]);
+ wait_ms(200);assert(rel_count>0&&gyro_starts==1);
+ /* A UI orientation change does not alter native stationary gyro bias.
+  * Repeated logical transforms still clear output integration, not learning. */
+ fixture();ready();imu_enabled=true;
+ for(unsigned i=0;i<20;i++){
+  pose=i%4;wait_ms(120);assert(!hid_events&&gyro_starts==1);
+ }
+ assert(air_state.motion.bias_valid&&!air_state.motion.calibrating);
+ assert(air_state.motion.bias[0]==180&&air_state.motion.bias[1]==-480);
+ /* Real sampling faults still invalidate an incomplete stationary window.
+  * Repeated failures cannot manufacture calibration; clean reads recover. */
+ for(unsigned sensor_fault=0;sensor_fault<2;sensor_fault++){
+  fixture();ready();imu_enabled=true;
+  for(unsigned i=0;i<14;i++){
+   wait_ms(180);
+   if(sensor_fault==0)imu_accel_errors=1;else imu_gyro_errors=1;
+   wait_ms(20);
+   assert(!imu_accel_errors&&!imu_gyro_errors);
+   assert(!air_state.motion.bias_valid&&!hid_events&&gyro_starts==1);
+  }
+  wait_ms(2400);
+  assert(air_state.motion.bias_valid&&!air_state.motion.calibrating);
+  assert(!hid_events&&gyro_starts==1);
+ }
+ /* Long sleep restores normal touch reports; RAW idle authorization is gone.
+  * Fresh calibrated gyro motion can wake, but cannot bypass RAW re-arming. */
+ fixture();ready();imu_enabled=true;wait_ms(2400);
+ assert(air_state.motion.bias_valid);screen_sleeping=true;wait_ms(10000);
+ assert(screen_sleeping&&!factory_page&&xiao147_touch_blocks_air()&&!motion_wakes);
+ before_air=rel_count;gyro_raw[0]=1480;
+ unsigned wake_deadline=now+200;
+ while(screen_sleeping&&now<wake_deadline){
+  unsigned preceding_reports=rel_count;poll();
+  if(!screen_sleeping)assert(rel_count==preceding_reports);
+ }
+ assert(!screen_sleeping&&motion_wakes==1&&rel_count==(unsigned)before_air);
+ assert(!air_state.motion.have_time);
+ wait_ms(80);assert(rel_count==(unsigned)before_air);
+ wait_ms(800);assert(factory_page&&!xiao147_touch_blocks_air()&&rel_count>(unsigned)before_air);
+ assert(gyro_starts==1);
+ /* The runtime air mode is buttons-bottom portrait. With the screen up,
+  * pure native Z yaw must move X and also wake after sleep; native X is pitch.
+  * These are independent physical directions, not the old gx/-gy mapping. */
+ fixture();pose=XIAO147_BUTTONS_BOTTOM;
+ accel_raw[0]=accel_raw[1]=0;accel_raw[2]=-16384;
+ ready();imu_enabled=true;wait_ms(2400);assert(air_state.motion.bias_valid);
+ before_air=rel_count;gyro_raw[2]+=1300;wait_ms(300);
+ assert(rel_count>(unsigned)before_air&&rel_x>0&&!rel_y);
+ gyro_raw[2]-=1300;wait_ms(100);screen_sleeping=true;wait_ms(10000);
+ before_air=rel_count;gyro_raw[2]+=1300;wake_deadline=now+200;
+ while(screen_sleeping&&now<wake_deadline){poll();assert(rel_count==(unsigned)before_air);}
+ assert(!screen_sleeping&&motion_wakes==1&&!air_state.motion.have_time);
+ wait_ms(900);assert(rel_count>(unsigned)before_air&&rel_x>0&&!rel_y);
+ /* Touch still owns the cursor while air mode remains on in either grip. */
+ values(unknown,200);before_air=rel_count;wait_ms(200);
+ assert(xiao147_touch_blocks_air()&&rel_count==(unsigned)before_air);
+ gyro_raw[2]-=1300;values(quiet,160);
+ clicks=left_clicks;rc=right_clicks;tap(one);tap(two);
+ assert(left_clicks==clicks+1&&right_clicks==rc+1&&gyro_starts==1);
+ /* Portrait upright: gravity is native +Y; -Y is yaw right and -X pitch up. */
+ fixture();pose=XIAO147_BUTTONS_BOTTOM;
+ accel_raw[0]=accel_raw[2]=0;accel_raw[1]=16384;
+ ready();imu_enabled=true;wait_ms(2400);
+ gyro_raw[1]-=1300;wait_ms(300);assert(rel_x>0&&!rel_y);
+ gyro_raw[1]+=1300;wait_ms(100);rel_x=rel_y=0;
+ gyro_raw[0]-=1300;wait_ms(300);assert(!rel_x&&rel_y<0);
+ /* Native contact, failed/malformed/stale reads and pending HID buttons are
+  * not permission to wake from the gyro, even with sustained movement. */
+ for(unsigned gate=0;gate<5;gate++){
+  fixture();ready();imu_enabled=true;wait_ms(2400);screen_sleeping=true;restored();
+  assert(xiao147_touch_allows_air_wake());
+  before_air=rel_count;gyro_raw[0]=1480;
+  if(gate==0)sensor[1]=1;
+  else if(gate==1)read_error=1000;
+  else if(gate==2)sensor[1]=6;
+  else if(gate==3)atomic_set(&normal_button_gate,1);
+  else {now+=101;assert(!xiao147_touch_allows_air_wake());}
+  if(gate==4){
+   for(unsigned i=0;i<10;i++){now+=20;imu_poll(&air_state.poll_work.work);}
+  }else wait_ms(300);
+  assert(screen_sleeping&&!motion_wakes&&rel_count==(unsigned)before_air);
+ }
+ /* No endpoint or a non-status page never wakes or emits pointer movement. */
+ for(unsigned gate=0;gate<2;gate++){
+  fixture();ready();imu_enabled=true;wait_ms(2400);screen_sleeping=true;restored();
+  if(gate==0)endpoint=-1;else page=1;
+  gyro_raw[0]=1480;before_air=rel_count;wait_ms(300);
+  assert(screen_sleeping&&!motion_wakes&&rel_count==(unsigned)before_air);
+ }
+ /* One noisy sample cannot wake. A real sustained run does, and repeated
+  * enable cycles and endpoint changes retain independent calibration. */
+ fixture();ready();imu_enabled=true;wait_ms(2400);screen_sleeping=true;restored();
+ gyro_raw[0]=1480;wait_ms(20);gyro_raw[0]=180;wait_ms(200);
+ assert(screen_sleeping&&!motion_wakes&&!hid_events);
+ gyro_raw[0]=1480;wait_ms(100);assert(!screen_sleeping&&motion_wakes==1&&!hid_events);
+ fixture();ready();
+ for(unsigned cycle=0;cycle<3;cycle++){
+  imu_enabled=true;
+  for(unsigned i=0;i<20;i++){endpoint=i%2;wait_ms(120);}
+  assert(air_state.motion.bias_valid&&!air_state.motion.calibrating&&!hid_events);
+  imu_enabled=false;wait_ms(100);assert(!air_state.gyro_on);
+ }
+ assert(gyro_starts==3);
  /* Third confirmed single frame includes displacement from frame two. */
  fixture();ready();
  const int32_t shift1[12]={0,0,80,80,150,150,70,70,0,0,0,0};

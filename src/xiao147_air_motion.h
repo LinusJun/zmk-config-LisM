@@ -8,18 +8,25 @@
  * Raw counts at 245 dps; 6500 count*ms/HID-unit retains precision at low speed.
  * Faster motion ramps continuously to 4x with one shared vector gain.
  * HID units are not physical screen pixels; host acceleration/scaling applies.
- * Filtering and integration both use actual elapsed time. */
+ * Three native gyro axes are projected using trusted support acceleration,
+ * giving one continuous world-yaw / projected-screen-right-pitch frame for
+ * flat and upright grips. Filtering and integration use actual elapsed time. */
 struct xiao147_air_motion {
     int32_t bias[3], sum[3];
     int16_t minimum[3], maximum[3];
     int32_t remainder[2];
     int32_t filtered[2]; /* Q8 corrected gyro counts */
     int16_t gravity[3];
+    int32_t up[3]; /* Q14 low-pass support acceleration (world UP). */
     unsigned samples;
     uint32_t started, last_ms, gravity_ms, stable_since;
     uint32_t calibration_ms;
     bool calibrating, bias_valid, have_time, have_gravity, gravity_stable;
     bool have_calibration_time;
+    /* Last zero-learning rejection: gravity=1, sample time=2, bias=4, spread=8. */
+    uint8_t calibration_blocked;
+    uint32_t up_at;
+    bool up_valid, project_ready;
 };
 
 static inline void xiao147_air_clear(struct xiao147_air_motion *s)
@@ -45,6 +52,31 @@ static inline void xiao147_air_begin(struct xiao147_air_motion *s, uint32_t now)
     s->calibrating = true; /* Keep the last valid bias until a stable replacement. */
     s->have_gravity = false;
     s->have_calibration_time = false;
+    s->calibration_blocked = 0;
+    s->up_valid = s->project_ready = false;
+}
+
+/* Restoring integer square root: bounded, deterministic and no libm/runtime
+ * dependency on the embedded target. All squared vectors fit uint64_t. */
+static inline uint32_t xiao147_air_sqrt(uint64_t value)
+{
+    uint64_t root = 0, bit = UINT64_C(1) << 62;
+    while (bit > value) { bit >>= 2; }
+    while (bit) {
+        if (value >= root + bit) {
+            value -= root + bit;
+            root = (root >> 1) + bit;
+        } else { root >>= 1; }
+        bit >>= 2;
+    }
+    return (uint32_t)root;
+}
+
+static inline uint32_t xiao147_air_norm(const int32_t v[3])
+{
+    uint64_t norm = 0;
+    for (int i = 0; i < 3; ++i) { norm += (int64_t)v[i] * v[i]; }
+    return xiao147_air_sqrt(norm);
 }
 
 /* Fresh accelerometer support is required for zero learning, never as a
@@ -62,6 +94,88 @@ static inline void xiao147_air_gravity(struct xiao147_air_motion *s,
     }
     s->gravity_stable = stable && norm >= 13000LL * 13000 && norm <= 19660LL * 19660;
     s->have_gravity = true; s->gravity_ms = now;
+    /* Only approximately 1g samples may steer the reference. Brief invalid
+     * acceleration holds the last trustworthy direction for at most 100 ms.
+     * A bus failure separately clears have_gravity and fails closed at once. */
+    if (norm >= 13000LL * 13000 && norm <= 19660LL * 19660) {
+        uint32_t length = xiao147_air_sqrt((uint64_t)norm);
+        uint32_t dt = now - s->up_at;
+        int64_t alignment = 0;
+        for (int i = 0; i < 3; ++i) { alignment += (int64_t)a[i] * s->up[i]; }
+        if (s->up_valid && alignment < 0) {
+            /* A discontinuous hemisphere flip is not an interpolation path.
+             * Normalizing a short-step blend of antipodal unit vectors could
+             * otherwise lock forever onto the OLD direction. Silence this
+             * sample; a subsequent fresh trustworthy sample can re-anchor. */
+            s->up_valid = s->project_ready = false;
+            xiao147_air_clear(s);
+            return;
+        }
+        int32_t next[3];
+        for (int i = 0; i < 3; ++i) {
+            int32_t unit = (int32_t)((int64_t)a[i] * 16384 / length);
+            next[i] = !s->up_valid || dt > 100 ? unit : s->up[i] +
+                (int32_t)((int64_t)(unit - s->up[i]) * dt / (80 + dt));
+        }
+        length = xiao147_air_norm(next);
+        if (length) {
+            for (int i = 0; i < 3; ++i) {
+                s->up[i] = (int32_t)((int64_t)next[i] * 16384 / length);
+            }
+            s->up_at = now; s->up_valid = true;
+        }
+    }
+}
+
+/* One physical frame for both flat screen-up and upright grips. Native +X
+ * points down and +Y left in USB-left front view; the front normal -Z follows
+ * the project's right-handed mounting assumption, not a new hardware reading.
+ * World yaw is about UP. Pitch is about the screen's projected RIGHT axis.
+ * Roll about the remaining forward axis is intentionally not cursor motion.
+ * Rates are already logical counts; do not apply another 2D pose rotation. */
+static inline bool xiao147_air_project(struct xiao147_air_motion *s, uint32_t now,
+    enum xiao147_orientation pose, const int16_t raw[3], struct xiao147_xy *rates)
+{
+    *rates = (struct xiao147_xy){0, 0};
+    if (!s->bias_valid || s->calibrating || !s->have_gravity || !s->up_valid ||
+        now - s->up_at > 100 || now - s->gravity_ms > 100) {
+        s->project_ready = false;
+        xiao147_air_clear(s);
+        return false;
+    }
+    int32_t right[3] = {0, 0, 0};
+    switch (pose) {
+    case XIAO147_USB_LEFT: right[1] = -16384; break;
+    case XIAO147_BUTTONS_BOTTOM: right[0] = -16384; break;
+    case XIAO147_USB_RIGHT: right[1] = 16384; break;
+    case XIAO147_BUTTONS_TOP: right[0] = 16384; break;
+    default:
+        s->project_ready = false; xiao147_air_clear(s); return false;
+    }
+    int64_t dot = 0;
+    for (int i = 0; i < 3; ++i) { dot += (int64_t)right[i] * s->up[i]; }
+    dot /= 16384;
+    int32_t horizontal[3];
+    for (int i = 0; i < 3; ++i) {
+        horizontal[i] = right[i] - (int32_t)(dot * s->up[i] / 16384);
+    }
+    uint32_t length = xiao147_air_norm(horizontal);
+    /* Near screen-right parallel to gravity the intended pitch axis is
+     * undefined. Silence with hysteresis, never switch axes or amplify noise. */
+    if (length * 100 < (s->project_ready ? 35U : 50U) * 16384U) {
+        s->project_ready = false; xiao147_air_clear(s); return false;
+    }
+    s->project_ready = true;
+    int64_t yaw = 0, pitch = 0;
+    for (int i = 0; i < 3; ++i) {
+        int32_t omega = (int32_t)raw[i] - s->bias[i];
+        int32_t h = (int32_t)((int64_t)horizontal[i] * 16384 / length);
+        yaw -= (int64_t)omega * s->up[i];
+        pitch -= (int64_t)omega * h;
+    }
+    rates->x = (int)(yaw / 16384);
+    rates->y = (int)(pitch / 16384);
+    return true;
 }
 
 static inline struct xiao147_xy xiao147_air_sample(struct xiao147_air_motion *s,
@@ -75,11 +189,12 @@ static inline struct xiao147_xy xiao147_air_sample(struct xiao147_air_motion *s,
             s->calibrating = !s->bias_valid;
         }
         if (s->calibrating || !s->bias_valid) {
-            bool stable = s->have_gravity && s->gravity_stable && now - s->gravity_ms <= 40;
+            uint8_t blocked = s->have_gravity && s->gravity_stable &&
+                              now - s->gravity_ms <= 40 ? 0 : 1;
             /* Duplicate/stalled polls cannot manufacture a stationary window. */
             if (s->have_calibration_time &&
                 (now == s->calibration_ms || now - s->calibration_ms > 80)) {
-                s->samples = 0; stable = false;
+                s->samples = 0; blocked |= 2;
             }
             s->have_calibration_time = true; s->calibration_ms = now;
             for (int i = 0; i < 3; i++) {
@@ -92,14 +207,15 @@ static inline struct xiao147_xy xiao147_air_sample(struct xiao147_air_motion *s,
                  * admission bound, not an IC specification or motion proof. */
                 if (abs(raw[i]) > 800 ||
                     (s->bias_valid && abs((int)raw[i] - s->bias[i]) > 256)) {
-                    stable = false;
+                    blocked |= 4;
                 }
                 if (s->samples && (abs((int)raw[i] - s->minimum[i]) > 320 ||
                                    abs((int)raw[i] - s->maximum[i]) > 320)) {
-                    stable = false;
+                    blocked |= 8;
                 }
             }
-            if (!stable) { s->samples = 0; }
+            s->calibration_blocked = blocked;
+            if (blocked) { s->samples = 0; }
             else {
                 for (int i = 0; i < 3; i++) {
                     if (!s->samples) { s->sum[i] = 0; s->minimum[i] = s->maximum[i] = raw[i]; }
@@ -118,7 +234,10 @@ static inline struct xiao147_xy xiao147_air_sample(struct xiao147_air_motion *s,
             return (struct xiao147_xy){0, 0};
         }
     }
-    if (!s->bias_valid) { xiao147_air_clear(s); return (struct xiao147_xy){0, 0}; }
+    struct xiao147_xy v;
+    if (!xiao147_air_project(s, now, pose, raw, &v)) {
+        return (struct xiao147_xy){0, 0};
+    }
     uint32_t dt = now - s->last_ms;
     bool first = !s->have_time;
     s->last_ms = now;
@@ -127,8 +246,6 @@ static inline struct xiao147_xy xiao147_air_sample(struct xiao147_air_motion *s,
         return (struct xiao147_xy){0, 0};
     }
     if (!dt) { return (struct xiao147_xy){0, 0}; }
-    struct xiao147_xy v = xiao147_gyro_to_logical(pose, raw[0] - s->bias[0],
-                                                raw[1] - s->bias[1]);
     int32_t values[2] = {v.x, v.y};
     for (int i = 0; i < 2; i++) {
         /* Soft deadband plus immediate rest cutoff: no filtered drift tail. */

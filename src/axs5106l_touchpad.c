@@ -92,6 +92,7 @@ struct axs_touch_data {
 #ifdef CONFIG_LISM_XIAO147_AUTO_TOUCH
     struct xiao147_auto_touch automatic;
     int automatic_endpoint;
+    uint32_t automatic_trace_at;
 #endif
 #ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
     struct xiao147_raw_capture capture;
@@ -309,6 +310,17 @@ static atomic_t capture_gate;
 #ifdef CONFIG_LISM_XIAO147_AUTO_TOUCH
 static atomic_t air_gate = 1;
 static atomic_t air_frame_at;
+/* Sleep restores native reports, so RAW idle leases cannot authorize waking.
+ * Keep a separate, short-lived native no-contact observation for wake only. */
+static atomic_t air_wake_idle;
+static atomic_t air_wake_at;
+
+bool xiao147_touch_allows_air_wake(void)
+{
+    return !atomic_get(&capture_gate) && !xiao147_touch_button_pending() &&
+           atomic_get(&air_wake_idle) &&
+           k_uptime_get_32() - (uint32_t)atomic_get(&air_wake_at) <= 100;
+}
 
 bool xiao147_touch_blocks_air(void)
 {
@@ -828,6 +840,17 @@ static bool axs_auto_poll(struct axs_touch_data *data, bool permit)
     atomic_set(&air_frame_at, data->automatic.frame_at);
     atomic_set(&air_gate, data->pending_button ||
                !xiao147_auto_air_idle(&data->automatic, k_uptime_get_32()));
+    if (xiao147_ui_imu_enabled() &&
+        k_uptime_get_32() - data->automatic_trace_at >= 2000) {
+        LOG_INF("IMU touch gate=%d phase=%d armed=%d blocked=%d shape=%d quiet=%u frame_age=%u allowed=%d cooldown=%d disabled=%d failures=%u",
+                (int)atomic_get(&air_gate), data->automatic.capture.phase,
+                data->automatic.baseline.armed, data->automatic.blocked,
+                data->automatic.hypothesis, data->automatic.air_quiet_frames,
+                data->automatic.have_frame ? k_uptime_get_32() - data->automatic.frame_at : UINT32_MAX,
+                data->automatic.allowed, data->automatic.cooldown, data->automatic.disabled,
+                data->automatic.failures);
+        data->automatic_trace_at = k_uptime_get_32();
+    }
     if (consumed || active) { cancel_contact(data); data->swallow_until_release = true; }
     return consumed;
 }
@@ -894,6 +917,7 @@ static void axs_poll(struct k_work *work)
     }
     if (ret < 0) {
 #ifdef CONFIG_LISM_XIAO147_AUTO_TOUCH
+        atomic_set(&air_wake_idle, 0);
         xiao147_auto_normal(&data->automatic, false, 0, k_uptime_get_32());
 #endif
 #ifdef CONFIG_LISM_XIAO147_RAW_CAPTURE
@@ -917,6 +941,10 @@ static void axs_poll(struct k_work *work)
             if (!point_valid(report, i)) { invalid = true; break; }
         }
     }
+#ifdef CONFIG_LISM_XIAO147_AUTO_TOUCH
+    atomic_set(&air_wake_idle, !invalid && fingers == 0);
+    atomic_set(&air_wake_at, k_uptime_get_32());
+#endif
     /* Capture BEFORE rejection: diagnose count/ID/event nibbles and the full
      * second record even if our current format assumption rejects it. */
     bool first_report = data->reads_extended + data->reads_legacy == 1;

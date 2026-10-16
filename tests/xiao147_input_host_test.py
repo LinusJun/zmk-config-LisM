@@ -129,6 +129,7 @@ static int imu_mode,auto_rotate_mode,restore_landscape,sleeping;
 bool xiao147_ui_is_sleeping(void);
 static int auto_updates,last_auto_pose;
 static uint8_t imu_axes[6];
+static uint8_t accel_axes[6]={0,0,0,0x40,0,0}; /* buttons-bottom upright: +Y up */
 static bool xiao147_ui_imu_enabled(void) {return imu_mode!=0;}
 static bool xiao147_ui_auto_rotate_enabled(void) {return auto_rotate_mode!=0;}
 static void xiao147_ui_set_auto_orientation(enum xiao147_orientation o) {auto_updates++;last_auto_pose=o;}
@@ -139,7 +140,7 @@ static int xiao147_pointer_endpoint(void) {return active_endpoint;}
 static int i2c_write_read_dt(const struct i2c_dt_spec *b,const void *p,size_t n,void *out,size_t len) {
     (void)b;assert(n==1);if(read_error)return read_error;
     if(*(const uint8_t *)p==0x0f){assert(len==1);*(uint8_t *)out=0x6a;}
-    else {assert(len==6);memcpy(out,imu_axes,6);}
+    else {assert(len==6);memcpy(out,*(const uint8_t *)p==0x22?imu_axes:accel_axes,6);}
     if (*(const uint8_t *)p==0x22 && imu_read_hook) {imu_read_hook();}
     return 0;
 }
@@ -199,7 +200,7 @@ static void imu_transition_tests(void) {
         read_error=0;atomic_set(&normal_button_gate,0);
         assert(imu_init(&iv)==0);id.gyro_on=true;id.last_pose=pose;id.output_allowed=true;
         id.motion.bias_valid=true;id.motion.have_time=true;id.motion.last_ms=now;
-        id.motion.filtered[0]=570*256;id.motion.filtered[1]=1220*256;
+        id.motion.filtered[0]=-570*256;id.motion.filtered[1]=1220*256;
         imu_axes[0]=0x14;imu_axes[1]=5;imu_axes[2]=0x8a;imu_axes[3]=2;
         int before=hid_reports;imu_read_hook=change_during_imu_read;
         now+=20;imu_poll(&id.poll_work.work);imu_read_hook=NULL;
@@ -275,12 +276,12 @@ static void ordinary_failure_tests(void) {
         failed_relative=1;failed_relative_code=i?INPUT_REL_Y:INPUT_REL_X;
         id.motion.calibrating=false;id.motion.bias_valid=true;id.output_allowed=true;
         xiao147_air_clear(&id.motion);id.motion.have_time=true;id.motion.last_ms=now;
-        id.motion.filtered[0]=570*256;id.motion.filtered[1]=1220*256;
+        id.motion.filtered[0]=-570*256;id.motion.filtered[1]=1220*256;
         int before=hid_reports;
         now+=20;imu_poll(&id.poll_work.work);
         assert(!failed_relative&&hid_reports==before+i&&id.input_errors==(unsigned)(i+1));
         assert(!id.motion.remainder[0]&&!id.motion.remainder[1]);
-        if(i){assert(host_reports[before].x>0&&!host_reports[before].y);}
+        if(i){assert(host_reports[before].x<0&&!host_reports[before].y);}
         imu_mode=0;now+=20;imu_poll(&id.poll_work.work);
         assert(hid_reports==before+i);
         imu_mode=1;id.gyro_on=true;
@@ -475,17 +476,18 @@ int main(void) {
     /* Actual IMU poll: stable 600 ms, diagonal/flat hold and I2C failure reset. */
     struct imu_data id={0};const struct imu_config ic={0};struct device iv={&id,&ic};
     assert(imu_init(&iv)==0);auto_rotate_mode=1;
-    imu_axes[0]=0x80;imu_axes[1]=0x3e; /* +16000 X */
+    memset(accel_axes,0,6);accel_axes[0]=0x80;accel_axes[1]=0x3e; /* +16000 X */
     for(int i=0;i<30;i++){now+=20;imu_poll(&id.poll_work.work);}assert(auto_updates==0);
     now+=20;imu_poll(&id.poll_work.work);assert(auto_updates==1&&last_auto_pose==2);
-    memset(imu_axes,0,6);now+=20;imu_poll(&id.poll_work.work);assert(!id.auto_rotate_active);
-    imu_axes[2]=0x80;imu_axes[3]=0xc1; /* -16000 Y */
+    memset(accel_axes,0,6);now+=20;imu_poll(&id.poll_work.work);assert(!id.auto_rotate_active);
+    accel_axes[2]=0x80;accel_axes[3]=0xc1; /* -16000 Y */
     now+=20;imu_poll(&id.poll_work.work);assert(id.orientation_candidate==3);
     read_error=-EIO;now+=20;imu_poll(&id.poll_work.work);assert(!id.auto_rotate_active);
     read_error=0;
     for(int i=0;i<30;i++){now+=20;imu_poll(&id.poll_work.work);}assert(auto_updates==1);
     now+=20;imu_poll(&id.poll_work.work);assert(auto_updates==2&&last_auto_pose==3);
     auto_rotate_mode=0;imu_mode=1;pose=1; /* desired buttons-bottom gyro */
+    memset(accel_axes,0,6);accel_axes[3]=0x40;
     imu_axes[0]=0x14;imu_axes[1]=5;imu_axes[2]=0x8a;imu_axes[3]=2; /* gx=1300 gy=650 */
     nrel=0;now+=20;imu_poll(&id.poll_work.work);assert(nrel==0);
     now+=3000;imu_poll(&id.poll_work.work);
@@ -494,7 +496,12 @@ int main(void) {
     now+=20;imu_poll(&id.poll_work.work); /* anchor, not a backlog */
     now+=20;imu_poll(&id.poll_work.work);
     now+=20;imu_poll(&id.poll_work.work);
-    assert(nrel>=2&&rel_value[0]>0&&rel_value[1]>0);
+    bool saw_left=false,saw_down=false;
+    for(int i=0;i<nrel;i++){
+        if(rel_code[i]==INPUT_REL_X&&rel_value[i]<0)saw_left=true;
+        if(rel_code[i]==INPUT_REL_Y&&rel_value[i]>0)saw_down=true;
+    }
+    assert(saw_left&&saw_down); /* fractional axes need not emit on one poll */
     /* Full rate/filter/calibration invariants have their own portable suite. */
     imu_transition_tests();
     ordinary_failure_tests();
@@ -524,3 +531,85 @@ with tempfile.TemporaryDirectory(prefix="xiao147-input-") as directory:
     mutation = subprocess.run([str(binary)],capture_output=True,text=True)
     assert mutation.returncode != 0 and "nkey==(click?2:0)" in mutation.stderr, mutation.stderr
     print("PASS: removing native pair guard reproduces the phantom-right-click regression")
+
+# Exercise the real HID observation wrapper independently of the input queue.
+# Fake transports return success/failure but never replace the implementation
+# under test; every pointer/wheel/button field must pass through unchanged.
+trace = re.sub(r"^#include .*$", "", (root / "src/xiao147_hid_trace.c").read_text(), flags=re.M)
+trace_prelude = r'''
+#include <assert.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
+#define IS_ENABLED(x) (x)
+#define CONFIG_ZMK_USB 1
+#define CONFIG_ZMK_BLE 1
+#define LOG_MODULE_REGISTER(...)
+typedef int atomic_t;
+typedef int atomic_val_t;
+static int atomic_get(int *p){return *p;}
+static int atomic_inc(int *p){return (*p)++;}
+static bool atomic_cas(int *p,int old,int next){if(*p!=old)return false;*p=next;return true;}
+static uint32_t now;
+static uint32_t k_uptime_get_32(void){return now;}
+enum zmk_transport {ZMK_TRANSPORT_NONE,ZMK_TRANSPORT_USB,ZMK_TRANSPORT_BLE};
+struct zmk_endpoint_instance {enum zmk_transport transport;struct {int profile_index;} ble;};
+static struct zmk_endpoint_instance selected;
+static bool usb_ready,ble_connected;
+static struct zmk_endpoint_instance zmk_endpoint_get_selected(void){return selected;}
+static bool zmk_usb_is_hid_ready(void){return usb_ready;}
+static bool zmk_ble_profile_is_connected(int profile){assert(profile==selected.ble.profile_index);return ble_connected;}
+static int zmk_endpoint_instance_to_index(struct zmk_endpoint_instance ep){return ep.transport==ZMK_TRANSPORT_USB?0:1+ep.ble.profile_index;}
+struct zmk_hid_mouse_report_body {uint8_t buttons;int16_t d_x,d_y,d_scroll_y,d_scroll_x;};
+struct zmk_hid_mouse_report {uint8_t report_id;struct zmk_hid_mouse_report_body body;};
+static struct zmk_hid_mouse_report current,forwarded;
+static const struct zmk_hid_mouse_report *zmk_hid_get_mouse_report(void){return &current;}
+static unsigned sends,logs;
+static int send_result;
+static char message[384];
+static void host_log(const char *format,...){
+ va_list args;va_start(args,format);vsnprintf(message,sizeof(message),format,args);va_end(args);logs++;
+}
+#define LOG_INF(...) host_log(__VA_ARGS__)
+int __real_zmk_endpoint_send_mouse_report(void){sends++;forwarded=current;return send_result;}
+'''
+trace_test = r'''
+int main(void){
+ selected.transport=ZMK_TRANSPORT_NONE;assert(xiao147_pointer_endpoint()==-1);
+ selected.transport=ZMK_TRANSPORT_USB;assert(xiao147_pointer_endpoint()==-1);
+ usb_ready=true;assert(xiao147_pointer_endpoint()==0);
+ selected.transport=ZMK_TRANSPORT_BLE;selected.ble.profile_index=4;
+ assert(xiao147_pointer_endpoint()==-1);ble_connected=true;assert(xiao147_pointer_endpoint()==5);
+ selected.transport=ZMK_TRANSPORT_USB;
+ current.report_id=4;current.body=(struct zmk_hid_mouse_report_body){.d_x=37,.d_y=-19};
+ now=2000;assert(__wrap_zmk_endpoint_send_mouse_report()==0&&sends==1&&logs==1);
+ assert(!memcmp(&current,&forwarded,sizeof(current)));
+ assert(strstr(message,"endpoint 0 pointer 37 -19 wheel 0 0 buttons 0x0, send result 0"));
+ /* Observation is rate limited, forwarding never is. */
+ current.body.d_x=-2;now=2100;assert(__wrap_zmk_endpoint_send_mouse_report()==0);
+ assert(sends==2&&logs==1&&!memcmp(&current,&forwarded,sizeof(current)));
+ /* Snapshot remains correct even when the underlying transport fails. */
+ selected.transport=ZMK_TRANSPORT_BLE;selected.ble.profile_index=2;
+ current.body=(struct zmk_hid_mouse_report_body){.buttons=2,.d_x=-300,.d_y=400,.d_scroll_x=3,.d_scroll_y=-4};
+ send_result=-EIO;now=3200;assert(__wrap_zmk_endpoint_send_mouse_report()==-EIO);
+ assert(sends==3&&logs==2&&!memcmp(&current,&forwarded,sizeof(current)));
+ assert(strstr(message,"endpoint 3 pointer -300 400 wheel 3 -4 buttons 0x2, send result -5"));
+ assert(strstr(message,"reports 3 failures 1"));
+ /* An empty failed send still appears; an empty successful send still forwards. */
+ memset(&current.body,0,sizeof(current.body));now=4400;
+ assert(__wrap_zmk_endpoint_send_mouse_report()==-EIO&&sends==4&&logs==3);
+ send_result=0;now=5600;assert(__wrap_zmk_endpoint_send_mouse_report()==0&&sends==5&&logs==3);
+ assert(!memcmp(&current,&forwarded,sizeof(current)));
+ puts("PASS: real HID wrapper observes pointer/wheels/button/transport result, forwards every field unchanged, and gates disconnected USB/BLE endpoints");
+}
+'''
+with tempfile.TemporaryDirectory(prefix="xiao147-hid-trace-") as directory:
+    c = Path(directory)/"trace.c"
+    c.write_text(trace_prelude + trace + trace_test)
+    binary = Path(directory)/"trace"
+    subprocess.run(["cc", "-std=gnu11", "-Wall", "-Wextra", "-Werror",
+                    "-fsanitize=address,undefined", str(c), "-o", str(binary)], check=True)
+    subprocess.run([str(binary)], check=True)

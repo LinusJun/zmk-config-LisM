@@ -89,6 +89,7 @@ static void auto_sample(void *ctx, enum xiao147_raw_type type, uint8_t channels,
     s->frame_at = s->now;
     s->have_frame = true;
     enum xiao147_raw_hypothesis h = profile.hypothesis;
+    s->hypothesis = h;
     if (h == XIAO147_RAW_NONE) {
         if (s->air_quiet_frames < 2) { s->air_quiet_frames++; }
     } else { s->air_quiet_frames = 0; }

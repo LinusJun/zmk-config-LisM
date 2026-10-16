@@ -26,6 +26,7 @@ struct xiao147_auto_touch {
     uint32_t one_positive[XIAO147_PROFILE_CHANNELS];
     struct xiao147_xy one_anchor, one_previous;
     uint8_t orientation, one_frames, release_frames, failures, air_quiet_frames;
+    enum xiao147_raw_hypothesis hypothesis;
     bool quiet, cooldown, disabled, have_frame, blocked, pair_seen;
     bool one_active, one_moved, one_releasing, one_weak_tail, allowed;
 };
