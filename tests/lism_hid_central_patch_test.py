@@ -74,7 +74,11 @@ with tempfile.TemporaryDirectory(prefix="lism-hid-central-") as directory:
                "    is_scanning = true;\n    int err = bt_le_scan_start(BT_LE_SCAN_PASSIVE, split_central_device_found);",
                '    LOG_DBG("Scanning successfully started");',
                "static void split_central_connected(struct bt_conn *conn, uint8_t conn_err) {",
-               "static void split_central_disconnected(struct bt_conn *conn, uint8_t reason) {")
+               "static void split_central_disconnected(struct bt_conn *conn, uint8_t reason) {",
+               "static bool is_enabled;", "    is_enabled = enabled;",
+               '        LOG_DBG("Not scanning, we\'re disabled");',
+               '        LOG_DBG("Scanning already running");',
+               '        LOG_DBG("All devices are connected, scanning is unnecessary");')
     for anchor in anchors:
         patch(central.replace(anchor, "/* moved anchor */", 1), succeeds=False)
         patch(central + "\n" + anchor, succeeds=False)
@@ -90,9 +94,13 @@ with tempfile.TemporaryDirectory(prefix="lism-hid-central-") as directory:
 
     scan = function(output, "static int start_scanning(void) {")
     assert scan[scan.index("{") + 1:].lstrip().startswith(
-        "if (lism_hid_host_scan_paused()) { return 0; }")
+        "atomic_inc(&lism_owner_diag[OWNER_START]);")
+    assert "if (lism_hid_host_scan_paused())" in scan
     assert scan.index("if (err < 0)") < scan.index("is_scanning = true;")
     guard = function(output, "static void split_central_device_found(")
+    assert guard.index("atomic_inc(&lism_owner_diag[OWNER_RX])") < guard.index(
+        "lism_hid_host_claim_ad(addr)")
+    assert "BLE owner diag" not in guard  # RX stays free of diagnostic logs.
     prelude = r'''
 #include <assert.h>
 #include <stdbool.h>
@@ -112,6 +120,11 @@ static const bt_addr_le_t empty = {0};
 static void test_log(const char *fmt,...) {(void)fmt;}
 #define LOG_DBG(...) test_log(__VA_ARGS__)
 #define LOG_ERR(...) test_log(__VA_ARGS__)
+#define LOG_INF(...) test_log(__VA_ARGS__)
+typedef long atomic_t;
+static long atomic_inc(atomic_t *p) {return (*p)++;}
+static long atomic_get(const atomic_t *p) {return *p;}
+static long atomic_set(atomic_t *p,long v) {long old=*p;*p=v;return old;}
 static bt_addr_le_t peripheral_addrs[4];
 static struct {void *conn;} peripherals[4];
 static bool is_enabled = true, is_scanning, need_hid, claim_hid, paused;
@@ -138,6 +151,15 @@ static int bt_le_scan_start(int mode,void (*cb)(const bt_addr_le_t *,int8_t,uint
     pause = output[output.index("int lism_hid_scan_pause(void)"):output.index("\nvoid lism_hid_scan_resume")]
     stop = function(output, "static int stop_scanning(void) {")
     resume = function(output, "void lism_hid_scan_resume(void) {")
+    diagnostic_support = output[output.index("/* LISM owner diagnostics begin:"):
+                                output.index("/* LISM owner diagnostics end */")]
+    # Compile the actual assignments from set_enabled without exercising its
+    # unrelated peripheral disconnect/event machinery.
+    enable_body = function(output, "static int split_central_bt_set_enabled(bool enabled) {")
+    enable_prefix = enable_body[enable_body.index("{") + 1:enable_body.index("    if (enabled)")]
+    assert enable_prefix.strip() == ("is_enabled = enabled;\n"
+                                    "    atomic_set(&lism_owner_diag[OWNER_ENABLED], enabled);")
+    enable_mirror = "static void set_enabled_prefix(bool enabled) {" + enable_prefix + "}\n"
     checks = r'''
 int main(void) {
     bt_addr_le_t known={1,10},unknown={1,11},same_bytes_wrong_type={0,10};
@@ -151,21 +173,39 @@ int main(void) {
     claim_hid=true;split_central_device_found(&known,-30,1,&ad);assert(split_connections==1);
     split_central_device_found(&unknown,-30,0,&ad);assert(parsed==0);
     claim_hid=false;split_central_device_found(&unknown,-30,0,&ad);assert(parsed==1);
+    assert(atomic_get(&lism_owner_diag[OWNER_RX])==5);
+    set_enabled_prefix(false);assert(!is_enabled&&atomic_get(&lism_owner_diag[OWNER_ENABLED])==0);
+    set_enabled_prefix(true);assert(is_enabled&&atomic_get(&lism_owner_diag[OWNER_ENABLED])==1);
     for(int i=0;i<4;i++)peripherals[i].conn=(void*)1;
     assert(start_scanning()==0 && attempts==0);
+    assert(atomic_get(&lism_owner_diag[OWNER_FULL])==1);
     need_hid=true;assert(start_scanning()==0 && attempts==1 && is_scanning);
+    assert(atomic_get(&lism_owner_diag[OWNER_START_CALL])==1);
+    assert(atomic_get(&lism_owner_diag[OWNER_SCAN_CACHE])==1);
     assert(start_scanning()==0 && attempts==1);
+    assert(atomic_get(&lism_owner_diag[OWNER_CACHED])==1);
     is_scanning=false;scan_result=-5;assert(start_scanning()==-5 && !is_scanning);
+    assert(atomic_get(&lism_owner_diag[OWNER_START_RC])==-5);
+    assert(atomic_get(&lism_owner_diag[OWNER_START_CALL])==2);
     scan_result=0;assert(start_scanning()==0 && attempts==3 && is_scanning);
+    assert(atomic_get(&lism_owner_diag[OWNER_START_RC])==0);
     is_scanning=false;is_enabled=false;assert(start_scanning()==0 && attempts==3);
+    assert(atomic_get(&lism_owner_diag[OWNER_DISABLED])==1);
     is_enabled=true;need_hid=false;peripherals[0].conn=NULL;
     assert(start_scanning()==0 && attempts==4 && is_scanning);
     stop_result=-5;assert(lism_hid_scan_pause()==-5&&stops==1&&is_scanning);
+    assert(atomic_get(&lism_owner_diag[OWNER_STOP_CALL])==1);
+    assert(atomic_get(&lism_owner_diag[OWNER_STOP_RC])==-5);
+    assert(atomic_get(&lism_owner_diag[OWNER_SCAN_CACHE])==1);
     stop_result=0;assert(lism_hid_scan_pause()==0&&stops==2&&!is_scanning);
+    assert(atomic_get(&lism_owner_diag[OWNER_SCAN_CACHE])==0);
     assert(lism_hid_scan_pause()==0&&stops==2);
     paused=true;assert(start_scanning()==0&&!is_scanning&&attempts==4);
+    assert(atomic_get(&lism_owner_diag[OWNER_PAUSED])==1);
     paused=false;assert(start_scanning()==0&&is_scanning&&attempts==5);
     stop_result=-EALREADY;assert(lism_hid_scan_pause()==0&&stops==3&&!is_scanning);
+    assert(atomic_get(&lism_owner_diag[OWNER_STOP_RC])==-EALREADY);
+    assert(atomic_get(&lism_owner_diag[OWNER_SCAN_CACHE])==0);
     /* The expired explicit HID window must stop active scanning if every split
      * peer is connected. A missing split still owns an independent scan need. */
     stop_result=0;need_hid=true;lism_hid_scan_resume();assert(is_scanning&&attempts==6);
@@ -175,11 +215,27 @@ int main(void) {
     need_hid=false;lism_hid_scan_resume();assert(is_scanning&&stops==4);
     paused=true;peripherals[0].conn=(void*)1;lism_hid_scan_resume();assert(is_scanning&&stops==4);
     paused=false;lism_hid_scan_resume();assert(!is_scanning&&stops==5);
+    assert(atomic_get(&lism_owner_diag[OWNER_RESUME])==6);
+    assert(atomic_get(&lism_owner_diag[OWNER_START_CALL])==attempts);
+    assert(atomic_get(&lism_owner_diag[OWNER_STOP_CALL])==stops);
+    lism_hid_scan_diagnostics();
+    assert(atomic_get(&lism_owner_diag[OWNER_RX])==5); /* logging never resets */
+    /* EALREADY remains an error on start; cache is not falsely set. */
+    scan_result=-EALREADY;assert(start_scanning()==0); /* all split peers full */
+    need_hid=true;assert(start_scanning()==-EALREADY&&!is_scanning);
+    assert(atomic_get(&lism_owner_diag[OWNER_START_RC])==-EALREADY);
+    assert(atomic_get(&lism_owner_diag[OWNER_SCAN_CACHE])==0);
+    assert(atomic_get(&lism_owner_diag[OWNER_START])==
+           atomic_get(&lism_owner_diag[OWNER_START_CALL])+
+           atomic_get(&lism_owner_diag[OWNER_PAUSED])+
+           atomic_get(&lism_owner_diag[OWNER_DISABLED])+
+           atomic_get(&lism_owner_diag[OWNER_CACHED])+
+           atomic_get(&lism_owner_diag[OWNER_FULL]));
     return 0;
 }
 '''
     c, executable = temp / "guard.c", temp / "guard"
-    c.write_text(prelude + accessor + guard + scan + stop + pause + resume + checks)
+    c.write_text(prelude + diagnostic_support + enable_mirror + accessor + guard + scan + stop + pause + resume + checks)
     subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
                     "-fsanitize=address,undefined", str(c), "-o", str(executable)], check=True)
     subprocess.run([str(executable)], check=True)

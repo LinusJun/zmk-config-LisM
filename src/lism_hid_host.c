@@ -125,7 +125,12 @@ static atomic_t pending_release, endpoint_generation, endpoint_reset_generation;
 static atomic_t event_fault, emergency_command, closed_index;
 static atomic_t scan_needed, scan_paused, advertisements_enabled;
 static atomic_t pairing_diagnostics, advertisements_seen, advertisements_dropped;
+/* Lifetime RX-entry count is deliberately independent of the advertisement
+ * gate and per-window accepted/drop counters. Never reset it at scan start. */
+static atomic_t raw_callbacks, scan_register_calls, scan_register_result;
 static uint32_t diagnostics_at;
+static uint32_t diagnostics_raw_baseline;
+static bool diagnostics_start_pending, diagnostics_end_pending;
 static uint8_t own_buttons;
 static uint16_t button_reports_seen;
 static int input_endpoint = -1;
@@ -553,6 +558,7 @@ static bool parse_ad(struct bt_data *data, void *context)
 }
 static void scan_received(const struct bt_le_scan_recv_info *info, struct net_buf_simple *data)
 {
+    atomic_inc(&raw_callbacks);
     if (!atomic_get(&advertisements_enabled)) { return; }
     bool diagnostics = atomic_get(&pairing_diagnostics) != 0;
     if (diagnostics) { atomic_inc(&advertisements_seen); }
@@ -590,6 +596,27 @@ static void scanner_state(void)
     atomic_set(&scan_needed, need);
     atomic_set(&advertisements_enabled, need);
     if (!atomic_get(&scan_paused)) { lism_hid_scan_resume(); }
+}
+static uint32_t scan_raw_delta(void)
+{
+    return (uint32_t)atomic_get(&raw_callbacks) - diagnostics_raw_baseline;
+}
+static void scan_diagnostic_snapshot(const char *reason)
+{
+    /* Observation only. In particular, bt_is_ready is not a reason to start,
+     * restart or stop scanning, reconnect, clear bonds, or alter any gate. */
+    LOG_INF("BLE scan diag v1 %s settings=%d peer=%d suspended=%d paused=%d needed=%d adv=%d bt_ready=%d",
+            reason, settings_ready, peer != NULL, reconnect_suspended,
+            atomic_get(&scan_paused) != 0, atomic_get(&scan_needed) != 0,
+            atomic_get(&advertisements_enabled) != 0, bt_is_ready());
+    LOG_INF("BLE scan diag v1 counts raw=%lu delta=%lu seen=%lu dropped=%lu register_calls=%lu register_rc=%ld",
+            (unsigned long)(uint32_t)atomic_get(&raw_callbacks),
+            (unsigned long)scan_raw_delta(),
+            (unsigned long)(uint32_t)atomic_get(&advertisements_seen),
+            (unsigned long)(uint32_t)atomic_get(&advertisements_dropped),
+            (unsigned long)(uint32_t)atomic_get(&scan_register_calls),
+            (long)atomic_get(&scan_register_result));
+    lism_hid_scan_diagnostics();
 }
 bool lism_hid_host_scan_needed(void) { return atomic_get(&scan_needed) != 0; }
 bool lism_hid_host_scan_paused(void) { return atomic_get(&scan_paused) != 0; }
@@ -854,6 +881,8 @@ static void handle_command(struct command_event request)
     uint32_t now = k_uptime_get_32();
     if (request.kind == CMD_PAIR) {
         if (peer) { message("Mouse busy; cancel or forget first"); return; }
+        diagnostics_raw_baseline = (uint32_t)atomic_get(&raw_callbacks);
+        diagnostics_start_pending = true;
         reconnect_suspended = false;
         if (have_saved) { message("Waiting for saved mouse advertisement"); scanner_state(); return; }
         k_mutex_lock(&state_lock, K_FOREVER);
@@ -884,6 +913,7 @@ static void handle_command(struct command_event request)
                 k_mutex_lock(&state_lock, K_FOREVER);
                 snprintf(status.name, sizeof(status.name), "%s", c->public.name);
                 status.pairing = false; pairing_until = 0;
+                if (atomic_get(&pairing_diagnostics)) { diagnostics_end_pending = true; }
                 atomic_clear(&pairing_diagnostics);
                 k_mutex_unlock(&state_lock);
             }
@@ -894,6 +924,7 @@ static void handle_command(struct command_event request)
         advertisement_pending = false;
         k_mutex_lock(&state_lock, K_FOREVER);
         pairing_until = 0; status.pairing = false;
+        if (atomic_get(&pairing_diagnostics)) { diagnostics_end_pending = true; }
         atomic_clear(&pairing_diagnostics);
         k_mutex_unlock(&state_lock);
         begin_close(request.kind == CMD_FORGET ? "Forgetting selected mouse" : "Pairing cancelled");
@@ -1117,14 +1148,8 @@ static void control(struct k_work *work)
     if (pairing_until && elapsed(now, pairing_until)) {
         k_mutex_lock(&state_lock, K_FOREVER); pairing_until = 0; status.pairing = false; k_mutex_unlock(&state_lock);
         atomic_clear(&pairing_diagnostics);
-        LOG_INF("BLE scan ended: received %ld dropped %ld", (long)atomic_get(&advertisements_seen),
-                (long)atomic_get(&advertisements_dropped));
+        diagnostics_end_pending = true;
         message("Scan expired; tap Start scan");
-    }
-    if (atomic_get(&pairing_diagnostics) && now - diagnostics_at >= 10000) {
-        diagnostics_at = now;
-        LOG_INF("BLE scan: received %ld dropped %ld", (long)atomic_get(&advertisements_seen),
-                (long)atomic_get(&advertisements_dropped));
     }
     if (peer && elapsed(now, deadline)) {
         if (phase == DISCONNECTING) { begin_close("Waiting for mouse teardown"); }
@@ -1135,6 +1160,20 @@ static void control(struct k_work *work)
     if (atomic_get(&clear_input) || atomic_get(&pending_release) ||
         k_msgq_num_used_get(&frames)) { kick_input(); }
     scanner_state();
+    /* The initial/end snapshots must see the coordinated scanner gates, not
+     * their previous values before scanner_state() has published them. */
+    if (diagnostics_start_pending) {
+        diagnostics_start_pending = false;
+        diagnostics_at = now;
+        scan_diagnostic_snapshot("start");
+    } else if (atomic_get(&pairing_diagnostics) && now - diagnostics_at >= 10000) {
+        diagnostics_at = now;
+        scan_diagnostic_snapshot("periodic");
+    }
+    if (diagnostics_end_pending) {
+        diagnostics_end_pending = false;
+        scan_diagnostic_snapshot("end");
+    }
 }
 static void tick(struct k_work *work)
 {
@@ -1189,7 +1228,8 @@ void lism_hid_host_select(uint8_t index, uint32_t token) { request(CMD_SELECT, i
 void lism_hid_host_forget(void) { request(CMD_FORGET, 0, 0); }
 static int init(void)
 {
-    bt_le_scan_cb_register(&scan_callbacks);
+    atomic_inc(&scan_register_calls);
+    atomic_set(&scan_register_result, bt_le_scan_cb_register(&scan_callbacks));
     message("BLE relative mouse bridge (test)");
     return 0;
 }

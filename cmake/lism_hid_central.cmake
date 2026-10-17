@@ -44,6 +44,32 @@ endfunction()
 
 function(lism_hid_patch_central input output header)
   file(READ "${input}" code)
+  set(diagnostics [=[/* LISM owner diagnostics begin: atomic observations, never scan control. */
+enum lism_owner_counter {
+    OWNER_RESUME, OWNER_START, OWNER_PAUSED, OWNER_DISABLED, OWNER_CACHED,
+    OWNER_FULL, OWNER_START_CALL, OWNER_START_RC, OWNER_STOP_CALL, OWNER_STOP_RC,
+    OWNER_RX, OWNER_ENABLED, OWNER_SCAN_CACHE, OWNER_COUNTER_COUNT
+};
+static atomic_t lism_owner_diag[OWNER_COUNTER_COUNT];
+void lism_hid_scan_diagnostics(void) {
+    LOG_INF("BLE owner diag resume=%ld start=%ld skip paused=%ld disabled=%ld cached=%ld full=%ld",
+            (long)atomic_get(&lism_owner_diag[OWNER_RESUME]),
+            (long)atomic_get(&lism_owner_diag[OWNER_START]),
+            (long)atomic_get(&lism_owner_diag[OWNER_PAUSED]),
+            (long)atomic_get(&lism_owner_diag[OWNER_DISABLED]),
+            (long)atomic_get(&lism_owner_diag[OWNER_CACHED]),
+            (long)atomic_get(&lism_owner_diag[OWNER_FULL]));
+    LOG_INF("BLE owner diag enabled=%ld cached_scanning=%ld start_call=%ld last_rc=%ld stop_call=%ld last_rc=%ld callback=%ld (cache not controller proof)",
+            (long)atomic_get(&lism_owner_diag[OWNER_ENABLED]),
+            (long)atomic_get(&lism_owner_diag[OWNER_SCAN_CACHE]),
+            (long)atomic_get(&lism_owner_diag[OWNER_START_CALL]),
+            (long)atomic_get(&lism_owner_diag[OWNER_START_RC]),
+            (long)atomic_get(&lism_owner_diag[OWNER_STOP_CALL]),
+            (long)atomic_get(&lism_owner_diag[OWNER_STOP_RC]),
+            (long)atomic_get(&lism_owner_diag[OWNER_RX]));
+}
+/* LISM owner diagnostics end */
+]=])
   set(stop_old [=[static int stop_scanning(void) {
     LOG_DBG("Stopping peripheral scanning");
     is_scanning = false;
@@ -58,19 +84,27 @@ function(lism_hid_patch_central input output header)
 }]=])
   set(stop_new [=[static int stop_scanning(void) {
     LOG_DBG("Stopping peripheral scanning");
+    atomic_inc(&lism_owner_diag[OWNER_STOP_CALL]);
     int err = bt_le_scan_stop();
+    atomic_set(&lism_owner_diag[OWNER_STOP_RC], err);
     if (err < 0 && err != -EALREADY) {
         LOG_ERR("Stop LE scan failed (err %d)", err);
         return err;
     }
     is_scanning = false;
+    atomic_set(&lism_owner_diag[OWNER_SCAN_CACHE], false);
     return 0;
 }]=])
   lism_hid_replace_once(code "${stop_old}" "${stop_new}")
   lism_hid_replace_once(code "#include <zmk/ble.h>"
-    "#include <zmk/ble.h>\n#include \"${header}\"\nextern bool lism_split_known_addr(const bt_addr_le_t *addr);")
+    "#include <zmk/ble.h>\n#include <zephyr/sys/atomic.h>\n#include \"${header}\"\nextern bool lism_split_known_addr(const bt_addr_le_t *addr);")
+  lism_hid_replace_once(code "static bool is_enabled;"
+    "${diagnostics}\nstatic bool is_enabled;")
+  lism_hid_replace_once(code "    is_enabled = enabled;"
+    "    is_enabled = enabled;\n    atomic_set(&lism_owner_diag[OWNER_ENABLED], enabled);")
   set(scan_api [=[int lism_hid_scan_pause(void) { return is_scanning ? stop_scanning() : 0; }
 void lism_hid_scan_resume(void) {
+    atomic_inc(&lism_owner_diag[OWNER_RESUME]);
     if (lism_hid_host_scan_paused()) { return; }
     bool needed = lism_hid_host_scan_needed();
     for (size_t i = 0; i < ARRAY_SIZE(peripherals); i++) {
@@ -84,10 +118,16 @@ void lism_hid_scan_resume(void) {
   lism_hid_replace_once(code "static bool split_central_eir_found(const bt_addr_le_t *addr) {"
     "${scan_api}static bool split_central_eir_found(const bt_addr_le_t *addr) {")
   lism_hid_replace_once(code "static int start_scanning(void) {"
-    "static int start_scanning(void) {\n    if (lism_hid_host_scan_paused()) { return 0; }")
+    "static int start_scanning(void) {\n    atomic_inc(&lism_owner_diag[OWNER_START]);\n    if (lism_hid_host_scan_paused()) { atomic_inc(&lism_owner_diag[OWNER_PAUSED]); return 0; }")
+  lism_hid_replace_once(code "        LOG_DBG(\"Not scanning, we're disabled\");"
+    "        atomic_inc(&lism_owner_diag[OWNER_DISABLED]);\n        LOG_DBG(\"Not scanning, we're disabled\");")
+  lism_hid_replace_once(code "        LOG_DBG(\"Scanning already running\");"
+    "        atomic_inc(&lism_owner_diag[OWNER_CACHED]);\n        LOG_DBG(\"Scanning already running\");")
+  lism_hid_replace_once(code "        LOG_DBG(\"All devices are connected, scanning is unnecessary\");"
+    "        atomic_inc(&lism_owner_diag[OWNER_FULL]);\n        LOG_DBG(\"All devices are connected, scanning is unnecessary\");")
   lism_hid_replace_once(code
     "                                       struct net_buf_simple *ad) {\n    char dev[BT_ADDR_LE_STR_LEN];"
-    "                                       struct net_buf_simple *ad) {\n    if (lism_hid_host_claim_ad(addr)) { return; }\n    char dev[BT_ADDR_LE_STR_LEN];")
+    "                                       struct net_buf_simple *ad) {\n    atomic_inc(&lism_owner_diag[OWNER_RX]);\n    if (lism_hid_host_claim_ad(addr)) { return; }\n    char dev[BT_ADDR_LE_STR_LEN];")
   lism_hid_replace_once(code
     "    } else if (type == BT_GAP_ADV_TYPE_ADV_DIRECT_IND) {\n        split_central_eir_found(addr);"
     "    } else if (type == BT_GAP_ADV_TYPE_ADV_DIRECT_IND && lism_split_known_addr(addr)) {\n        split_central_eir_found(addr);")
@@ -95,9 +135,9 @@ void lism_hid_scan_resume(void) {
     "    bool has_unconnected = lism_hid_host_scan_needed();")
   lism_hid_replace_once(code
     "    is_scanning = true;\n    int err = bt_le_scan_start(BT_LE_SCAN_PASSIVE, split_central_device_found);"
-    "    int err = bt_le_scan_start(BT_LE_SCAN_ACTIVE, split_central_device_found);")
+    "    atomic_inc(&lism_owner_diag[OWNER_START_CALL]);\n    int err = bt_le_scan_start(BT_LE_SCAN_ACTIVE, split_central_device_found);\n    atomic_set(&lism_owner_diag[OWNER_START_RC], err);")
   lism_hid_replace_once(code "    LOG_DBG(\"Scanning successfully started\");"
-    "    is_scanning = true;\n    LOG_DBG(\"Scanning successfully started\");")
+    "    is_scanning = true;\n    atomic_set(&lism_owner_diag[OWNER_SCAN_CACHE], true);\n    LOG_DBG(\"Scanning successfully started\");")
   lism_hid_replace_once(code
     "static void split_central_connected(struct bt_conn *conn, uint8_t conn_err) {"
     "static void split_central_connected(struct bt_conn *conn, uint8_t conn_err) {\n    if (peripheral_slot_for_conn(conn) == NULL) { return; }")

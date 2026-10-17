@@ -21,6 +21,7 @@ prelude = r'''
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <stdarg.h>
 #include "lism_hid_parser.h"
 #define ARG_UNUSED(x) (void)(x)
 #define MIN(a,b) ((a)<(b)?(a):(b))
@@ -32,7 +33,7 @@ prelude = r'''
 #define K_FOREVER -1
 #define K_MSEC(x) (x)
 #define LOG_MODULE_REGISTER(...)
-#define LOG_INF(...)
+#define LOG_INF(...) mock_log(__VA_ARGS__)
 #define LOG_WRN(...)
 #define INPUT_EV_MSC 4
 #define ZMK_HID_MOUSE_NUM_BUTTONS 5
@@ -52,6 +53,17 @@ static const zmk_event_t *as_zmk_endpoint_changed(const zmk_event_t *event){retu
 #define SETTINGS_STATIC_HANDLER_DEFINE(...)
 #define SYS_INIT(...)
 static int rx;
+static unsigned diagnostic_logs;
+static char last_diagnostic_gates[512],last_diagnostic_counts[512];
+static void mock_log(const char *format,...){
+ assert(!rx);char line[768];va_list args;va_start(args,format);
+ vsnprintf(line,sizeof(line),format,args);va_end(args);
+ if(strstr(line,"BLE scan diag v1 counts")){
+   diagnostic_logs++;snprintf(last_diagnostic_counts,sizeof(last_diagnostic_counts),"%.511s",line);
+ }else if(strstr(line,"BLE scan diag v1")){
+   diagnostic_logs++;snprintf(last_diagnostic_gates,sizeof(last_diagnostic_gates),"%.511s",line);
+ }
+}
 static uint32_t now;
 typedef int atomic_t;
 static int atomic_get(atomic_t *a){return *a;}
@@ -170,10 +182,15 @@ struct bt_le_scan_recv_info {const bt_addr_le_t *addr;int8_t rssi;uint16_t adv_p
 struct bt_le_scan_cb {void (*recv)(const struct bt_le_scan_recv_info *,struct net_buf_simple *);};
 static uint16_t sys_get_le16(const uint8_t *p){return p[0]|p[1]<<8;}
 static void bt_data_parse(struct net_buf_simple *b,bool (*f)(struct bt_data *,void *),void *p){for(size_t i=0;i<b->len;){unsigned n=b->data[i++];if(!n||i+n>b->len)return;struct bt_data d={b->data[i],n-1,b->data+i+1};if(!f(&d,p))return;i+=n;}}
-static void bt_le_scan_cb_register(struct bt_le_scan_cb *c){(void)c;}
+static int registration_attempts,registration_result=-EALREADY;
+static bool bluetooth_ready;
+static int bt_le_scan_cb_register(struct bt_le_scan_cb *c){(void)c;assert(!rx);registration_attempts++;return registration_result;}
+static bool bt_is_ready(void){assert(!rx);return bluetooth_ready;}
 static int resumes,pauses;
 void lism_hid_scan_resume(void){assert(!rx);resumes++;}
 int lism_hid_scan_pause(void){assert(!rx);pauses++;return 0;}
+static unsigned owner_diagnostics;
+void lism_hid_scan_diagnostics(void){assert(!rx);owner_diagnostics++;}
 '''
 checks = r'''
 static const uint8_t mouse_map[]={
@@ -355,8 +372,63 @@ static void connectable_lease_regression(void){
  assert(peer&&creates==before+1&&selected_seen==0);
  lism_hid_host_cancel();pump();done();
 }
+static void preboot_diagnostics(void){
+ assert(!settings_ready&&!scan_register_calls&&!registration_attempts);
+ /* An uninvoked registration is explicitly represented by calls=0, rather
+  * than interpreting a zero-initialized return code as successful setup. */
+ scan_diagnostic_snapshot("preboot");
+ assert(strstr(last_diagnostic_counts,"register_calls=0"));
+ ad(1,true,true);assert(raw_callbacks==1&&!advertisements_seen&&!advertisements.count);
+ assert(!scan_needed&&!advertisements_enabled&&!creates&&!unpairs&&!saves);
+ init();assert(scan_register_calls==1&&registration_attempts==1);
+ assert(scan_register_result==-EALREADY); /* real return, not a synthesized 0 */
+ assert(!scan_needed&&!advertisements_enabled&&!creates&&!unpairs&&!saves);
+}
+static void diagnostic_regression(void){
+ assert(!peer&&!have_saved);now=5000;bluetooth_ready=false;
+ uint32_t raw_before=(uint32_t)atomic_get(&raw_callbacks);
+ unsigned owner_before=owner_diagnostics;scan_start();
+ assert(diagnostics_raw_baseline==raw_before&&scan_raw_delta()==0);
+ assert(owner_diagnostics==owner_before+1&&strstr(last_diagnostic_gates,"v1 start"));
+ assert(strstr(last_diagnostic_gates,"settings=1 peer=0 suspended=0 paused=0 needed=1 adv=1 bt_ready=0"));
+ char expected_registration[64];snprintf(expected_registration,sizeof(expected_registration),
+       "register_calls=1 register_rc=%d",-EALREADY);
+ assert(strstr(last_diagnostic_counts,expected_registration));
+ /* The Bluetooth-not-ready diagnostic must not change existing scan policy. */
+ assert(scan_needed&&advertisements_enabled);
+ raw_ad(97,0,true,0,NULL,0);assert(scan_raw_delta()==1&&advertisements_seen==1);
+ atomic_clear(&advertisements_enabled);uint32_t accepted=advertisements_seen;
+ raw_ad(97,0,true,0,NULL,0);
+ assert(scan_raw_delta()==2&&(uint32_t)advertisements_seen==accepted);
+ atomic_clear(&advertisements_enabled);
+ /* Direct read-only dump itself cannot scan, connect, mutate settings/bonds
+  * or re-enable gates. The normal coordinator remains the sole policy owner. */
+ int old_resume=resumes,old_pause=pauses,old_create=creates;
+ int old_save=saves,old_delete=deletes,old_unpair=unpairs;
+ scan_diagnostic_snapshot("read-only");
+ assert(resumes==old_resume&&pauses==old_pause&&creates==old_create);
+ assert(saves==old_save&&deletes==old_delete&&unpairs==old_unpair&&!advertisements_enabled);
+ pump();bluetooth_ready=true;now+=9999;owner_before=owner_diagnostics;pump();
+ assert(owner_diagnostics==owner_before);now++;pump();
+ assert(owner_diagnostics==owner_before+1&&strstr(last_diagnostic_gates,"v1 periodic"));
+ assert(strstr(last_diagnostic_gates,"bt_ready=1")&&strstr(last_diagnostic_counts,"delta=2 seen=1"));
+ now+=50000;pump();assert(!status.pairing&&!scan_needed&&!advertisements_enabled);
+ assert(strstr(last_diagnostic_gates,"v1 end")&&strstr(last_diagnostic_gates,"needed=0 adv=0"));
+ assert(saves==old_save&&deletes==old_delete&&unpairs==old_unpair&&creates==old_create);
+ /* Lifetime counter is never reset at pair. Its window subtraction is
+  * unsigned, including callbacks crossing UINT32_MAX while gate is off. */
+ atomic_set(&raw_callbacks,-2);scan_start();assert(diagnostics_raw_baseline==UINT32_MAX-1);
+ atomic_clear(&advertisements_enabled);
+ for(unsigned i=0;i<3;i++){raw_ad(98,0,true,0,NULL,0);atomic_clear(&advertisements_enabled);}
+ assert((uint32_t)atomic_get(&raw_callbacks)==1&&scan_raw_delta()==3&&!advertisements_seen);
+ scan_diagnostic_snapshot("wrap");assert(strstr(last_diagnostic_counts,"raw=1 delta=3 seen=0"));
+ lism_hid_host_cancel();pump();assert(strstr(last_diagnostic_gates,"v1 end"));
+ registration_result=0;init();assert(scan_register_calls==2&&registration_attempts==2&&scan_register_result==0);
+ scan_diagnostic_snapshot("registered");assert(strstr(last_diagnostic_counts,"register_calls=2 register_rc=0"));
+ assert(saves==old_save&&deletes==old_delete&&unpairs==old_unpair&&creates==old_create);
+}
 int main(void){
- boot();start();to_subscribe();assert(!saves&&!status.ready);
+ preboot_diagnostics();boot();start();to_subscribe();assert(!saves&&!status.ready);
  rx=1;subscribed_cb(&connection,0,sp);rx=0;assert(!status.ready);pump();
  assert(phase==READY&&status.ready&&input_ready&&saves==1&&have_saved);
  struct input_event kick={INPUT_EV_MSC,INPUT_KICK};bridge_input(&kick,NULL);
@@ -418,6 +490,7 @@ int main(void){
  assert(!connection.refs);
  advertisement_regression();assert(!connection.refs);
  connectable_lease_regression();assert(!connection.refs);
+ diagnostic_regression();assert(!connection.refs);
  puts("PASS actual HID coordinator: callback context, discovery/map/reference/CCC/READY, mouse, cancellation/late callbacks, subscribe/map rejection, named discovery/ADV aggregation/cache expiry/name priority/address type/exact UUIDs/12 stable slots/tokens/diagnostics, exact fresh reconnect, target-only forget, overflow and clock wrap");
  return 0;
 }

@@ -32,3 +32,5 @@ bool lism_hid_host_scan_paused(void);
 bool lism_hid_host_claim_ad(const bt_addr_le_t *addr);
 void lism_hid_scan_resume(void);
 int lism_hid_scan_pause(void);
+/* Read-only scanner-owner snapshot; invoked only by host coordinator logs. */
+void lism_hid_scan_diagnostics(void);
