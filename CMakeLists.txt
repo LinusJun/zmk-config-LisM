@@ -15,6 +15,28 @@ if(CONFIG_LISM_PROSPECTOR_LOCK_INDICATORS OR CONFIG_LISM_XIAO147_TOUCH OR CONFIG
     set_source_files_properties("${_hid_central_src}" "${_hid_ble_src}" "${_hid_endpoints_src}"
       DIRECTORY "${APPLICATION_SOURCE_DIR}" PROPERTIES HEADER_FILE_ONLY ON)
     zephyr_library_sources("${_hid_central_copy}" "${_hid_ble_copy}" "${_hid_endpoints_copy}")
+    if(CONFIG_SHIELD_PROSPECTOR_ADAPTER)
+      include("${CMAKE_CURRENT_LIST_DIR}/cmake/lism_hid_observer.cmake")
+      get_filename_component(_hid_west_root "${ZEPHYR_BASE}" DIRECTORY)
+      set(_hid_observer_module "${_hid_west_root}/prospector-zmk-module")
+      set(_hid_observer_src
+          "${_hid_observer_module}/src/split/bluetooth/central_status_changed_observer.c")
+      set(_hid_observer_copy "${CMAKE_CURRENT_BINARY_DIR}/lism_hid_prospector_observer.c")
+      lism_hid_patch_observer("${_hid_observer_src}" "${_hid_observer_copy}")
+      # This config module is configured before Prospector. Set the original
+      # source's directory-scoped property only after that module exists.
+      set_property(GLOBAL PROPERTY LISM_HID_OBSERVER_SOURCE "${_hid_observer_src}")
+      set_property(GLOBAL PROPERTY LISM_HID_OBSERVER_MODULE "${_hid_observer_module}")
+      function(lism_hid_finish_observer_override)
+        get_property(_source GLOBAL PROPERTY LISM_HID_OBSERVER_SOURCE)
+        get_property(_module GLOBAL PROPERTY LISM_HID_OBSERVER_MODULE)
+        set_source_files_properties("${_source}"
+          DIRECTORY "${_module}" PROPERTIES HEADER_FILE_ONLY ON)
+      endfunction()
+      cmake_language(DEFER DIRECTORY "${APPLICATION_SOURCE_DIR}"
+        CALL lism_hid_finish_observer_override)
+      zephyr_library_sources("${_hid_observer_copy}")
+    endif()
   endif()
   zephyr_library_sources_ifdef(CONFIG_LISM_CHARGE_TELEMETRY src/lism_charge.c)
   if(CONFIG_LISM_CHARGE_TELEMETRY)

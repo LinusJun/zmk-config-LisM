@@ -91,6 +91,18 @@ with tempfile.TemporaryDirectory(prefix="lism-hid-central-") as directory:
     endpoint_anchor = "    zmk_hid_mouse_clear();"
     patch(source_endpoints=endpoints.replace(endpoint_anchor, "/* moved clear */", 1), succeeds=False)
     patch(source_endpoints=endpoints + "\n" + endpoint_anchor, succeeds=False)
+    settings_anchor = ('#if IS_ENABLED(CONFIG_SETTINGS)\n'
+                       '    settings_register(&ble_central_settings_handler);\n'
+                       '    return 0;\n#else\n    return finish_init();\n'
+                       '#endif // IS_ENABLED(CONFIG_SETTINGS)')
+    patch(central.replace(settings_anchor, "/* moved settings init */", 1), succeeds=False)
+    patch(central + "\n" + settings_anchor, succeeds=False)
+    patched_init = function(output, "static int zmk_split_bt_central_init(void) {")
+    assert patched_init.index("settings_subsys_init()") < patched_init.index("settings_register(")
+    assert "settings_load(" not in patched_init and "settings_save" not in patched_init
+    assert "settings_delete(" not in patched_init
+    assert "BLE central settings registered" in patched_init
+    assert "SYS_INIT(zmk_split_bt_central_init, APPLICATION, CONFIG_ZMK_BLE_INIT_PRIORITY);" in output
 
     scan = function(output, "static int start_scanning(void) {")
     assert scan[scan.index("{") + 1:].lstrip().startswith(
@@ -127,6 +139,13 @@ static long atomic_get(const atomic_t *p) {return *p;}
 static long atomic_set(atomic_t *p,long v) {long old=*p;*p=v;return old;}
 static bt_addr_le_t peripheral_addrs[4];
 static struct {void *conn;} peripherals[4];
+struct bt_conn {int identity;};
+static void *peripheral_slot_for_conn(struct bt_conn *conn) {
+    for(size_t i=0;i<ARRAY_SIZE(peripherals);i++) {
+        if(peripherals[i].conn==conn)return &peripherals[i];
+    }
+    return NULL;
+}
 static bool is_enabled = true, is_scanning, need_hid, claim_hid, paused;
 static int attempts, scan_result, split_connections, parsed, stops, stop_result;
 struct net_buf_simple {unsigned len;};
@@ -160,8 +179,17 @@ static int bt_le_scan_start(int mode,void (*cb)(const bt_addr_le_t *,int8_t,uint
     assert enable_prefix.strip() == ("is_enabled = enabled;\n"
                                     "    atomic_set(&lism_owner_diag[OWNER_ENABLED], enabled);")
     enable_mirror = "static void set_enabled_prefix(bool enabled) {" + enable_prefix + "}\n"
+    owns_connection = function(output, "bool lism_split_owns_connection(struct bt_conn *conn) {")
     checks = r'''
 int main(void) {
+    struct bt_conn owned={1},unowned={2};
+    assert(!lism_split_owns_connection(NULL));
+    assert(!lism_split_owns_connection(&unowned));
+    peripherals[3].conn=&owned;
+    assert(lism_split_owns_connection(&owned));
+    assert(!lism_split_owns_connection(&unowned));
+    peripherals[3].conn=NULL;
+    assert(!lism_split_owns_connection(&owned));
     bt_addr_le_t known={1,10},unknown={1,11},same_bytes_wrong_type={0,10};
     peripheral_addrs[2]=known;
     assert(!lism_split_known_addr(NULL));assert(!lism_split_known_addr(BT_ADDR_LE_ANY));
@@ -235,7 +263,7 @@ int main(void) {
 }
 '''
     c, executable = temp / "guard.c", temp / "guard"
-    c.write_text(prelude + diagnostic_support + enable_mirror + accessor + guard + scan + stop + pause + resume + checks)
+    c.write_text(prelude + diagnostic_support + enable_mirror + owns_connection + accessor + guard + scan + stop + pause + resume + checks)
     subprocess.run(["cc", "-std=c11", "-Wall", "-Wextra", "-Werror",
                     "-fsanitize=address,undefined", str(c), "-o", str(executable)], check=True)
     subprocess.run([str(executable)], check=True)

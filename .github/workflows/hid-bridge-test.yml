@@ -6,6 +6,10 @@ on:
 jobs:
   regression:
     runs-on: ubuntu-latest
+    env:
+      LISM_ZMK_APP: pinned-zmk/app
+      LISM_ZEPHYR_BASE: pinned-zephyr
+      LISM_PROSPECTOR_MODULE: pinned-prospector
     steps:
       - uses: actions/checkout@v7
       - uses: actions/checkout@v7
@@ -13,6 +17,16 @@ jobs:
           repository: zmkfirmware/zmk
           ref: 9ebbeff0a8b69a42f14aec022cdf16c7a107b9e0
           path: pinned-zmk
+      - uses: actions/checkout@v7
+        with:
+          repository: zmkfirmware/zephyr
+          ref: 10ba6d0cb38bc3d258775d27982f707599320085
+          path: pinned-zephyr
+      - uses: actions/checkout@v7
+        with:
+          repository: carrefinho/prospector-zmk-module
+          ref: ed98221f3b52b7066dbb10ba3af8a29150b93a5a
+          path: pinned-prospector
       - name: Bounded descriptor and source ownership tests
         run: |
           python3 tests/lism_hid_parser_host_test.py

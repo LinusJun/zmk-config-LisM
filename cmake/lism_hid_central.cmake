@@ -102,6 +102,32 @@ void lism_hid_scan_diagnostics(void) {
     "${diagnostics}\nstatic bool is_enabled;")
   lism_hid_replace_once(code "    is_enabled = enabled;"
     "    is_enabled = enabled;\n    atomic_set(&lism_owner_diag[OWNER_ENABLED], enabled);")
+  # Dynamic handlers registered before settings_subsys_init() would be lost
+  # when that subsystem first initializes its list. Do not depend on the link
+  # order of central and BLE SYS_INIT entries sharing APPLICATION priority.
+  set(settings_old [=[#if IS_ENABLED(CONFIG_SETTINGS)
+    settings_register(&ble_central_settings_handler);
+    return 0;
+#else
+    return finish_init();
+#endif // IS_ENABLED(CONFIG_SETTINGS)]=])
+  set(settings_new [=[#if IS_ENABLED(CONFIG_SETTINGS)
+    int err = settings_subsys_init();
+    if (err != 0) {
+        LOG_ERR("BLE central settings subsystem init failed (err %d)", err);
+        return err;
+    }
+    err = settings_register(&ble_central_settings_handler);
+    if (err != 0) {
+        LOG_ERR("BLE central settings registration failed (err %d)", err);
+        return err;
+    }
+    LOG_INF("BLE central settings registered");
+    return 0;
+#else
+    return finish_init();
+#endif // IS_ENABLED(CONFIG_SETTINGS)]=])
+  lism_hid_replace_once(code "${settings_old}" "${settings_new}")
   set(scan_api [=[int lism_hid_scan_pause(void) { return is_scanning ? stop_scanning() : 0; }
 void lism_hid_scan_resume(void) {
     atomic_inc(&lism_owner_diag[OWNER_RESUME]);
@@ -140,7 +166,7 @@ void lism_hid_scan_resume(void) {
     "    is_scanning = true;\n    atomic_set(&lism_owner_diag[OWNER_SCAN_CACHE], true);\n    LOG_DBG(\"Scanning successfully started\");")
   lism_hid_replace_once(code
     "static void split_central_connected(struct bt_conn *conn, uint8_t conn_err) {"
-    "static void split_central_connected(struct bt_conn *conn, uint8_t conn_err) {\n    if (peripheral_slot_for_conn(conn) == NULL) { return; }")
+    "bool lism_split_owns_connection(struct bt_conn *conn) {\n    return conn != NULL && peripheral_slot_for_conn(conn) != NULL;\n}\n\nstatic void split_central_connected(struct bt_conn *conn, uint8_t conn_err) {\n    if (peripheral_slot_for_conn(conn) == NULL) { return; }")
   lism_hid_replace_once(code
     "static void split_central_disconnected(struct bt_conn *conn, uint8_t reason) {"
     "static void split_central_disconnected(struct bt_conn *conn, uint8_t reason) {\n    if (peripheral_slot_for_conn(conn) == NULL) { return; }")
