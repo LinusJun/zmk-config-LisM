@@ -3,7 +3,8 @@
 #include <stdint.h>
 #include <zephyr/bluetooth/addr.h>
 
-#define LISM_HID_CANDIDATES 3
+#define LISM_HID_CANDIDATES 12
+#define LISM_HID_VISIBLE_CANDIDATES 3
 struct lism_hid_candidate {
     uint32_t token;
     char name[24];
@@ -13,6 +14,7 @@ struct lism_hid_candidate {
 };
 struct lism_hid_status {
     uint32_t generation;
+    uint32_t advertisements_seen, advertisements_dropped;
     bool pairing, connected, ready, saved, unsupported;
     uint8_t seconds_left;
     char message[48], name[24];

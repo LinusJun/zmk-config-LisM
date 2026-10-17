@@ -158,6 +158,10 @@ struct callbacks {void (*connected)(struct bt_conn *,uint8_t);void (*disconnecte
 #define BT_DATA_NAME_SHORTENED 8
 #define BT_DATA_UUID16_ALL 3
 #define BT_DATA_UUID16_SOME 2
+#define BT_DATA_UUID128_ALL 7
+#define BT_DATA_UUID128_SOME 6
+#define BT_DATA_SVC_DATA16 0x16
+#define BT_DATA_SVC_DATA128 0x21
 #define BT_DATA_GAP_APPEARANCE 25
 #define BT_GAP_ADV_PROP_CONNECTABLE 1
 struct bt_data {uint8_t type,data_len;const uint8_t *data;};
@@ -218,6 +222,138 @@ static void to_reference(void){
 static void to_subscribe(void){
  to_reference();
  uint8_t ref[]={0,1};read_data(ref,2);assert(phase==SUBSCRIBE&&sp&&sp->ccc_handle==7);
+}
+static void scan_start(void){
+ assert(!peer&&!have_saved);lism_hid_host_pair();pump();assert(status.pairing);
+}
+static void raw_ad(unsigned identity,unsigned address_type,bool connectable,
+                   unsigned field,const uint8_t *value,unsigned length){
+ assert(length<=60);bt_addr_le_t a={.type=address_type,.a={{identity}}};
+ uint8_t bytes[64]={length+1,field};if(length)memcpy(bytes+2,value,length);
+ struct net_buf_simple b={bytes,field?length+2:0};
+ struct bt_le_scan_recv_info i={&a,-43,connectable?1:0};
+ rx=1;scan_received(&i,&b);rx=0;pump();
+}
+static void named(unsigned id,unsigned type,bool connectable,bool complete,const char *name){
+ raw_ad(id,type,connectable,complete?BT_DATA_NAME_COMPLETE:BT_DATA_NAME_SHORTENED,
+        (const uint8_t *)name,strlen(name));
+}
+static unsigned candidate_count(void){unsigned n=0;for(unsigned i=0;i<LISM_HID_CANDIDATES;i++){n+=candidates[i].public.valid;}return n;}
+static void advertisement_regression(void){
+ int initial_creates=creates,initial_saves=saves,initial_unpairs=unpairs;
+ scan_start();named(20,0,true,true,"Logitech G705");
+ assert(candidate_count()==1&&!peer&&creates==initial_creates);
+ assert(!strcmp(candidates[0].public.name,"Logitech G705"));
+ /* Real name permits discovery, never bypasses HIDS validation. */
+ lism_hid_host_select(0,candidates[0].public.token);pump();assert(peer);connect_ok();
+ discovery_end();assert(phase==DISCONNECTING&&!status.ready&&!input_ready);
+ done();assert(saves==initial_saves&&unpairs==initial_unpairs);
+
+ /* ADV and SCAN_RSP may arrive in either order. A response itself is not
+  * connectable: only the same address/type's recent ADV supplies that bit. */
+ scan_start();raw_ad(21,0,true,0,NULL,0);assert(!candidate_count());
+ named(21,0,false,true,"Mouse response");assert(candidate_count()==1&&!peer);
+ scan_start();named(22,0,false,true,"Response first");assert(!candidate_count());
+ raw_ad(22,0,true,0,NULL,0);assert(candidate_count()==1&&!peer);
+ /* Expire the entire cache entry, not just its connectable/HID flags. */
+ scan_start();named(23,0,false,true,"Expired name");now+=2001;
+ raw_ad(23,0,true,0,NULL,0);assert(!candidate_count());
+ scan_start();raw_ad(24,0,true,0,NULL,0);now+=2001;
+ named(24,0,false,true,"Late response");assert(!candidate_count());
+ scan_start();ad(24,false,true);now+=2001;
+ raw_ad(24,0,true,0,NULL,0);assert(!candidate_count());
+
+ scan_start();named(25,0,true,true,"Public mouse");
+ named(25,1,true,true,"Random mouse");assert(candidate_count()==2);
+ assert(candidates[0].addr.type!=candidates[1].addr.type);
+ named(25,0,false,false,"Pub");
+ assert(!strcmp(candidates[0].public.name,"Public mouse"));
+ named(25,0,false,true,"Public full replacement");
+ assert(!strcmp(candidates[0].public.name,"Public full replacement"));
+
+ static const uint8_t hids128[]={0xfb,0x34,0x9b,0x5f,0x80,0,0,0x80,
+                              0,0x10,0,0,0x12,0x18,0,0};
+ scan_start();raw_ad(26,0,true,BT_DATA_UUID128_ALL,hids128,sizeof(hids128));
+ assert(candidate_count()==1&&!peer);
+ uint8_t lookalike[16];memcpy(lookalike,hids128,16);lookalike[15]=1;
+ raw_ad(27,0,true,BT_DATA_UUID128_SOME,lookalike,16);assert(candidate_count()==1);
+ raw_ad(28,0,true,BT_DATA_UUID128_ALL,hids128,15);assert(candidate_count()==1);
+ uint8_t reversed[16];for(unsigned i=0;i<16;i++){reversed[i]=hids128[15-i];}
+ raw_ad(29,0,true,BT_DATA_UUID128_ALL,reversed,16);assert(candidate_count()==1);
+ uint8_t trailing[17];memcpy(trailing,hids128,16);trailing[16]=0;
+ raw_ad(30,0,true,BT_DATA_UUID128_SOME,trailing,17);assert(candidate_count()==1);
+ raw_ad(31,0,true,BT_DATA_SVC_DATA128,hids128,16);assert(candidate_count()==2);
+ uint8_t svc16[]={0x12,0x18,0xff};
+ raw_ad(32,0,true,BT_DATA_SVC_DATA16,svc16,3);assert(candidate_count()==3);
+ scan_start();named(33,0,true,true,"   ");assert(!candidate_count());
+ /* Complete-name priority also applies to duplicate fields in one packet. */
+ struct ad_fields fields={0};
+ struct bt_data complete={BT_DATA_NAME_COMPLETE,9,(const uint8_t *)"Full name"};
+ struct bt_data short_name={BT_DATA_NAME_SHORTENED,4,(const uint8_t *)"Full"};
+ parse_ad(&complete,&fields);parse_ad(&short_name,&fields);
+ assert(fields.name_complete&&!strcmp(fields.name,"Full name"));
+
+ /* Queue pressure remains observable without replacing control events or
+  * automatically connecting any newly visible device. */
+ scan_start();bt_addr_le_t flood_addr={.a={{34}}};
+ struct net_buf_simple empty_payload={NULL,0};
+ struct bt_le_scan_recv_info flood_info={&flood_addr,-45,1};
+ unsigned received=advertisements.cap+2;
+ rx=1;for(unsigned i=0;i<received;i++){scan_received(&flood_info,&empty_payload);}rx=0;
+ struct lism_hid_status snapshot;lism_hid_host_snapshot(&snapshot);
+ assert(snapshot.advertisements_seen==received&&snapshot.advertisements_dropped==2);
+ pump();assert(!peer&&!candidate_count());
+
+ /* Twelve stable slots, no RSSI resorting/replacement, old scan tokens cannot
+  * select a new identity at the same visual index. */
+ scan_start();uint32_t tokens[LISM_HID_CANDIDATES];
+ for(unsigned i=0;i<LISM_HID_CANDIDATES;i++){
+   char name[24];snprintf(name,sizeof(name),"Mouse %u",i);
+   named(40+i,0,true,true,name);tokens[i]=candidates[i].public.token;
+   assert(tokens[i]&&candidates[i].addr.a.val[0]==40+i);
+ }
+ assert(LISM_HID_CANDIDATES==12&&candidate_count()==12&&!peer);
+ named(90,0,true,true,"Thirteenth device");assert(candidate_count()==12);
+ for(unsigned i=0;i<LISM_HID_CANDIDATES;i++){
+   assert(candidates[i].public.token==tokens[i]&&candidates[i].addr.a.val[0]==40+i);
+ }
+ named(40,0,true,false,"M");assert(candidates[0].public.token==tokens[0]);
+ assert(!strcmp(candidates[0].public.name,"Mouse 0"));
+ scan_start();named(91,0,true,true,"New generation");int n=creates;
+ lism_hid_host_select(0,tokens[0]);pump();assert(creates==n&&!peer);
+ uint32_t fresh=candidates[0].public.token;now+=2001;
+ lism_hid_host_select(0,fresh);pump();assert(creates==n&&!peer);
+ named(91,0,true,true,"New generation");
+ lism_hid_host_select(0,fresh);pump();assert(peer&&connection.addr.a.val[0]==91);
+ lism_hid_host_cancel();pump();done();
+ assert(saves==initial_saves&&unpairs==initial_unpairs);
+}
+static void connectable_lease_regression(void){
+ /* Non-connectable SCAN_RSP/name traffic may keep a candidate visible, but
+  * must never renew the independently aged connectable-ADV evidence. */
+ for(unsigned wrap=0;wrap<2;wrap++){
+   uint32_t first=wrap?UINT32_MAX-1000:0;now=first;scan_start();
+   named(95,0,true,true,"Fresh ADV mouse");
+   assert(candidate_count()==1&&candidates[0].last_connectable_seen==first);
+   uint32_t token=candidates[0].public.token;
+   for(unsigned response=0;response<3;response++){
+     now+=750;named(95,0,false,true,"Fresh ADV mouse");
+     assert(candidates[0].seen==now&&candidates[0].last_connectable_seen==first);
+   }
+   int before=creates;lism_hid_host_select(0,token);pump();
+   assert(creates==before&&!peer&&status.pairing);
+   /* A genuinely new connectable ADV restores eligibility at the same slot
+    * and token; timestamp zero and wrap are values, not sentinel states. */
+   raw_ad(95,0,true,0,NULL,0);
+   assert(candidates[0].last_connectable_seen==now&&candidates[0].public.token==token);
+   lism_hid_host_select(0,token);pump();assert(creates==before+1&&peer);
+   lism_hid_host_cancel();pump();done();
+ }
+ /* Selection at uptime zero is legal before any lease has elapsed. */
+ now=0;scan_start();named(96,0,true,true,"Zero timestamp mouse");
+ int before=creates;lism_hid_host_select(0,candidates[0].public.token);pump();
+ assert(peer&&creates==before+1&&selected_seen==0);
+ lism_hid_host_cancel();pump();done();
 }
 int main(void){
  boot();start();to_subscribe();assert(!saves&&!status.ready);
@@ -280,7 +416,9 @@ int main(void){
  now=UINT32_MAX-100;start();now+=SESSION_TIMEOUT_MS-1;pump();assert(phase==CONNECTING);
  now++;pump();assert(phase==DISCONNECTING);done();
  assert(!connection.refs);
- puts("PASS actual HID coordinator: callback context, discovery/map/reference/CCC/READY, mouse, cancellation/late callbacks, subscribe/map rejection, scan aggregation/tokens, exact fresh reconnect, target-only forget, overflow and clock wrap");
+ advertisement_regression();assert(!connection.refs);
+ connectable_lease_regression();assert(!connection.refs);
+ puts("PASS actual HID coordinator: callback context, discovery/map/reference/CCC/READY, mouse, cancellation/late callbacks, subscribe/map rejection, named discovery/ADV aggregation/cache expiry/name priority/address type/exact UUIDs/12 stable slots/tokens/diagnostics, exact fresh reconnect, target-only forget, overflow and clock wrap");
  return 0;
 }
 '''

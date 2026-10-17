@@ -105,9 +105,12 @@ static lv_obj_t *hid_message;
 static lv_obj_t *hid_limit;
 static lv_obj_t *hid_action;
 static lv_obj_t *hid_action_label;
-static lv_obj_t *hid_rows[LISM_HID_CANDIDATES];
-static lv_obj_t *hid_names[LISM_HID_CANDIDATES];
-static lv_obj_t *hid_details[LISM_HID_CANDIDATES];
+static lv_obj_t *hid_more, *hid_more_label;
+static lv_obj_t *hid_rows[LISM_HID_VISIBLE_CANDIDATES];
+static lv_obj_t *hid_names[LISM_HID_VISIBLE_CANDIDATES];
+static lv_obj_t *hid_details[LISM_HID_VISIBLE_CANDIDATES];
+#define HID_CANDIDATE_PAGES ((LISM_HID_CANDIDATES + LISM_HID_VISIBLE_CANDIDATES - 1) / LISM_HID_VISIBLE_CANDIDATES)
+static uint8_t hid_page, hid_drawn_page, hid_press_page;
 static uint32_t hid_forget_deadline;
 static bool hid_tap_active;
 static uint16_t hid_tap_x, hid_tap_y;
@@ -243,12 +246,24 @@ static void layout_devices(bool portrait)
 }
 
 #if defined(CONFIG_LISM_BLE_HID_BRIDGE)
+static void hid_mouse_draw_snapshot(const struct lism_hid_status *status)
+{
+    if (!hid_drawn_valid || status->generation != hid_drawn_status.generation) {
+        hid_page = 0;
+        hid_tap_active = false;
+    }
+    hid_drawn_status = *status;
+    hid_drawn_page = hid_page;
+    hid_drawn_valid = true;
+}
+
 static void draw_hid_mouse(void)
 {
     const bool portrait = xiao147_rotation_is_portrait();
     const int width = portrait ? SCREEN_H : SCREEN_W;
     struct lism_hid_status status = {0};
     lism_hid_host_snapshot(&status);
+    hid_mouse_draw_snapshot(&status);
     lv_label_set_text(title_label, "BLE Mouse (test)");
     lv_obj_set_size(hid_group, width, portrait ? SCREEN_W : SCREEN_H);
     lv_obj_set_pos(hid_message, 9, portrait ? 36 : 25);
@@ -258,7 +273,7 @@ static void draw_hid_mouse(void)
         snprintf(text, sizeof(text), "%s: %.23s", status.ready ? "Ready" : "Connected",
                  status.name[0] ? status.name : "BLE mouse");
     } else if (status.pairing) {
-        snprintf(text, sizeof(text), "Select mouse (%us)", status.seconds_left);
+        snprintf(text, sizeof(text), "Select BLE device (%us)", status.seconds_left);
     } else {
         snprintf(text, sizeof(text), "%.47s", status.message[0] ? status.message :
                  status.saved ? "Saved mouse; reconnecting" : "No mouse paired");
@@ -273,8 +288,9 @@ static void draw_hid_mouse(void)
                       status.connected || status.saved ?
                       confirm ? "Tap again: forget mouse" : "Forget mouse" : "Start scan (60s)");
     lv_obj_center(hid_action_label);
-    for (int i = 0; i < LISM_HID_CANDIDATES; i++) {
-        const struct lism_hid_candidate *candidate = &status.candidates[i];
+    for (int i = 0; i < LISM_HID_VISIBLE_CANDIDATES; i++) {
+        const int index = hid_page * LISM_HID_VISIBLE_CANDIDATES + i;
+        const struct lism_hid_candidate *candidate = &status.candidates[index];
         lv_obj_set_pos(hid_rows[i], 9, (portrait ? 120 : 78) + i * (portrait ? 44 : 23));
         lv_obj_set_size(hid_rows[i], width - 18, portrait ? 40 : 21);
         lv_obj_set_pos(hid_names[i], 5, portrait ? 2 : 3);
@@ -282,7 +298,7 @@ static void draw_hid_mouse(void)
         lv_obj_set_pos(hid_details[i], portrait ? 5 : 147, portrait ? 20 : 3);
         lv_obj_set_width(hid_details[i], portrait ? width - 28 : 150);
         lv_label_set_text(hid_names[i], candidate->valid ?
-                          candidate->name[0] ? candidate->name : "Unnamed HID" : "--");
+                          candidate->name[0] ? candidate->name : "Unnamed BLE" : "--");
         text[0] = '\0';
         if (candidate->valid) {
             snprintf(text, sizeof(text), "%.17s %ddBm", candidate->address, candidate->rssi);
@@ -295,21 +311,28 @@ static void draw_hid_mouse(void)
         lv_obj_set_style_opa(hid_rows[i], status.pairing && candidate->valid ?
                              LV_OPA_COVER : LV_OPA_50, LV_PART_MAIN);
     }
-    lv_obj_set_pos(hid_limit, 9, portrait ? 262 : 150);
-    lv_obj_set_width(hid_limit, width - 18);
-    lv_label_set_text(hid_limit, status.unsupported ?
-                      portrait ? "Unsupported features;\nmouse only, no raw gestures" :
-                                 "Unsupported features; mouse only" :
+    lv_obj_set_pos(hid_limit, 9, portrait ? 262 : 147);
+    lv_obj_set_width(hid_limit, portrait ? width - 18 : 218);
+    lv_label_set_text(hid_limit, status.pairing ?
+                      portrait ? "BLE devices; HID\nchecked after select" :
+                                 "BLE devices; HID checked\nafter select" :
                       portrait ? "Mouse only; raw\ngestures unsupported" :
-                                 "Mouse only; raw gestures unsupported");
-    hid_drawn_status = status;
-    hid_drawn_valid = true;
+                                 "Mouse only; raw\ngestures unsupported");
+    lv_obj_set_pos(hid_more, portrait ? 9 : 230, portrait ? 288 : 147);
+    lv_obj_set_size(hid_more, portrait ? width - 18 : 81, portrait ? 28 : 24);
+    snprintf(text, sizeof(text), "More %u/%u", hid_page + 1U,
+             (unsigned)HID_CANDIDATE_PAGES);
+    lv_label_set_text(hid_more_label, text);
+    lv_obj_center(hid_more_label);
+    lv_obj_set_style_opa(hid_more, status.pairing ? LV_OPA_COVER : LV_OPA_50,
+                         LV_PART_MAIN);
 }
 
 static void hid_mouse_press(void)
 {
     hid_tap_active = hid_drawn_valid;
     hid_press_status = hid_drawn_status;
+    hid_press_page = hid_drawn_page;
 }
 
 static void hid_mouse_tap(uint16_t x, uint16_t y)
@@ -319,7 +342,9 @@ static void hid_mouse_tap(uint16_t x, uint16_t y)
     if (x < 9 || x >= width - 9) { return; }
     struct lism_hid_status status = {0};
     lism_hid_host_snapshot(&status);
-    if (!hid_drawn_valid || status.generation != hid_press_status.generation) { return; }
+    if (!hid_tap_active || !hid_drawn_valid ||
+        hid_page != hid_press_page || hid_drawn_page != hid_press_page ||
+        status.generation != hid_press_status.generation) { return; }
     if (y >= (portrait ? 76 : 48) && y < (portrait ? 110 : 73)) {
         if (status.pairing != hid_press_status.pairing ||
             status.saved != hid_press_status.saved ||
@@ -338,17 +363,26 @@ static void hid_mouse_tap(uint16_t x, uint16_t y)
             lism_hid_host_pair();
         }
     } else if (status.pairing && hid_press_status.pairing) {
+        if (x >= (portrait ? 9 : 230) && x < (portrait ? width - 9 : 311) &&
+            y >= (portrait ? 288 : 147) && y < (portrait ? 316 : 171)) {
+            hid_page = (hid_page + 1) % HID_CANDIDATE_PAGES;
+            hid_tap_active = false;
+            redraw(NULL);
+            return;
+        }
         const int start = portrait ? 120 : 78;
         const int stride = portrait ? 44 : 23;
         const int height = portrait ? 40 : 21;
         if (y >= start) {
             int row = (y - start) / stride;
-            if (row < LISM_HID_CANDIDATES && (y - start) % stride < height &&
-                status.candidates[row].valid && hid_press_status.candidates[row].valid &&
-                status.candidates[row].token == hid_press_status.candidates[row].token &&
-                strcmp(status.candidates[row].address, hid_press_status.candidates[row].address) == 0 &&
-                strcmp(status.candidates[row].name, hid_press_status.candidates[row].name) == 0) {
-                lism_hid_host_select(row, hid_press_status.candidates[row].token);
+            const int index = hid_press_page * LISM_HID_VISIBLE_CANDIDATES + row;
+            if (row < LISM_HID_VISIBLE_CANDIDATES && index < LISM_HID_CANDIDATES &&
+                (y - start) % stride < height &&
+                status.candidates[index].valid && hid_press_status.candidates[index].valid &&
+                status.candidates[index].token == hid_press_status.candidates[index].token &&
+                strcmp(status.candidates[index].address, hid_press_status.candidates[index].address) == 0 &&
+                strcmp(status.candidates[index].name, hid_press_status.candidates[index].name) == 0) {
+                lism_hid_host_select(index, hid_press_status.candidates[index].token);
             }
         }
     }
@@ -928,7 +962,18 @@ static void create_ui(struct k_work *work)
     lv_obj_set_style_text_font(hid_message, &XiaoMenu_Bold_12, LV_PART_MAIN);
     lv_obj_set_style_text_font(hid_limit, &XiaoMenu_Bold_12, LV_PART_MAIN);
     lv_obj_set_style_text_font(hid_action_label, &XiaoMenu_Bold_12, LV_PART_MAIN);
-    for (int i = 0; i < LISM_HID_CANDIDATES; i++) {
+    hid_more = lv_obj_create(hid_group);
+    lv_obj_set_style_bg_color(hid_more, lv_color_hex(COLOR_CARD), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(hid_more, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(hid_more, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(hid_more, lv_color_hex(COLOR_ACCENT), LV_PART_MAIN);
+    lv_obj_set_style_radius(hid_more, 5, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(hid_more, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(hid_more, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    hid_more_label = make_label(hid_more, 0, 0, 78, "", COLOR_TEXT);
+    lv_obj_set_style_text_font(hid_more_label, &XiaoMenu_Bold_12, LV_PART_MAIN);
+    lv_obj_set_style_text_align(hid_more_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    for (int i = 0; i < LISM_HID_VISIBLE_CANDIDATES; i++) {
         hid_rows[i] = lv_obj_create(hid_group);
         lv_obj_set_style_bg_color(hid_rows[i], lv_color_hex(COLOR_CARD), LV_PART_MAIN);
         lv_obj_set_style_bg_opa(hid_rows[i], LV_OPA_COVER, LV_PART_MAIN);

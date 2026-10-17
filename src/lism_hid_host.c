@@ -31,7 +31,7 @@
 LOG_MODULE_REGISTER(lism_hid_host, LOG_LEVEL_INF);
 #define MAX_CHARS 24
 #define MAX_REPORT_CHARS 16
-#define ADV_CACHE_SIZE 8
+#define ADV_CACHE_SIZE 24
 #define INPUT_KICK 0x7ffe
 #define SAVED_VERSION 1
 #define SESSION_TIMEOUT_MS 20000
@@ -48,14 +48,15 @@ struct candidate {
     bt_addr_le_t addr;
     struct lism_hid_candidate public;
     uint32_t seen;
-    bool connectable, hid_hint;
+    uint32_t last_connectable_seen;
+    bool connectable, hid_hint, has_name, name_complete;
 };
 struct ad_event {
     bt_addr_le_t addr;
     char name[24];
     uint32_t seen;
     int8_t rssi;
-    bool connectable, hid_hint;
+    bool connectable, hid_hint, name_complete;
 };
 struct report_char {
     uint16_t value, end, ccc, reference;
@@ -123,6 +124,8 @@ static atomic_t epoch, input_ready, input_fault, clear_input;
 static atomic_t pending_release, endpoint_generation, endpoint_reset_generation;
 static atomic_t event_fault, emergency_command, closed_index;
 static atomic_t scan_needed, scan_paused, advertisements_enabled;
+static atomic_t pairing_diagnostics, advertisements_seen, advertisements_dropped;
+static uint32_t diagnostics_at;
 static uint8_t own_buttons;
 static uint16_t button_reports_seen;
 static int input_endpoint = -1;
@@ -133,7 +136,7 @@ K_MUTEX_DEFINE(state_lock);
 K_MUTEX_DEFINE(report_lock);
 K_MSGQ_DEFINE(frames, sizeof(struct raw_frame), 16, 4);
 K_MSGQ_DEFINE(bt_events, sizeof(struct bt_event), 32, 4);
-K_MSGQ_DEFINE(advertisements, sizeof(struct ad_event), 8, 4);
+K_MSGQ_DEFINE(advertisements, sizeof(struct ad_event), 16, 4);
 K_MSGQ_DEFINE(commands, sizeof(struct command_event), 8, 4);
 static void control(struct k_work *work);
 static void tick(struct k_work *work);
@@ -500,20 +503,47 @@ BT_CONN_CB_DEFINE(mouse_callbacks) = {
     .security_changed = security_changed,
 };
 
-struct ad_fields { char name[24]; bool hid; };
+struct ad_fields { char name[24]; bool hid, name_complete; };
+static bool hid_uuid128(const uint8_t *uuid)
+{
+    /* Full Bluetooth base UUID, in the little-endian advertising encoding.
+     * Never match the 0x1812 substring inside an unrelated vendor UUID. */
+    static const uint8_t expected[16] = {
+        0xfb, 0x34, 0x9b, 0x5f, 0x80, 0x00, 0x00, 0x80,
+        0x00, 0x10, 0x00, 0x00, 0x12, 0x18, 0x00, 0x00};
+    return !memcmp(uuid, expected, sizeof(expected));
+}
 static bool parse_ad(struct bt_data *data, void *context)
 {
     struct ad_fields *fields = context;
     if (data->type == BT_DATA_NAME_COMPLETE || data->type == BT_DATA_NAME_SHORTENED) {
         size_t length = MIN(data->data_len, sizeof(fields->name) - 1);
+        bool nonempty = false;
+        for (size_t i = 0; i < length; i++) {
+            /* UTF-8 names are still real names even though the small UI font
+             * currently substitutes non-ASCII bytes for safe display. */
+            nonempty |= data->data[i] > 32 && data->data[i] != 127;
+        }
+        if (!nonempty || (fields->name_complete && data->type != BT_DATA_NAME_COMPLETE)) {
+            return true;
+        }
         for (size_t i = 0; i < length; i++) {
             fields->name[i] = data->data[i] >= 32 && data->data[i] < 127 ? data->data[i] : '?';
         }
         fields->name[length] = 0;
+        fields->name_complete = data->type == BT_DATA_NAME_COMPLETE;
     } else if (data->type == BT_DATA_UUID16_ALL || data->type == BT_DATA_UUID16_SOME) {
-        for (size_t i = 0; i + 1 < data->data_len; i += 2) {
+        for (size_t i = 0; data->data_len % 2 == 0 && i + 1 < data->data_len; i += 2) {
             if (sys_get_le16(data->data + i) == 0x1812) { fields->hid = true; }
         }
+    } else if (data->type == BT_DATA_UUID128_ALL || data->type == BT_DATA_UUID128_SOME) {
+        for (size_t i = 0; data->data_len % 16 == 0 && i + 15 < data->data_len; i += 16) {
+            fields->hid |= hid_uuid128(data->data + i);
+        }
+    } else if (data->type == BT_DATA_SVC_DATA16 && data->data_len >= 2) {
+        fields->hid |= sys_get_le16(data->data) == 0x1812;
+    } else if (data->type == BT_DATA_SVC_DATA128 && data->data_len >= 16) {
+        fields->hid |= hid_uuid128(data->data);
     } else if (data->type == BT_DATA_GAP_APPEARANCE && data->data_len == 2) {
         uint16_t appearance = sys_get_le16(data->data);
         fields->hid |= appearance == 0x03c0 || appearance == 0x03c2 || appearance == 0x03c9;
@@ -524,17 +554,20 @@ static bool parse_ad(struct bt_data *data, void *context)
 static void scan_received(const struct bt_le_scan_recv_info *info, struct net_buf_simple *data)
 {
     if (!atomic_get(&advertisements_enabled)) { return; }
+    bool diagnostics = atomic_get(&pairing_diagnostics) != 0;
+    if (diagnostics) { atomic_inc(&advertisements_seen); }
     struct ad_fields fields = {0};
     struct net_buf_simple copy = *data;
     bt_data_parse(&copy, parse_ad, &fields);
     struct ad_event event = {.seen = k_uptime_get_32(), .rssi = info->rssi,
         .connectable = (info->adv_props & BT_GAP_ADV_PROP_CONNECTABLE) != 0,
-        .hid_hint = fields.hid};
+        .hid_hint = fields.hid, .name_complete = fields.name_complete};
     bt_addr_le_copy(&event.addr, info->addr);
     memcpy(event.name, fields.name, sizeof(event.name));
     /* Low-priority advertisements may be dropped under load; never displace
      * control / connection / GATT events or mutate candidate slots in RX. */
     if (!k_msgq_put(&advertisements, &event, K_NO_WAIT)) { k_work_submit(&control_work); }
+    else if (diagnostics) { atomic_inc(&advertisements_dropped); }
 }
 static struct bt_le_scan_cb scan_callbacks = {.recv = scan_received};
 
@@ -740,6 +773,12 @@ static void connect_target(void)
         scanner_state();
     }
 }
+static bool candidate_eligible(const struct candidate *candidate)
+{
+    /* A name is only a user-selectable discovery hint, NOT HID validation.
+     * Actual service and relative Report Map validation remain mandatory. */
+    return candidate->connectable && (candidate->has_name || candidate->hid_hint);
+}
 static void handle_advertisement(const struct ad_event *event)
 {
     if (peer || !settings_ready || reconnect_suspended) { return; }
@@ -768,14 +807,22 @@ static void handle_advertisement(const struct ad_event *event)
         bt_addr_le_copy(&ad_cache[cache].addr, &event->addr);
     }
     struct candidate *c = &ad_cache[cache];
-    if (c->public.valid && event->seen - c->seen > 2000) { c->connectable = c->hid_hint = false; }
+    if (c->public.valid && event->seen - c->seen > 2000) {
+        /* A fresh partial response must not inherit an expired name or hint. */
+        c->connectable = c->hid_hint = c->has_name = c->name_complete = false;
+        c->public.name[0] = 0;
+    }
     c->public.valid = true; c->seen = event->seen;
     c->connectable |= event->connectable;
+    if (event->connectable) { c->last_connectable_seen = event->seen; }
     c->hid_hint |= event->hid_hint;
     c->public.rssi = event->rssi;
-    if (event->name[0]) { snprintf(c->public.name, sizeof(c->public.name), "%s", event->name); }
-    if (!c->connectable || !c->hid_hint) { return; }
-    if (!c->public.name[0]) { snprintf(c->public.name, sizeof(c->public.name), "BLE HID device"); }
+    if (event->name[0] && (!c->name_complete || event->name_complete)) {
+        snprintf(c->public.name, sizeof(c->public.name), "%s", event->name);
+        c->has_name = true;
+        c->name_complete = event->name_complete;
+    }
+    if (!candidate_eligible(c)) { return; }
     bt_addr_to_str(&event->addr.a, c->public.address, sizeof(c->public.address));
     int slot = -1;
     for (unsigned i = 0; i < LISM_HID_CANDIDATES; i++) {
@@ -785,13 +832,21 @@ static void handle_advertisement(const struct ad_event *event)
     if (slot >= 0) {
         k_mutex_lock(&state_lock, K_FOREVER);
         uint32_t token = candidates[slot].public.token;
-        if (!candidates[slot].public.valid) {
+        bool added = !candidates[slot].public.valid;
+        if (added) {
             token = ++next_candidate_token;
             if (!token) { token = ++next_candidate_token; }
         }
         candidates[slot] = *c; /* Fixed slot, no RSSI re-sorting or replacement. */
+        if (!candidates[slot].has_name) {
+            snprintf(candidates[slot].public.name, sizeof(candidates[slot].public.name), "BLE HID device");
+        }
         candidates[slot].public.token = token;
         k_mutex_unlock(&state_lock);
+        if (added) {
+            LOG_INF("BLE candidate %u: %s RSSI %d named %d HID hint %d", slot + 1,
+                    candidates[slot].public.name, c->public.rssi, c->has_name, c->hid_hint);
+        }
     }
 }
 static void handle_command(struct command_event request)
@@ -808,22 +863,28 @@ static void handle_command(struct command_event request)
         if (!status.generation) { status.generation++; }
         pairing_until = now + 60000; status.pairing = true;
         k_mutex_unlock(&state_lock);
-        message("Select HID device; names alone are ignored");
+        atomic_clear(&advertisements_seen);
+        atomic_clear(&advertisements_dropped);
+        atomic_set(&pairing_diagnostics, 1);
+        diagnostics_at = now;
+        message("Select BLE device; HID checked after connect");
     } else if (request.kind == CMD_SELECT) {
         bool valid = pairing_until && !elapsed(now, pairing_until) && !peer &&
             request.index < LISM_HID_CANDIDATES;
         if (valid) {
             struct candidate *c = &candidates[request.index];
             valid = c->public.valid && c->public.token && request.token == c->public.token &&
-                    c->connectable && c->hid_hint && now - c->seen <= 2000;
+                    candidate_eligible(c) && now - c->seen <= 2000 &&
+                    now - c->last_connectable_seen <= 2000;
             if (valid) {
                 bt_addr_le_copy(&selected, &c->addr);
-                selected_seen = c->seen;
+                selected_seen = c->last_connectable_seen;
                 advertisement_pending = newly_selected = true;
                 retry_at = now;
                 k_mutex_lock(&state_lock, K_FOREVER);
                 snprintf(status.name, sizeof(status.name), "%s", c->public.name);
                 status.pairing = false; pairing_until = 0;
+                atomic_clear(&pairing_diagnostics);
                 k_mutex_unlock(&state_lock);
             }
         }
@@ -833,6 +894,7 @@ static void handle_command(struct command_event request)
         advertisement_pending = false;
         k_mutex_lock(&state_lock, K_FOREVER);
         pairing_until = 0; status.pairing = false;
+        atomic_clear(&pairing_diagnostics);
         k_mutex_unlock(&state_lock);
         begin_close(request.kind == CMD_FORGET ? "Forgetting selected mouse" : "Pairing cancelled");
         if (request.kind == CMD_FORGET && have_saved) {
@@ -1054,7 +1116,15 @@ static void control(struct k_work *work)
     uint32_t now = k_uptime_get_32();
     if (pairing_until && elapsed(now, pairing_until)) {
         k_mutex_lock(&state_lock, K_FOREVER); pairing_until = 0; status.pairing = false; k_mutex_unlock(&state_lock);
+        atomic_clear(&pairing_diagnostics);
+        LOG_INF("BLE scan ended: received %ld dropped %ld", (long)atomic_get(&advertisements_seen),
+                (long)atomic_get(&advertisements_dropped));
         message("Scan expired; tap Start scan");
+    }
+    if (atomic_get(&pairing_diagnostics) && now - diagnostics_at >= 10000) {
+        diagnostics_at = now;
+        LOG_INF("BLE scan: received %ld dropped %ld", (long)atomic_get(&advertisements_seen),
+                (long)atomic_get(&advertisements_dropped));
     }
     if (peer && elapsed(now, deadline)) {
         if (phase == DISCONNECTING) { begin_close("Waiting for mouse teardown"); }
@@ -1094,6 +1164,8 @@ void lism_hid_host_snapshot(struct lism_hid_status *out)
 {
     k_mutex_lock(&state_lock, K_FOREVER);
     *out = status;
+    out->advertisements_seen = (uint32_t)atomic_get(&advertisements_seen);
+    out->advertisements_dropped = (uint32_t)atomic_get(&advertisements_dropped);
     uint32_t now = k_uptime_get_32();
     out->seconds_left = pairing_until && !elapsed(now, pairing_until) ?
         MIN(60, (pairing_until - now + 999) / 1000) : 0;
