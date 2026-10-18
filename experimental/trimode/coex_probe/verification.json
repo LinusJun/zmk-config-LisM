@@ -1,0 +1,9 @@
+{
+  "zmk-core": "9ebbeff0a8b69a42f14aec022cdf16c7a107b9e0",
+  "zephyr": "10ba6d0cb38bc3d258775d27982f707599320085",
+  "nrf": "9b3d2623fdcd9c0fd0284f860beea924568c9826",
+  "nrfxlib": "dfadf17305d8f000eda9aa74a5b9ff1c5647a23e",
+  "verified": "compile/link only; BLE advertising plus MPSL-scheduled ESB test TX; not run on hardware",
+  "flash_bytes": 241812,
+  "ram_bytes": 58292
+}
