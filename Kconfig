@@ -1,3 +1,36 @@
+config LISM_SPLIT_ESB
+    bool "Experimental always-ESB LisM split with BLE host coexistence"
+    depends on ZMK_SPLIT && SOC_NRF52840 && BT_LL_SOFTDEVICE
+    select ESB
+    select ESB_DYNAMIC_INTERRUPTS
+    select TINYCRYPT
+    select TINYCRYPT_AES
+    select TINYCRYPT_AES_CCM
+    select BT_GATT_CLIENT
+    help
+      Keyboard positions, pointer input, battery events and central commands
+      always use authenticated ESB, independent of the selected USB/BLE host.
+      Encrypted BLE remains connected for enrollment and the existing set
+      lifecycle. This does not yet eliminate split BLE maintenance power.
+      Requires the pinned Nordic SDK, generated RADIO ownership patch and
+      explicit SoftDevice Controller devicetree overlay. Opt-in test build.
+
+if LISM_SPLIT_ESB
+config LISM_SPLIT_ESB_CHANNEL
+    int "Initial fixed ESB RF channel (2400 MHz plus channel)"
+    range 2 80
+    default 37
+config ESB_MAX_PAYLOAD_LENGTH
+    int
+    default 68
+config ESB_RADIO_IRQ_PRIORITY
+    int
+    default 0
+config MPSL_TIMESLOT_SESSION_COUNT
+    int
+    default 1
+endif
+
 config LISM_BLE_INPUT_BRIDGE
     bool "Screen-managed standard BLE keyboard and mouse receiver"
     depends on LISM_BLE_HID_BRIDGE

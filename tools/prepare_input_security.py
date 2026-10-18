@@ -8,7 +8,7 @@ PINNED_SHA256 = "9393b6e9aa993e87e40657c7f58d517295d3546fb6709ca100b010e01dc9f05
 ANCHOR = "    select BT_SMP_SC_PAIR_ONLY\n"
 
 
-def generate(source, destination):
+def generate(source, destination, legacy_build_policy=None):
     source = Path(source).resolve()
     data = source.read_bytes()
     if hashlib.sha256(data).hexdigest() != PINNED_SHA256:
@@ -16,7 +16,15 @@ def generate(source, destination):
     text = data.decode()
     if text.count(ANCHOR) != 1:
         raise ValueError("SC policy anchor moved or duplicated")
-    text = text.replace(ANCHOR, "    select BT_SMP_SC_PAIR_ONLY if !LISM_INPUT_LEGACY_COMPAT\n")
+    policy = "LISM_INPUT_LEGACY_COMPAT"
+    prefix = ""
+    if legacy_build_policy is not None:
+        # An independent build constant avoids the NCS BLE/I2C/UI dependency
+        # cycle. CMake must verify it matches the actual per-device policy.
+        policy = "LISM_INPUT_LEGACY_BUILD_POLICY"
+        prefix = ("config LISM_INPUT_LEGACY_BUILD_POLICY\n    bool\n    default " +
+                  ("y" if legacy_build_policy else "n") + "\n\n")
+    text = prefix + text.replace(ANCHOR, f"    select BT_SMP_SC_PAIR_ONLY if !{policy}\n")
     def absolute(match):
         path = match.group(2)
         if Path(path).is_absolute() or "$" in path or ".." in Path(path).parts:

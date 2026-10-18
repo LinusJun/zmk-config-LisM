@@ -8,7 +8,8 @@ static bool valid(struct lism_mode m) {
            (m.output == LISM_OUTPUT_BLE ? m.profile < 5 : m.profile == 0);
 }
 enum lism_link_mode lism_mode_link(struct lism_mode m) {
-    return m.output == LISM_OUTPUT_BLE ? LISM_LINK_BLE : LISM_LINK_ESB;
+    (void)m;
+    return LISM_LINK_ESB;
 }
 void lism_switch_init(struct lism_switch *s, struct lism_mode current, uint32_t epoch) {
     memset(s, 0, sizeof(*s));

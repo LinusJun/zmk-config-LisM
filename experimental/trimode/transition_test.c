@@ -17,7 +17,7 @@ static void ready(struct lism_switch *s, unsigned left) {
 }
 int main(void) {
     assert(lism_mode_link(usb) == LISM_LINK_ESB);
-    assert(lism_mode_link(ble) == LISM_LINK_BLE);
+    assert(lism_mode_link(ble) == LISM_LINK_ESB);
     assert(lism_mode_link(esb) == LISM_LINK_ESB);
     struct lism_switch s;
     lism_switch_init(&s, ble, 10);

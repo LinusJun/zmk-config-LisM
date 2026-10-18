@@ -4,6 +4,9 @@
 #include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/bluetooth/bluetooth.h>
+#if defined(CONFIG_LISM_SPLIT_ESB)
+#include "esb/integration.h"
+#endif
 #if defined(CONFIG_LISM_AUTO_SPLIT_SETS)
 #include "lism_split_auto.h"
 #endif
@@ -116,6 +119,9 @@ void lism_split_sets_ready(uint8_t slot) {
     bool ready=connected[slot] && !draining[slot];
     if (ready && pending_slot == slot) pending_slot = -1;
     k_spin_unlock(&lock, key);
+#if defined(CONFIG_LISM_SPLIT_ESB)
+    if (ready) lism_esb_peer_ready(slot);
+#endif
 #if defined(CONFIG_LISM_AUTO_SPLIT_SETS)
     if(ready)lism_split_auto_ready(slot);
 #endif
