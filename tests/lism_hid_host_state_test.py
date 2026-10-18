@@ -34,7 +34,7 @@ prelude = r'''
 #define K_MSEC(x) (x)
 #define LOG_MODULE_REGISTER(...)
 #define LOG_INF(...) mock_log(__VA_ARGS__)
-#define LOG_WRN(...)
+#define LOG_WRN(...) mock_log(__VA_ARGS__)
 #define INPUT_EV_MSC 4
 #define ZMK_HID_MOUSE_NUM_BUTTONS 5
 #define IS_ENABLED(x) 1
@@ -55,6 +55,7 @@ static const zmk_event_t *as_zmk_endpoint_changed(const zmk_event_t *event){retu
 static int rx;
 static unsigned diagnostic_logs;
 static char last_diagnostic_gates[512],last_diagnostic_counts[512];
+static char last_connected[128],last_disconnected[128],last_security[128],last_read_error[128],last_timeout[128];
 static void mock_log(const char *format,...){
  assert(!rx);char line[768];va_list args;va_start(args,format);
  vsnprintf(line,sizeof(line),format,args);va_end(args);
@@ -63,6 +64,11 @@ static void mock_log(const char *format,...){
  }else if(strstr(line,"BLE scan diag v1")){
    diagnostic_logs++;snprintf(last_diagnostic_gates,sizeof(last_diagnostic_gates),"%.511s",line);
  }
+ if(strstr(line,"BLE HID connected error"))snprintf(last_connected,sizeof(last_connected),"%.127s",line);
+ if(strstr(line,"BLE HID disconnected reason"))snprintf(last_disconnected,sizeof(last_disconnected),"%.127s",line);
+ if(strstr(line,"BLE HID security level"))snprintf(last_security,sizeof(last_security),"%.127s",line);
+ if(strstr(line,"BLE HID read error/status"))snprintf(last_read_error,sizeof(last_read_error),"%.127s",line);
+ if(strstr(line,"BLE HID setup timeout"))snprintf(last_timeout,sizeof(last_timeout),"%.127s",line);
 }
 static uint32_t now;
 typedef int atomic_t;
@@ -126,7 +132,8 @@ static int bt_conn_le_create_cancel(void){assert(!rx);cancels++;return 0;}
 #define BT_CONN_LE_CREATE_CONN NULL
 #define BT_LE_CONN_PARAM(...) NULL
 static int bt_conn_le_create(const bt_addr_le_t *a,void *p,void *q,struct bt_conn **out){(void)p;(void)q;assert(!rx);creates++;connection.addr=*a;connection.refs++;*out=&connection;return 0;}
-static int bt_conn_get_security(struct bt_conn *c){(void)c;assert(!rx);return 2;}
+static int mock_security=2;
+static int bt_conn_get_security(struct bt_conn *c){(void)c;assert(!rx);return mock_security;}
 static int bt_conn_set_security(struct bt_conn *c,int l){(void)c;(void)l;assert(!rx);return 0;}
 struct bt_bond_info {bt_addr_le_t addr;};
 static void bt_foreach_bond(int id,void (*f)(const struct bt_bond_info *,void *),void *p){(void)id;assert(!rx);struct bt_bond_info b={connection.addr};f(&b,p);}
@@ -261,7 +268,7 @@ static void advertisement_regression(void){
  scan_start();named(20,0,true,true,"Logitech G705");
  assert(candidate_count()==1&&!peer&&creates==initial_creates);
  assert(!strcmp(candidates[0].public.name,"Logitech G705"));
- /* Real name permits discovery, never bypasses HIDS validation. */
+ /* An input-device name permits discovery, never bypasses HIDS validation. */
  lism_hid_host_select(0,candidates[0].public.token);pump();assert(peer);connect_ok();
  discovery_end();assert(phase==DISCONNECTING&&!status.ready&&!input_ready);
  done();assert(saves==initial_saves&&unpairs==initial_unpairs);
@@ -270,13 +277,13 @@ static void advertisement_regression(void){
   * connectable: only the same address/type's recent ADV supplies that bit. */
  scan_start();raw_ad(21,0,true,0,NULL,0);assert(!candidate_count());
  named(21,0,false,true,"Mouse response");assert(candidate_count()==1&&!peer);
- scan_start();named(22,0,false,true,"Response first");assert(!candidate_count());
+ scan_start();named(22,0,false,true,"Mouse response first");assert(!candidate_count());
  raw_ad(22,0,true,0,NULL,0);assert(candidate_count()==1&&!peer);
  /* Expire the entire cache entry, not just its connectable/HID flags. */
- scan_start();named(23,0,false,true,"Expired name");now+=2001;
+ scan_start();named(23,0,false,true,"Expired mouse name");now+=2001;
  raw_ad(23,0,true,0,NULL,0);assert(!candidate_count());
  scan_start();raw_ad(24,0,true,0,NULL,0);now+=2001;
- named(24,0,false,true,"Late response");assert(!candidate_count());
+ named(24,0,false,true,"Late mouse response");assert(!candidate_count());
  scan_start();ad(24,false,true);now+=2001;
  raw_ad(24,0,true,0,NULL,0);assert(!candidate_count());
 
@@ -285,8 +292,10 @@ static void advertisement_regression(void){
  assert(candidates[0].addr.type!=candidates[1].addr.type);
  named(25,0,false,false,"Pub");
  assert(!strcmp(candidates[0].public.name,"Public mouse"));
+ uint32_t replacement_token=candidates[0].public.token;
  named(25,0,false,true,"Public full replacement");
  assert(!strcmp(candidates[0].public.name,"Public full replacement"));
+ assert(candidate_count()==2&&candidates[0].name_hint&&candidates[0].public.token==replacement_token);
 
  static const uint8_t hids128[]={0xfb,0x34,0x9b,0x5f,0x80,0,0,0x80,
                               0,0x10,0,0,0x12,0x18,0,0};
@@ -324,26 +333,48 @@ static void advertisement_regression(void){
  /* Twelve stable slots, no RSSI resorting/replacement, old scan tokens cannot
   * select a new identity at the same visual index. */
  scan_start();uint32_t tokens[LISM_HID_CANDIDATES];
+ /* Named smart-home/non-input devices must not consume the twelve slots.
+  * Filter by positive input evidence, never an Aqara/brand blacklist. */
+ static const char *const unrelated[]={"Aqara Hub M3","Aqara Motion Sensor",
+   "Yeelight lamp","Temperature sensor","Bluetooth speaker","BLE Beacon",
+   "Logitech receiver","MickeyMouse lamp","Mousepad sensor","TouchpadSensor"};
+ for(unsigned i=0;i<sizeof(unrelated)/sizeof(unrelated[0]);i++){
+   named(100+i,0,true,true,unrelated[i]);assert(candidate_count()==0);
+ }
  for(unsigned i=0;i<LISM_HID_CANDIDATES;i++){
    char name[24];snprintf(name,sizeof(name),"Mouse %u",i);
    named(40+i,0,true,true,name);tokens[i]=candidates[i].public.token;
    assert(tokens[i]&&candidates[i].addr.a.val[0]==40+i);
  }
  assert(LISM_HID_CANDIDATES==12&&candidate_count()==12&&!peer);
- named(90,0,true,true,"Thirteenth device");assert(candidate_count()==12);
+ named(90,0,true,true,"Thirteenth mouse");assert(candidate_count()==12);
  for(unsigned i=0;i<LISM_HID_CANDIDATES;i++){
    assert(candidates[i].public.token==tokens[i]&&candidates[i].addr.a.val[0]==40+i);
  }
  named(40,0,true,false,"M");assert(candidates[0].public.token==tokens[0]);
  assert(!strcmp(candidates[0].public.name,"Mouse 0"));
- scan_start();named(91,0,true,true,"New generation");int n=creates;
+ scan_start();named(91,0,true,true,"New mouse generation");int n=creates;
  lism_hid_host_select(0,tokens[0]);pump();assert(creates==n&&!peer);
  uint32_t fresh=candidates[0].public.token;now+=2001;
  lism_hid_host_select(0,fresh);pump();assert(creates==n&&!peer);
- named(91,0,true,true,"New generation");
+ named(91,0,true,true,"New mouse generation");
  lism_hid_host_select(0,fresh);pump();assert(peer&&connection.addr.a.val[0]==91);
  lism_hid_host_cancel();pump();done();
  assert(saves==initial_saves&&unpairs==initial_unpairs);
+ /* Actual compatible names and independent-word fallbacks, case-insensitive. */
+ scan_start();
+ static const char *const input_names[]={"G705 Mouse","Logitech G705","CheerPod",
+   "CheerPod2","USB Touchpad","MY-TRACKPAD","Pocket mouse"};
+ for(unsigned i=0;i<sizeof(input_names)/sizeof(input_names[0]);i++){
+   named(110+i,0,true,true,input_names[i]);assert(candidate_count()==i+1);
+ }
+ /* No-name HID remains selectable; hint and name may arrive in either order. */
+ scan_start();named(120,0,false,true,"Aqara unknown");assert(!candidate_count());
+ ad(120,true,true);assert(candidate_count()==1&&candidates[0].hid_hint);
+ scan_start();ad(121,true,true);assert(candidate_count()==1);
+ uint32_t hint_token=candidates[0].public.token;
+ named(121,0,false,true,"Unknown input");
+ assert(candidate_count()==1&&candidates[0].public.token==hint_token&&candidates[0].hid_hint);
 }
 static void connectable_lease_regression(void){
  /* Non-connectable SCAN_RSP/name traffic may keep a candidate visible, but
@@ -427,6 +458,23 @@ static void diagnostic_regression(void){
  scan_diagnostic_snapshot("registered");assert(strstr(last_diagnostic_counts,"register_calls=2 register_rc=0"));
  assert(saves==old_save&&deletes==old_delete&&unpairs==old_unpair&&creates==old_create);
 }
+static void connection_diagnostic_regression(void){
+ /* The UI uses one generic disconnected message for these different failure
+  * stages. Preserve distinct control-context diagnostics without bond writes. */
+ int saved_before=saves,deleted_before=deletes,unpaired_before=unpairs;
+ start();rx=1;connected(&connection,62);rx=0;pump();
+ assert(!peer&&!connection.refs&&strstr(last_connected,"connected error 62 phase 1"));
+ start();connect_ok();assert(strstr(last_connected,"connected error 0 phase 1"));
+ rx=1;disconnected(&connection,22);rx=0;pump();
+ assert(!peer&&!connection.refs&&strstr(last_disconnected,"disconnected reason 22 phase 3"));
+ start();mock_security=1;rx=1;connected(&connection,0);rx=0;pump();assert(phase==SECURITY);
+ rx=1;security_changed(&connection,1,(enum bt_security_err)4);rx=0;pump();
+ assert(phase==DISCONNECTING&&strstr(last_security,"security level 1 error 4 phase 2"));
+ done();mock_security=2;
+ start();to_map();rx=1;rp->func(&connection,5,rp,NULL,0);rx=0;pump();
+ assert(phase==DISCONNECTING&&strstr(last_read_error,"read error/status 5 phase 5"));done();
+ assert(saves==saved_before&&deletes==deleted_before&&unpairs==unpaired_before);
+}
 int main(void){
  preboot_diagnostics();boot();start();to_subscribe();assert(!saves&&!status.ready);
  rx=1;subscribed_cb(&connection,0,sp);rx=0;assert(!status.ready);pump();
@@ -486,11 +534,12 @@ int main(void){
  now+=59999;pump();assert(status.pairing);now++;pump();assert(!status.pairing);
  assert(elapsed(4,UINT32_MAX-2)&&!elapsed(UINT32_MAX-2,4));
  now=UINT32_MAX-100;start();now+=SESSION_TIMEOUT_MS-1;pump();assert(phase==CONNECTING);
- now++;pump();assert(phase==DISCONNECTING);done();
+ now++;pump();assert(phase==DISCONNECTING&&strstr(last_timeout,"timeout phase 1"));done();
  assert(!connection.refs);
  advertisement_regression();assert(!connection.refs);
  connectable_lease_regression();assert(!connection.refs);
  diagnostic_regression();assert(!connection.refs);
+ connection_diagnostic_regression();assert(!connection.refs);
  puts("PASS actual HID coordinator: callback context, discovery/map/reference/CCC/READY, mouse, cancellation/late callbacks, subscribe/map rejection, named discovery/ADV aggregation/cache expiry/name priority/address type/exact UUIDs/12 stable slots/tokens/diagnostics, exact fresh reconnect, target-only forget, overflow and clock wrap");
  return 0;
 }

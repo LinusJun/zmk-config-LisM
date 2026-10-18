@@ -73,6 +73,10 @@ struct k_work_delayable {struct k_work work;k_work_handler_t handler;bool pendin
 struct input_event {const struct device *dev;uint8_t type;uint16_t code;int value;bool sync;};
 typedef int atomic_val_t;
 static int imu_mode,auto_rotate_mode,restore_landscape,sleeping;
+static int usr1_down;
+enum { XIAO147_PAGE_STATUS, XIAO147_PAGE_SETTINGS, XIAO147_PAGE_DEVICES, XIAO147_PAGE_BLE_MOUSE };
+static int current_page = XIAO147_PAGE_STATUS;
+static int xiao147_ui_page(void) {return current_page;}
 static uint32_t now,last_activity_ms;
 static struct k_work redraw_work;
 static int gpio_raw[32],read_error,configured,configured_pin,submitted,events;
@@ -140,6 +144,15 @@ int main(void) {
     for(int i=0;i<100;i++){run_poll(&state);}assert(events==1&&submitted==1);
     gpio_raw[7]=1;run_poll(&state);assert(events==2&&imu_mode==1);
     gpio_raw[7]=0;run_poll(&state);assert(events==3&&!imu_mode&&submitted==2);
+    /* Status press semantics remain immediate; settings/device pages cannot
+     * accidentally enter six-axis mode with the same physical button. */
+    gpio_raw[7]=1;run_poll(&state);
+    current_page=XIAO147_PAGE_SETTINGS;gpio_raw[7]=0;run_poll(&state);
+    assert(!imu_mode&&submitted==2);gpio_raw[7]=1;run_poll(&state);
+    current_page=XIAO147_PAGE_DEVICES;gpio_raw[7]=0;run_poll(&state);
+    assert(!imu_mode&&submitted==2);gpio_raw[7]=1;run_poll(&state);
+    current_page=XIAO147_PAGE_BLE_MOUSE;gpio_raw[7]=0;run_poll(&state);
+    assert(!imu_mode&&submitted==2);gpio_raw[7]=1;run_poll(&state);
     puts("PASS: corrected D17/D19 aliases, separate reset/input owners, actual gpio-keys polling -> real USR1 callback, held/release/repress/errors/boot-held");
 }
 '''

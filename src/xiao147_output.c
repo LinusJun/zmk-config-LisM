@@ -20,6 +20,18 @@ static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 static uint8_t active_profile_index = 0;
 static enum zmk_transport active_transport = ZMK_TRANSPORT_USB;
 
+uint8_t xiao147_output_profile_count(void) {
+#if ZMK_BLE_PROFILE_COUNT > 5
+    /* A sixth computer profile is only shown for a real legacy pairing or
+     * explicit selection. Extra incoming HID bonds are not output profiles. */
+    return active_profile_index == 5 || !zmk_ble_profile_is_open(5) ? 6 : 5;
+#else
+    return ZMK_BLE_PROFILE_COUNT;
+#endif
+}
+
+#define XIAO147_OUTPUT_SLOT_COUNT ((ZMK_BLE_PROFILE_COUNT < 6) ? ZMK_BLE_PROFILE_COUNT : 6)
+
 static void set_usb_btn_state(lv_obj_t *btn, bool active) {
     lv_obj_t *label = lv_obj_get_child(btn, 0);
     if (active) {
@@ -66,8 +78,8 @@ static void set_slot_active(lv_obj_t *slot, bool active) {
     }
     lv_obj_t *label = lv_obj_get_child(slot, 0);
     if (label) {
-        lv_obj_set_style_text_color(label, lv_color_hex(active ?
-            DISPLAY_COLOR_OUTPUT_ACTIVE_TEXT : DISPLAY_COLOR_SLOT_TEXT), LV_PART_MAIN);
+        lv_obj_set_style_text_color(label, lv_color_hex(active ? DISPLAY_COLOR_SLOT_ACTIVE_TEXT :
+                                                   DISPLAY_COLOR_SLOT_TEXT), LV_PART_MAIN);
     }
 }
 
@@ -76,7 +88,18 @@ static void update_output_widget(struct zmk_widget_output *widget) {
     set_usb_btn_state(widget->usb_btn, is_usb);
     set_ble_btn_state(widget->ble_btn, !is_usb);
 
-    for (int i = 0; i < ZMK_BLE_PROFILE_COUNT; i++) {
+    unsigned int visible = xiao147_output_profile_count();
+    int row_width = lv_obj_get_width(widget->obj);
+    for (int i = 0; i < XIAO147_OUTPUT_SLOT_COUNT; i++) {
+        if ((unsigned int)i >= visible) {
+            lv_obj_add_flag(widget->slots[i], LV_OBJ_FLAG_HIDDEN);
+            continue;
+        }
+        lv_obj_clear_flag(widget->slots[i], LV_OBJ_FLAG_HIDDEN);
+        int x = i * (row_width + 2) / visible;
+        int end = (i + 1) * (row_width + 2) / visible - 2;
+        lv_obj_set_size(widget->slots[i], end - x, 29);
+        lv_obj_set_pos(widget->slots[i], x, lv_obj_get_y(widget->slots[i]));
         set_slot_active(widget->slots[i], (i == active_profile_index));
     }
 }
@@ -105,6 +128,12 @@ static void output_update_cb(struct output_state state) {
     }
 }
 
+/* Display queue only: recolor existing objects, without simulating input. */
+void xiao147_output_refresh_colors(void) {
+    struct zmk_widget_output *widget;
+    SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) { update_output_widget(widget); }
+}
+
 ZMK_DISPLAY_WIDGET_LISTENER(widget_output_async, struct output_state,
                            output_update_cb, output_get_state)
 ZMK_SUBSCRIPTION(widget_output_async, zmk_endpoint_changed);
@@ -126,7 +155,7 @@ static lv_obj_t *create_toggle_btn(lv_obj_t *parent, const char *text, int x) {
     return btn;
 }
 
-static lv_obj_t *create_slot_btn(lv_obj_t *parent, int index, int x, int width, bool show_number) {
+static lv_obj_t *create_slot_btn(lv_obj_t *parent, int index, int x, int width) {
     lv_obj_t *slot = lv_obj_create(parent);
     lv_obj_set_size(slot, width, 29);
     lv_obj_set_pos(slot, x, 33);
@@ -135,17 +164,15 @@ static lv_obj_t *create_slot_btn(lv_obj_t *parent, int index, int x, int width, 
     lv_obj_set_style_border_width(slot, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(slot, 0, LV_PART_MAIN);
 
-    if (show_number) {
-        lv_obj_t *label = lv_label_create(slot);
-        /* Allow the full int representation, including sign and terminator. */
-        char text[12];
-        snprintf(text, sizeof(text), "%d", index + 1);
-        lv_label_set_text(label, text);
-        lv_obj_set_style_text_font(label, &FG_Medium_20, LV_PART_MAIN);
-        lv_obj_set_style_text_color(label, lv_color_hex(DISPLAY_COLOR_SLOT_TEXT), LV_PART_MAIN);
-        lv_obj_center(label);
-        lv_obj_set_style_translate_y(label, 1, LV_PART_MAIN);
-    }
+    lv_obj_t *label = lv_label_create(slot);
+    /* The original 20 px digits fit even the six-profile 17 px slots. */
+    char text[12];
+    snprintf(text, sizeof(text), "%d", index + 1);
+    lv_label_set_text(label, text);
+    lv_obj_set_style_text_font(label, &FG_Medium_20, LV_PART_MAIN);
+    lv_obj_set_style_text_color(label, lv_color_hex(DISPLAY_COLOR_SLOT_TEXT), LV_PART_MAIN);
+    lv_obj_center(label);
+    lv_obj_set_style_translate_y(label, 1, LV_PART_MAIN);
 
     return slot;
 }
@@ -161,12 +188,13 @@ int zmk_widget_output_init(struct zmk_widget_output *widget, lv_obj_t *parent) {
     widget->ble_btn = create_toggle_btn(widget->obj, "BLE", 58);
 
     int slot_spacing = 2;
-    int slot_width = (116 - (ZMK_BLE_PROFILE_COUNT - 1) * slot_spacing) / ZMK_BLE_PROFILE_COUNT;
-    bool show_numbers = (ZMK_BLE_PROFILE_COUNT <= 5);
-
-    for (int i = 0; i < ZMK_BLE_PROFILE_COUNT; i++) {
-        int x = i * (slot_width + slot_spacing);
-        widget->slots[i] = create_slot_btn(widget->obj, i, x, slot_width, show_numbers);
+    active_profile_index = zmk_ble_active_profile_index();
+    for (int i = 0; i < XIAO147_OUTPUT_SLOT_COUNT; i++) {
+        /* Distribute rounding over the row so six numbered profiles fill the
+         * same width as five, without dropping the final pixels at the right. */
+        int x = i * (116 + slot_spacing) / XIAO147_OUTPUT_SLOT_COUNT;
+        int end = (i + 1) * (116 + slot_spacing) / XIAO147_OUTPUT_SLOT_COUNT - slot_spacing;
+        widget->slots[i] = create_slot_btn(widget->obj, i, x, end - x);
     }
 
     sys_slist_append(&widgets, &widget->node);

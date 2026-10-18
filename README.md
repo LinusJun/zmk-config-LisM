@@ -180,3 +180,9 @@ LisM は左右どちらでも「セントラル（Central）」と「ペリフ�
 ## リンク
 - [ドキュメント](https://4mplelab.github.io/LisM/)
 - [販売ページ](https://shop.4mple-lab.com/items/119269662)
+# Keymap Editor 完整改键分支
+
+本分支用于当前完整固件的日常改键。选择 `keymap-editor` 分支和
+`config/lism.keymap`，保存后等待 **Keymap Editor - complete firmware** 全绿，
+下载 **LisM-complete-firmware**。完整功能保留与刷写注意事项见
+[KEYMAP_EDITOR.md](KEYMAP_EDITOR.md)。普通更新不要刷 reset。

@@ -227,3 +227,12 @@ int zmk_widget_wpm_meter_init(struct zmk_widget_wpm_meter *widget, lv_obj_t *par
 lv_obj_t *zmk_widget_wpm_meter_obj(struct zmk_widget_wpm_meter *widget) {
     return widget->obj;
 }
+
+/* Display queue only: update the name without changing WPM/layer state. */
+void xiao147_layer_name_refresh_colors(void) {
+    struct zmk_widget_wpm_meter *widget;
+    SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
+        lv_obj_set_style_text_color(widget->layer_label,
+            lv_color_hex(DISPLAY_COLOR_LAYER_TEXT), LV_PART_MAIN);
+    }
+}

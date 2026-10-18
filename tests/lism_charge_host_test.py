@@ -34,6 +34,10 @@ prelude = r'''
 #define DT_CHOSEN(x) 0
 #define DEVICE_DT_GET(x) (&dev)
 #define SYS_INIT(...)
+#define LOG_MODULE_REGISTER(...)
+#define LOG_LEVEL_INF 3
+static unsigned diagnostic_logs;
+#define LOG_INF(...) do { diagnostic_logs++; if (0) printf(__VA_ARGS__); } while (0)
 #define K_MUTEX_DEFINE(x) static int x
 static void k_mutex_lock(int *m,int t) {(void)m;(void)t;}
 static void k_mutex_unlock(int *m) {(void)m;}
@@ -95,7 +99,7 @@ struct bt_conn_info {int type,state,role;};
 #define BT_CONN_STATE_CONNECTED 1
 #define BT_CONN_ROLE_CENTRAL 0
 #define BT_SECURITY_L2 2
-#define XIAO147_PERIPHERAL_COUNT 4
+#define XIAO147_PERIPHERAL_COUNT 6
 struct bt_gatt_read_params;
 typedef uint8_t (*read_fn)(struct bt_conn*,uint8_t,struct bt_gatt_read_params*,const void*,uint16_t);
 struct bt_gatt_read_params {read_fn func;unsigned handle_count;
@@ -115,7 +119,7 @@ static void bt_conn_foreach(int t,void(*fn)(struct bt_conn*,void*),void*ctx) {
 static int read_error,read_calls;
 static struct bt_gatt_read_params *pending[6];
 static int bt_gatt_read(struct bt_conn*c,struct bt_gatt_read_params*p) {
- assert(c->security>=2&&c->role==0&&c->slot>=0&&c->slot<4);
+ assert(c->security>=2&&c->role==0&&c->slot>=0&&c->slot<XIAO147_PERIPHERAL_COUNT);
  assert(!p->handle_count&&p->by_uuid.start_handle==1&&p->by_uuid.end_handle==65535);
  read_calls++;if(read_error)return read_error;
  assert(!pending[c-connections]);pending[c-connections]=p;return 0;
@@ -152,6 +156,16 @@ static void establish_usb_step(void) {
  assert(!(lism_charge_local().flags&LISM_CHARGE_BATTERY_CONFIRMED));
 }
 static void power_transition_tests(void) {
+ reset_local(false);
+ /* After minutes on battery, telemetry still requests fresh evidence within
+  * 2s; the normal 60s BAS timer is not sufficient for a USB handoff. */
+ unsigned requests_before=adc_requests;
+ now+=60000;sample_charge(NULL);assert(adc_requests==requests_before+1);
+ battery_fetch(0);sample_charge(NULL);
+ now+=2000;sample_charge(NULL);battery_fetch(0);sample_charge(NULL);
+ usb=true;sample_charge(NULL);
+ for(int i=0;i<4;i++)sample_mv(3820);
+ assert(lism_charge_show_bolt(lism_charge_local()));
  reset_local(true);
  /* Static 3.8V/CHG LOW is ambiguous, not 80% or charging. */
  for(int i=0;i<8;i++)sample_mv(3800);
@@ -217,6 +231,58 @@ static void power_transition_tests(void) {
  assert(!(lism_charge_local().flags&LISM_CHARGE_LEVEL_VALID));
  sample_mv(1600);assert(!lism_charge_show_bolt(lism_charge_local()));
  assert(config_calls==CENTRAL); /* no charger-control writes */
+}
+static void recovery_tests(void) {
+ reset_local(false);sample_mv(3900);
+ usb=true;sample_charge(NULL);sample_mv(3920);
+ uint32_t deadline=presence.seed_at+7000;
+ battery_fetch(-EIO);sample_charge(NULL);
+ assert(presence.handoff&&!presence.present&&!presence.candidate_count);
+ assert(presence.last_reason==LISM_PRESENCE_SAMPLE_ERROR);
+ sample_charge(NULL);assert(presence.last_reason==LISM_PRESENCE_SAMPLE_ERROR);
+ assert(!lism_charge_show_bolt(lism_charge_local()));
+ for(int i=0;i<3;i++){sample_mv(3920);assert(!lism_charge_show_bolt(lism_charge_local()));}
+ sample_mv(3920);assert(lism_charge_show_bolt(lism_charge_local())&&now<=deadline);
+ /* A later transient can recover from the previously fresh USB inference,
+  * without pretending its old percentage/bolt remained valid during error. */
+ for(int i=0;i<30;i++)sample_mv(3920);
+ uint32_t good_at=presence.last_at;
+ battery_fetch(-EIO);sample_charge(NULL);
+ assert(!presence.present&&presence.handoff&&presence.seed_at==good_at);
+ for(int i=0;i<3;i++){sample_mv(3930);assert(!lism_charge_show_bolt(lism_charge_local()));}
+ sample_mv(3930);assert(lism_charge_show_bolt(lism_charge_local()));
+ /* Repeated errors never extend the deadline or splice old votes. */
+ battery_fetch(-EIO);uint32_t seed=presence.seed_at;
+ for(int i=0;i<8;i++){now+=1000;battery_fetch(-EIO);sample_charge(NULL);assert(presence.seed_at==seed);}
+ assert(!presence.handoff&&!presence.present);
+ for(int i=0;i<8;i++)sample_mv(3930);
+ assert(!lism_charge_show_bolt(lism_charge_local()));
+ /* Within-baseline candidate noise restarts all votes, not the seed clock. */
+ reset_local(false);sample_mv(3900);usb=true;sample_charge(NULL);
+ sample_mv(3910);seed=presence.seed_at;sample_mv(3950);
+ assert(presence.handoff&&!presence.candidate&&presence.seed_at==seed);
+ for(int i=0;i<3;i++){sample_mv(3950);assert(!presence.present);}
+ sample_mv(3950);assert(presence.present);
+ /* Late-started candidate may not confirm after the original seven seconds. */
+ struct lism_battery_presence p={0};lism_presence_source(&p,false,0);
+ lism_presence_sample(&p,1000,true,3900);lism_presence_source(&p,true,1100);
+ for(unsigned t=6000;t<=9000;t+=1000)lism_presence_sample(&p,t,true,3920);
+ assert(!p.present&&!p.handoff&&p.last_reason==LISM_PRESENCE_TIMEOUT);
+ /* Hard voltage veto discards seeds and cannot fall into step-down in frame. */
+ p=(struct lism_battery_presence){0};lism_presence_source(&p,false,0);
+ lism_presence_sample(&p,1000,true,3900);lism_presence_source(&p,true,1100);
+ lism_presence_sample(&p,2100,true,3981);assert(!p.handoff&&!p.present);
+ assert(p.last_reason==LISM_PRESENCE_BASELINE);
+ for(unsigned t=3100;t<8100;t+=1000)lism_presence_sample(&p,t,true,3981);
+ assert(!p.present);
+ /* Recovery also handles timestamp wrap with an immutable last-good seed. */
+ p=(struct lism_battery_presence){.source_seen=true,.usb=true,.present=true,
+     .inferred=true,.have_sample=true,.last_mv=3900,.last_at=UINT32_MAX-1500,
+     .changed_at=UINT32_MAX-10000};
+ lism_presence_retry(&p,UINT32_MAX-500,LISM_PRESENCE_SAMPLE_ERROR);
+ seed=p.seed_at;
+ for(unsigned i=1;i<=4;i++)lism_presence_sample(&p,seed+i*1000U,true,3910);
+ assert(p.present&&p.inferred);
 }
 static void presence_tests(void) {
  struct lism_battery_presence p={0};
@@ -317,11 +383,52 @@ static void client_tests(void) {
  /* Fresh reads from a stale server must not manufacture charging. */
  now+=3000;poll_charges(NULL);wire[1]=0;reply(4,0,wire,4);
  assert(!lism_charge_show_bolt(lism_charge_peripheral(1)));
+ /* Optional diagnostic reads use a distinct UUID and cannot alter v2 state. */
+ if(pending[4])reply(4,0,wire,4);
+ now+=60000;poll_charges(NULL);assert(pending[4]);
+ wire[1]=65;reply(4,0,wire,4);
+ poll_charges(NULL);assert(pending[4]);
+ assert(pending[4]->by_uuid.uuid==&diag_uuid.uuid);
+ uint8_t diag[12]={1,65,0,32,0xf0,0x0e,0,0,1,0,30,0};
+ unsigned logs=diagnostic_logs;reply(4,0,diag,sizeof(diag));
+ assert(diagnostic_logs==logs+1&&peers[1].valid&&peers[1].state.flags==65);
+ peers[1].diag_at=now;poll_charges(NULL);
+ uint8_t diag2[LISM_CHARGE_DIAG_SIZE]={2,65,0,8,0x77,0x0f,0,0,1,0,30,0,
+     0x3c,0x0f,LISM_PRESENCE_SAMPLE_ERROR,0,20,0};
+ logs=diagnostic_logs;reply(4,0,diag2,sizeof(diag2));
+ assert(diagnostic_logs==logs+2&&peers[1].valid&&peers[1].state.flags==65);
+ peers[1].diag_at=now;poll_charges(NULL);diag2[0]=1;
+ reply(4,0,diag2,sizeof(diag2));assert(peers[1].valid&&peers[1].state.flags==65);
+ now+=3000;poll_charges(NULL);reply(4,0,wire,4);
+ peers[1].diag_at=now;read_error=-ENOMEM;poll_charges(NULL);
+ assert(peers[1].valid&&!peers[1].pending&&peers[1].state.flags==65);
+ assert(peers[1].diag_at==now+60000);read_error=0;
+ now+=3000;poll_charges(NULL);reply(4,0,wire,4);
+ peers[1].diag_at=now;poll_charges(NULL);reply(4,10,NULL,0);
+ assert(peers[1].valid&&peers[1].state.flags==65); /* old peripheral supported */
+ /* A delayed diagnostic does not extend freshness, and disconnect cannot
+  * recycle its params or reattach a late result to a replacement connection. */
+ peers[1].diag_at=now;poll_charges(NULL);assert(pending[4]);
+ struct bt_gatt_read_params *inflight=pending[4];
+ now+=6000;poll_charges(NULL);assert(pending[4]==inflight);
+ reply(4,0,diag,sizeof(diag));assert(peers[1].state.flags==65);
+ now+=3000;poll_charges(NULL);reply(4,0,wire,4);
+ peers[1].diag_at=now;poll_charges(NULL);assert(pending[4]);
+ connections[4].connected=false;lism_charge_connections.disconnected(&connections[4],1);
+ poll_charges(NULL);assert(connections[4].refs==1&&pending[4]);
+ reply(4,0,diag,sizeof(diag));assert(!peers[1].valid);
+ poll_charges(NULL);assert(connections[4].refs==0&&!peers[1].conn);
+ /* Second-set physical slot5 is independently polled, not aliased to A-R. */
+ connections[5]=(struct bt_conn){.slot=5,.security=2,.connected=true};
+ now+=3000;poll_charges(NULL);assert(pending[5]);
+ wire[1]=111;reply(5,0,wire,4);
+ assert(lism_charge_show_bolt(lism_charge_peripheral(5)));
+ assert(!lism_charge_show_bolt(lism_charge_peripheral(1)));
 }
 #endif
 int main(void) {
  policy_tests();presence_tests();assert(charge_init()==0);
- power_transition_tests();
+ power_transition_tests();recovery_tests();
 #if CENTRAL
  client_tests();
 #else
@@ -330,6 +437,19 @@ int main(void) {
  assert(read_charge(NULL,NULL,wire,4,0)==4&&wire[0]==2);
  struct lism_charge_state s;assert(lism_charge_decode(wire,4,&s)&&lism_charge_show_bolt(s));
  assert(read_charge(NULL,NULL,wire,4,5)<0);
+ assert(lism_charge_service[2]==BT_GATT_PERM_READ_ENCRYPT);
+ uint8_t diag[LISM_CHARGE_DIAG_SIZE];
+ assert(read_charge_diagnostics(NULL,NULL,diag,sizeof(diag),0)==LISM_CHARGE_DIAG_SIZE);
+ assert(diag[0]==2&&diag[1]==s.flags&&diag[2]==s.percent);
+ assert((diag[3]&7)==7&&(diag[4]|(diag[5]<<8))==3850&&diag[6]==0&&diag[7]==0);
+ assert((diag[10]|(diag[11]<<8))==now/1000);
+ uint8_t tail[4];assert(read_charge_diagnostics(NULL,NULL,tail,4,8)==4);
+ assert(!memcmp(tail,diag+8,4));
+ assert(read_charge_diagnostics(NULL,NULL,tail,4,19)<0);
+ battery_fetch(-EIO);
+ assert(read_charge_diagnostics(NULL,NULL,diag,sizeof(diag),0)==LISM_CHARGE_DIAG_SIZE);
+ assert((int8_t)diag[7]==-EIO&&!(diag[3]&1));
+ assert(diag[14]==LISM_PRESENCE_SAMPLE_ERROR&&diag[15]==0);
 #endif
  puts("PASS: fresh dynamic inference, unknown USB, removal/errors/stale, v2 encrypted peer lifecycle");
 }

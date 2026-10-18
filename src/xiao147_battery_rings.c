@@ -44,8 +44,14 @@ static void render_ring(uint8_t slot) {
     if (slot >= RING_COUNT || ring_obj[slot] == NULL) {
         return;
     }
+#if defined(CONFIG_LISM_TWO_KEYBOARD_SETS)
+    /* The actual transport is authoritative. A missed/early observer event
+     * must not make B-R (physical5) look disconnected on logical ring1. */
+    lism_split_sets_connected_snapshot(connected);
+#endif
 
-    const uint8_t source_slot = slot < 2 ? slot : xiao147_active_joystick_slot(connected);
+    const uint8_t source_slot = slot < 2 ? xiao147_active_keyboard_slot(slot) :
+                                         xiao147_active_joystick_slot(connected);
     const bool active = connected[source_slot];
     struct lism_charge_state charge = lism_charge_peripheral(source_slot);
     uint8_t level = 0;
@@ -64,6 +70,9 @@ static void render_ring(uint8_t slot) {
     char text[5];
     if (known) {
         snprintf(text, sizeof(text), "%u", level);
+    } else if (active && (charge.flags & LISM_CHARGE_USB)) {
+        /* Connected, USB observed, battery level unknown is not disconnected. */
+        snprintf(text, sizeof(text), "USB");
     } else {
         snprintf(text, sizeof(text), "--");
     }
@@ -200,6 +209,9 @@ struct connection_ring_state {
 static struct connection_ring_state latest_connection;
 
 static void connection_update_cb(struct connection_ring_state state) {
+#if defined(CONFIG_LISM_TWO_KEYBOARD_SETS)
+    lism_split_sets_connected_snapshot(state.connected);
+#endif
     for (uint8_t slot = 0; slot < XIAO147_PERIPHERAL_COUNT; slot++) {
         connected[slot] = state.connected[slot];
         if (!connected[slot]) { battery_seen[slot] = false; }

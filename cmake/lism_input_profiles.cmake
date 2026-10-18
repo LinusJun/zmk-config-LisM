@@ -1,0 +1,18 @@
+# Split-peer bond capacity and computer output profiles are independent. Preserve
+# existing computer profile indices instead of exposing generic input bond slots.
+function(lism_input_profile_header pinned_ble_h binary_include_root)
+  file(READ "${pinned_ble_h}" code)
+  set(old "#define ZMK_BLE_PROFILE_COUNT (CONFIG_BT_MAX_PAIRED - CONFIG_ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS)\n")
+  set(new "#define ZMK_BLE_PROFILE_COUNT CONFIG_LISM_BLE_HOST_PROFILES\n")
+  string(LENGTH "${code}" before)
+  string(LENGTH "${old}" expected)
+  string(REPLACE "${old}" "" removed "${code}")
+  string(LENGTH "${removed}" after)
+  math(EXPR actual "${before} - ${after}")
+  if(NOT actual EQUAL expected)
+    message(FATAL_ERROR "Pinned BLE computer profile formula moved or duplicated")
+  endif()
+  string(REPLACE "${old}" "${new}" code "${code}")
+  file(MAKE_DIRECTORY "${binary_include_root}/zmk")
+  file(WRITE "${binary_include_root}/zmk/ble.h" "${code}")
+endfunction()

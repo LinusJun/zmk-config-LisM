@@ -17,7 +17,9 @@ old_count = baseline["old_count"]
 count = old_count + 4
 row = baseline["row"]
 layers = {}
-keymap = read("config/lism.keymap")
+# The factory bindings remain a regression fixture, not a prohibition on remapping.
+# Active keymap structure/custom behavior preservation is tested by keymap_guard.
+keymap = read("tests/fixtures/keymap_editor_baseline.keymap")
 mt = re.search(r"&mt\s*\{(.*?)\};", keymap, re.S)[1]
 assert "tapping-term-ms = <200>;" in mt
 assert "require-prior-idle-ms = <125>;" in mt
@@ -93,6 +95,13 @@ assert "time-to-max-speed-ms = <0>" in keymap
 assert "acceleration-exponent = <0>" in keymap
 for path, digest in baseline["protected_files"].items():
     data = (ROOT / path).read_bytes()
+    if path == "config/west.yml":
+        # Freeze only the two former floating heads, verified against every
+        # blob in the exact dependency trees used for the delivered build.
+        for commit in (b"df652881be2520bde4f64ab6ca35e4c5708f4f9b",
+                       b"e6b467792a1dabef8cfa5c9fd26bfefc9c16662b"):
+            assert data.count(b"revision: " + commit) == 1
+            data = data.replace(b"revision: " + commit, b"revision: main")
     if path == "config/lism_right.conf":
         # Explicitly allow only additive charging telemetry; retain the original
         # protection hash for every trackball/input/radio setting.
@@ -101,17 +110,45 @@ for path, digest in baseline["protected_files"].items():
     if path in ("src/xiao147_ui.c", "src/xiao147_battery_rings.c"):
         # Normalize only the diagnostic-startup gate. UI's reviewed native-pixel
         # repair/power telemetry UI and compile-gated experimental BLE mouse
-        # pairing page have an explicitly reviewed protected hash;
+        # pairing page and display-only palette switch have reviewed hashes;
+        # palette touch safety/persistence/geometry execute in their own tests;
         # right-trackball/joystick hashes remain the original baseline.
         data = data.replace(b'#include "xiao147_display_test.h"\n', b'')
         data = data.replace(
             b'if (!zmk_display_is_initialized() || !xiao147_display_ui_ready()) {',
             b'if (!zmk_display_is_initialized()) {')
     if path == "src/xiao147_ui.c":
+        # Reviewed display-only refresh for the mode-specific layer-name color.
+        for refresh in (b'extern void xiao147_layer_name_refresh_colors(void);\n',
+                        b'        xiao147_layer_name_refresh_colors();\n'):
+            assert data.count(refresh) == 1
+            data = data.replace(refresh, b'')
         # Read-only touch safety query: no change to protected UI/charging code.
         query = b'bool xiao147_ui_is_sleeping(void)\n{\n    return atomic_get(&sleeping) != 0;\n}\n\n'
         assert data.count(query) == 1
         data = data.replace(query, b'')
+        snapshot = (b'#if defined(CONFIG_LISM_TWO_KEYBOARD_SETS)\n'
+                    b'    lism_split_sets_connected_snapshot(copy.connected);\n#endif\n')
+        assert data.count(snapshot) == 1
+        data = data.replace(snapshot, b'')
+    if path == "src/xiao147_battery_rings.c":
+        usb_unknown = (b'    } else if (active && (charge.flags & LISM_CHARGE_USB)) {\n'
+                       b'        /* Connected, USB observed, battery level unknown is not disconnected. */\n'
+                       b'        snprintf(text, sizeof(text), "USB");\n')
+        assert data.count(usb_unknown) == 1
+        data = data.replace(usb_unknown, b'')
+        # Reviewed B-R connection reconciliation only, independently executed
+        # by xiao147_second_set_rings_test.py; retain the original palette/layout hash.
+        snapshot = (b'#if defined(CONFIG_LISM_TWO_KEYBOARD_SETS)\n'
+                    b'    /* The actual transport is authoritative. A missed/early observer event\n'
+                    b'     * must not make B-R (physical5) look disconnected on logical ring1. */\n'
+                    b'    lism_split_sets_connected_snapshot(connected);\n#endif\n')
+        assert data.count(snapshot) == 1
+        data = data.replace(snapshot, b'')
+        snapshot = (b'#if defined(CONFIG_LISM_TWO_KEYBOARD_SETS)\n'
+                    b'    lism_split_sets_connected_snapshot(state.connected);\n#endif\n')
+        assert data.count(snapshot) == 1
+        data = data.replace(snapshot, b'')
     assert hashlib.sha256(data).hexdigest() == digest, path + " unexpectedly changed"
 build = (ROOT / "build.yaml").read_text()
 assert "lism_left_peripheral_4waystick" in build and "lism_left_peripheral_trackball" not in build

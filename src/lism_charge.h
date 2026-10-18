@@ -16,6 +16,10 @@
 #define LISM_CHARGE_OBSERVED 64
 #define LISM_CHARGE_FLAGS_ALL 127
 #define LISM_CHARGE_STALE_MS 10000U
+/* Separate encrypted diagnostic characteristic; v2 battery state stays intact. */
+#define LISM_CHARGE_DIAG_V1_SIZE 12
+/* 18-byte value + read-by-type header fits default ATT MTU23. */
+#define LISM_CHARGE_DIAG_SIZE 18
 
 struct lism_charge_state {
     uint8_t flags;

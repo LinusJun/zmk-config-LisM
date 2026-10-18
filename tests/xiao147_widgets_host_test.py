@@ -16,13 +16,18 @@ prelude = r"""
 #include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
+#define CONFIG_LISM_XIAO147_TOUCH 1
+static bool palette_bright = true;
+bool xiao147_palette_bright(void) { return palette_bright; }
 #include "xiao147_operator_colors.h"
 #include "xiao147_battery_colors.h"
 #define CONFIG_PROSPECTOR_LAYER_NAME_UPPERCASE 1
 #define IS_ENABLED(x) (x)
 #define WPM_BAR_COUNT 26
 #define WPM_MAX 120
+#ifndef ZMK_BLE_PROFILE_COUNT
 #define ZMK_BLE_PROFILE_COUNT 5
+#endif
 #define LV_PART_MAIN 0
 #define LV_OPA_TRANSP 0
 #define LV_OPA_COVER 255
@@ -44,8 +49,9 @@ static bool sys_slist_is_empty(sys_slist_t *l) { return !l->head; }
 static void sys_slist_append(sys_slist_t *l,sys_snode_t *n) {
     n->next=NULL; if(l->tail) l->tail->next=n; else l->head=n; l->tail=n;
 }
-typedef struct lv_obj { struct lv_obj *child; char text[40]; int x;
-    unsigned bg_color,text_color,border_color; int bg_opa; } lv_obj_t;
+typedef struct lv_obj { struct lv_obj *child,*children[32]; unsigned child_count;
+    char text[40]; int x,y,width,height,translate_y; const int *font; bool centered;
+    unsigned bg_color,text_color,border_color; int bg_opa; bool hidden; } lv_obj_t;
 typedef unsigned lv_color_t;
 static bool display_context;
 static lv_obj_t objects[160];
@@ -53,11 +59,13 @@ static unsigned objects_used,gui_calls;
 static void gui(void) { assert(display_context); gui_calls++; }
 static lv_obj_t *lv_obj_create(lv_obj_t *p) {
     gui(); assert(objects_used<160); lv_obj_t *o=&objects[objects_used++];
-    if(p && !p->child) p->child=o;
+    if(p) { assert(p->child_count<32);p->children[p->child_count++]=o;
+        if(!p->child)p->child=o; }
     return o;
 }
 static lv_obj_t *lv_label_create(lv_obj_t *p) { return lv_obj_create(p); }
-static lv_obj_t *lv_obj_get_child(lv_obj_t *p,int i) { gui(); assert(i==0); return p->child; }
+static lv_obj_t *lv_obj_get_child(lv_obj_t *p,int i) { gui(); assert(i>=0);return (unsigned)i<p->child_count?p->children[i]:NULL; }
+static uint32_t lv_obj_get_child_cnt(lv_obj_t *p) {gui();return p->child_count;}
 static lv_color_t lv_color_hex(unsigned c) { return c; }
 #define STYLE2(name) static void name(lv_obj_t *o,int a,int part) {(void)o;(void)a;(void)part;gui();}
 static void lv_obj_set_style_bg_color(lv_obj_t *o,int v,int part) {(void)part;o->bg_color=v;gui();}
@@ -71,15 +79,17 @@ STYLE2(lv_obj_set_style_pad_top)
 STYLE2(lv_obj_set_style_pad_bottom)
 static void lv_obj_set_style_text_color(lv_obj_t *o,int v,int part) {(void)part;o->text_color=v;gui();}
 static void lv_obj_set_style_border_color(lv_obj_t *o,int v,int part) {(void)part;o->border_color=v;gui();}
-STYLE2(lv_obj_set_style_translate_y)
-static void lv_obj_set_style_text_font(lv_obj_t *o,const int *f,int p) {(void)o;(void)f;(void)p;gui();}
-static void lv_obj_set_pos(lv_obj_t *o,int x,int y) {o->x=x;(void)y;gui();}
+static void lv_obj_set_style_translate_y(lv_obj_t *o,int v,int p) {(void)p;o->translate_y=v;gui();}
+static void lv_obj_set_style_text_font(lv_obj_t *o,const int *f,int p) {(void)p;o->font=f;gui();}
+static void lv_obj_set_pos(lv_obj_t *o,int x,int y) {o->x=x;o->y=y;gui();}
 static int lv_obj_get_x(lv_obj_t *o) { gui(); return o->x; }
-static void lv_obj_set_size(lv_obj_t *o,int w,int h) {(void)o;(void)w;(void)h;gui();}
+static int lv_obj_get_y(lv_obj_t *o) { gui(); return o->y; }
+static int lv_obj_get_width(lv_obj_t *o) { gui(); return o->width; }
+static void lv_obj_set_size(lv_obj_t *o,int w,int h) {o->width=w;o->height=h;gui();}
 static void lv_obj_align(lv_obj_t *o,int a,int x,int y) {(void)o;(void)a;(void)x;(void)y;gui();}
-static void lv_obj_add_flag(lv_obj_t *o,int f) {(void)o;(void)f;gui();}
-static void lv_obj_clear_flag(lv_obj_t *o,int f) {(void)o;(void)f;gui();}
-static void lv_obj_center(lv_obj_t *o) {(void)o;gui();}
+static void lv_obj_add_flag(lv_obj_t *o,int f) {if(f==LV_OBJ_FLAG_HIDDEN)o->hidden=true;gui();}
+static void lv_obj_clear_flag(lv_obj_t *o,int f) {if(f==LV_OBJ_FLAG_HIDDEN)o->hidden=false;gui();}
+static void lv_obj_center(lv_obj_t *o) {o->centered=true;gui();}
 static void lv_label_set_text(lv_obj_t *o,const char *s) {
     gui(); snprintf(o->text,sizeof(o->text),"%s",s);
 }
@@ -104,6 +114,10 @@ static struct zmk_endpoint_instance zmk_endpoint_get_selected(void) {
     return (struct zmk_endpoint_instance){.transport=mock_transport};
 }
 static uint8_t zmk_ble_active_profile_index(void) { return mock_profile; }
+#if ZMK_BLE_PROFILE_COUNT > 5
+static bool mock_sixth_saved=true;
+static bool zmk_ble_profile_is_open(uint8_t index) { assert(index==5);return !mock_sixth_saved; }
+#endif
 static const struct zmk_ble_active_profile_changed *as_zmk_ble_active_profile_changed(const zmk_event_t *e) {
     return e && e->kind==1 ? (const void *)&e->index : NULL;
 }
@@ -153,13 +167,15 @@ int main(void) {
     assert(zmk_widget_wpm_meter_init(&second,parent)==0);
     assert(delayable_inits==1); /* Do not reinitialize queued/running work. */
     assert(!strcmp(first.layer_label->text,"BASE"));
+    assert(first.layer_label->text_color==0xb0b0b0);
+    assert(second.layer_label->text_color==0xb0b0b0);
     wpm_smooth_work.pending=false;
     wpm_smooth_work.work.handler(&wpm_smooth_work.work);
     assert(wpm_smooth_work.pending && wpm_smooth_work.queue==&display_queue);
     assert(displayed_wpm>0 && displayed_wpm<target_wpm);
-    assert(first.bars[0]->bg_color==0xfc6b8a);
+    assert(first.bars[0]->bg_color==0xc2526a);
     assert(first.bars[WPM_BAR_COUNT-1]->bg_color==0x242424);
-    assert(first.wpm_label->text_color==0xfc6b8a);
+    assert(first.wpm_label->text_color==0xc2526a);
     display_context=false;
     /* Empty output list is safe during diagnostic stages. Event context never
      * mutates LVGL; endpoint/profile updates are deferred and coalesced.
@@ -170,6 +186,16 @@ int main(void) {
     dispatch(&widget_output_async_work); assert(gui_calls==before);
     struct zmk_widget_output output={0};
     display_context=true;assert(zmk_widget_output_init(&output,parent)==0);
+    assert(output.obj->child_count==ZMK_BLE_PROFILE_COUNT+2);
+    assert(output.slots[0]->x==0);
+    assert(output.slots[ZMK_BLE_PROFILE_COUNT-1]->x+
+           output.slots[ZMK_BLE_PROFILE_COUNT-1]->width==116);
+    for(int i=0;i<ZMK_BLE_PROFILE_COUNT;i++) {
+        char expected[12];snprintf(expected,sizeof(expected),"%d",i+1);
+        assert(output.slots[i]->child && !strcmp(output.slots[i]->child->text,expected));
+        assert(output.slots[i]->width>=17 && output.slots[i]->height==29);
+        assert(output.slots[i]->child->font==&FG_Medium_20 && output.slots[i]->child->centered);
+    }
     display_context=false;before=gui_calls;
     zmk_event_t profile={.kind=1,.index=2};
     widget_output_async_cb(&profile); assert(gui_calls==before);
@@ -177,22 +203,86 @@ int main(void) {
     assert(active_profile_index==2 && active_transport==ZMK_TRANSPORT_BLE && gui_calls>before);
     assert(output.ble_btn->bg_color==0x70cfd9&&output.ble_btn->bg_opa==255);
     assert(output.usb_btn->bg_opa==0&&output.usb_btn->border_color==0x4f4f40);
-    for(int i=0;i<5;i++){
+    for(int i=0;i<ZMK_BLE_PROFILE_COUNT;i++){
         assert(output.slots[i]->bg_color==(i==2?0xa0a3bf:0x353640));
-        assert(output.slots[i]->child->text_color==(i==2?0x000000:0xffffff));
+        assert(output.slots[i]->child->text_color==0xffffff);
     }
     before=gui_calls;mock_transport=ZMK_TRANSPORT_USB;
     widget_output_async_cb(NULL); assert(gui_calls==before);
     dispatch(&widget_output_async_work); assert(active_transport==ZMK_TRANSPORT_USB);
     assert(output.usb_btn->bg_color==0xf1f1d9&&output.usb_btn->bg_opa==255);
     assert(output.ble_btn->bg_opa==0&&output.ble_btn->border_color==0x353f40);
-    for(int i=0;i<5;i++){
+    for(int i=0;i<ZMK_BLE_PROFILE_COUNT;i++){
         assert(output.slots[i]->bg_color==(i==0?0xa0a3bf:0x353640));
-        assert(output.slots[i]->child->text_color==(i==0?0x000000:0xffffff));
+        assert(output.slots[i]->child->text_color==0xffffff);
     }
+    /* Execute the actual orientation layout fragment, not a copied formula.
+     * Keep the original 20 px face: digits 1-6 have 12 px advance and a
+     * maximum 10 px ink box in the pinned FG_Medium_20 font (checked below). */
+    display_context=true;
+    for(int pass=0;pass<3;pass++) {
+        bool portrait=pass==1;
+        layout_output(output.obj,portrait);
+        assert(output.obj->width==(portrait?156:116));
+        assert(output.obj->height==(portrait?65:62));
+        assert(output.usb_btn->width==(portrait?77:56));
+        assert(output.ble_btn->width==(portrait?77:56));
+        assert(output.usb_btn->y==0 && output.ble_btn->y==0);
+        assert(output.usb_btn->x==0 && output.ble_btn->x==(portrait?79:58));
+        assert(output.usb_btn->child->centered && output.ble_btn->child->centered);
+        int right=0;
+        for(int i=0;i<ZMK_BLE_PROFILE_COUNT;i++) {
+            lv_obj_t *slot=output.slots[i],*label=slot->child;
+            char expected[12];snprintf(expected,sizeof(expected),"%d",i+1);
+            assert(label && !strcmp(label->text,expected));
+            assert(label->font==&FG_Medium_20 && label->centered && label->translate_y==1);
+            assert(slot->width>=17 && slot->height==29 && slot->y==(portrait?36:33));
+            assert(slot->x==(i?right+2:0));
+            right=slot->x+slot->width;
+        }
+        assert(right==output.obj->width);
+        /* Every profile can become active, including profile six. */
+        for(int active=0;active<ZMK_BLE_PROFILE_COUNT;active++) {
+            display_context=false;before=gui_calls;
+            profile.index=active;widget_output_async_cb(&profile);assert(gui_calls==before);
+            dispatch(&widget_output_async_work);display_context=true;
+            for(int i=0;i<ZMK_BLE_PROFILE_COUNT;i++) {
+                assert(output.slots[i]->bg_color==(i==active?0xa0a3bf:0x353640));
+                assert(output.slots[i]->bg_opa==255);
+                assert(output.slots[i]->child->text_color==0xffffff);
+            }
+        }
+    }
+#if ZMK_BLE_PROFILE_COUNT > 5
+    /* Incoming HID capacity must not add a numbered computer profile. Keep
+     * legacy sixth pairing/selection reachable without squeezing five digits. */
+    display_context=true;
+    mock_sixth_saved=false;
+    output_update_cb((struct output_state){.profile=0,.transport=ZMK_TRANSPORT_USB});
+    assert(xiao147_output_profile_count()==5 && output.slots[5]->hidden);
+    int visible_right=0;
+    for(int i=0;i<5;i++) {
+        assert(!output.slots[i]->hidden);
+        assert(output.slots[i]->x==(i?visible_right+2:0));
+        visible_right=output.slots[i]->x+output.slots[i]->width;
+    }
+    assert(visible_right==output.obj->width);
+    mock_sixth_saved=true;
+    output_update_cb((struct output_state){.profile=0,.transport=ZMK_TRANSPORT_USB});
+    assert(xiao147_output_profile_count()==6 && !output.slots[5]->hidden);
+    mock_sixth_saved=false;
+    output_update_cb((struct output_state){.profile=5,.transport=ZMK_TRANSPORT_BLE});
+    assert(xiao147_output_profile_count()==6 && !output.slots[5]->hidden);
+    assert(output.slots[5]->bg_color==0xa0a3bf);
+    output_update_cb((struct output_state){.profile=0,.transport=ZMK_TRANSPORT_USB});
+    assert(xiao147_output_profile_count()==5 && output.slots[5]->hidden);
+    mock_sixth_saved=true;
+#else
+    assert(xiao147_output_profile_count()==5);
+#endif
     const unsigned levels[]={0,20,21,49,50,74,75,100};
-    const unsigned colors[]={0xff7070,0xff7070,0xfaa653,0xfaa653,
-                             0xffcc00,0xffcc00,0x6da68c,0x6da68c};
+    const unsigned colors[]={0xee9d9d,0xee9d9d,0xfaa653,0xfaa653,
+                             0xead382,0xead382,0x6da68c,0x6da68c};
     for(unsigned i=0;i<8;i++)assert(xiao147_battery_color(levels[i])==colors[i]);
     /* Fixed mappings from the pre-vivid pinned palette, not gains applied to
      * the 48fd08c replacements. Saturated colors cannot receive full gain. */
@@ -204,6 +294,7 @@ int main(void) {
     assert(DISPLAY_COLOR_MOD_ACTIVE==0xbcf3ff&&DISPLAY_COLOR_MOD_INACTIVE==0x4d6ba1);
     assert(DISPLAY_COLOR_MOD_SEPARATOR==0x606060&&DISPLAY_COLOR_MOD_CAPS_WORD==0xffbf00);
     assert(DISPLAY_COLOR_LAYER_DOT_ACTIVE==0xe0e0e0&&DISPLAY_COLOR_LAYER_DOT_INACTIVE==0x575757);
+    assert(DISPLAY_COLOR_LAYER_TEXT==0xb0b0b0&&DISPLAY_COLOR_SLOT_TEXT==0xffffff);
     assert(DISPLAY_COLOR_BATTERY_DISCONNECTED_FILL==0x383c42);
     assert(DISPLAY_COLOR_BATTERY_DISCONNECTED_RING==0x282c30&&DISPLAY_COLOR_BATTERY_BG==0x505050);
     assert(XIAO147_ACCENT_BLUE==0x3eccff&&XIAO147_SLIDER_BLUE==0x007aff);
@@ -211,17 +302,42 @@ int main(void) {
     for(unsigned gray=0;gray<256;gray++){
         unsigned neutral=gray*0x010101;assert(xiao147_original_color_brighten30(neutral)==neutral);
     }
+    /* Toggle the actual live widget palette without a profile/key event. */
+    palette_bright=false;display_context=true;
+    unsigned object_count=objects_used;
+    xiao147_output_refresh_colors();
+    xiao147_layer_name_refresh_colors();
+    assert(first.layer_label->text_color==0xe0e0e0&&second.layer_label->text_color==0xe0e0e0);
+    assert(objects_used==object_count);
+    for(int i=0;i<ZMK_BLE_PROFILE_COUNT;i++) {
+        assert(output.slots[i]->bg_color==(i==active_profile_index?0x7b7d93:0x353640));
+        assert(output.slots[i]->child->text_color==(i==active_profile_index?0:0x7b7d93));
+    }
+    assert(DISPLAY_COLOR_USB_ACTIVE_BG==0xb9b9a7&&DISPLAY_COLOR_BLE_ACTIVE_BG==0x569fa7);
+    const unsigned muted[]={0xb77979,0xb77979,0xc08040,0xc08040,0xb4a264,0xb4a264,0x54806c,0x54806c};
+    for(unsigned i=0;i<8;i++)assert(xiao147_battery_color(levels[i])==muted[i]);
+    assert(DISPLAY_COLOR_LAYER_TEXT==DISPLAY_COLOR_LAYER_DOT_ACTIVE&&DISPLAY_COLOR_LAYER_TEXT==0xe0e0e0);
+    assert(DISPLAY_COLOR_WPM_BAR_ACTIVE==0xc2526a);
+    palette_bright=true;xiao147_output_refresh_colors();
+    xiao147_layer_name_refresh_colors();
+    assert(first.layer_label->text_color==0xb0b0b0&&second.layer_label->text_color==0xb0b0b0);
+    for(int i=0;i<ZMK_BLE_PROFILE_COUNT;i++)assert(output.slots[i]->child->text_color==0xffffff);
     puts("PASS: actual OPERATOR WPM early-event safety, init-before-schedule, single work initialization, display-only animation and deferred USB/BLE GUI updates");
 }
 """
 joined = prelude + "\n#define widgets wpm_widgets\n" + body("src/xiao147_wpm_meter.c")
 joined += "\n#undef widgets\n#define widgets output_widgets\n" + body("src/xiao147_output.c")
-joined += "\n#undef widgets\n" + test
+ui = (root/"src/xiao147_ui.c").read_text()
+layout = ui[ui.index("    lv_obj_set_pos(output, portrait ? 8 : 202"):ui.index("    lv_obj_set_style_transform_pivot_x(output")]
+joined += "\n#undef widgets\nstatic void layout_output(lv_obj_t *output,bool portrait) {\n" + layout + "}\n" + test
 with tempfile.TemporaryDirectory(prefix="xiao147-widget-test-") as directory:
     folder=Path(directory)
     c=folder/"test.c"
     c.write_text(joined)
     binary=folder/"test"
-    subprocess.run(["cc","-std=gnu11","-Wall","-Wextra","-Werror",
-                    "-Wno-unused-parameter","-fsanitize=address,undefined","-I"+str(root/"src"),str(c),"-o",str(binary)],check=True)
-    subprocess.run([str(binary)],check=True)
+    for count in (5,6):
+        subprocess.run(["cc","-std=gnu11","-Wall","-Wextra","-Werror",
+                        "-Wno-unused-parameter","-fsanitize=address,undefined",
+                        f"-DZMK_BLE_PROFILE_COUNT={count}","-I"+str(root/"src"),str(c),"-o",str(binary)],check=True)
+        subprocess.run([str(binary)],check=True)
+        print(f"PASS: {count} numbered profiles, each active, landscape/portrait/landscape geometry, font and contrast")

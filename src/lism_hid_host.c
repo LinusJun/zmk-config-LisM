@@ -49,7 +49,7 @@ struct candidate {
     struct lism_hid_candidate public;
     uint32_t seen;
     uint32_t last_connectable_seen;
-    bool connectable, hid_hint, has_name, name_complete;
+    bool connectable, hid_hint, has_name, name_complete, name_hint;
 };
 struct ad_event {
     bt_addr_le_t addr;
@@ -702,6 +702,7 @@ static void begin_close(const char *why)
         atomic_inc(&epoch); /* Revoke queued notifications immediately. */
         advertisement_pending = false;
         cancelled = true;
+        LOG_INF("BLE HID phase %u -> %u report %u", (unsigned)phase, (unsigned)DISCONNECTING, report_index);
         phase = DISCONNECTING;
         operation_started = false;
         if (peer) { cancel_requests(peer); }
@@ -726,9 +727,14 @@ static void begin_close(const char *why)
     }
     deadline = k_uptime_get_32() + 3000;
 }
-static void fail(const char *why) { begin_close(why); }
+static void fail(const char *why)
+{
+    LOG_WRN("BLE HID failure phase %u report %u: %s", (unsigned)phase, report_index, why);
+    begin_close(why);
+}
 static void advance(enum phase next)
 {
+    LOG_INF("BLE HID phase %u -> %u report %u", (unsigned)phase, (unsigned)next, report_index);
     operation_started = false;
     phase = next;
 }
@@ -747,7 +753,10 @@ static void begin_discovery(uint8_t type, uint16_t start, uint16_t end, const st
     op->params = (struct bt_gatt_discover_params){.type = type, .start_handle = start,
         .end_handle = end, .uuid = uuid, .func = discovered};
     operation_started = true;
-    if (bt_gatt_discover(peer, &op->params)) { fail("HID discovery request failed"); }
+    int result = bt_gatt_discover(peer, &op->params);
+    LOG_INF("BLE HID discover phase %u type %u range %u-%u rc %d", (unsigned)phase,
+            type, start, end, result);
+    if (result) { fail("HID discovery request failed"); }
 }
 static void begin_read(uint16_t handle)
 {
@@ -757,7 +766,9 @@ static void begin_read(uint16_t handle)
     op->params.handle_count = 1;
     op->params.single.handle = handle;
     operation_started = true;
-    if (!handle || bt_gatt_read(peer, &op->params)) { fail("HID read request failed"); }
+    int result = handle ? bt_gatt_read(peer, &op->params) : -EINVAL;
+    LOG_INF("BLE HID read phase %u handle %u rc %d", (unsigned)phase, handle, result);
+    if (result) { fail("HID read request failed"); }
 }
 static void connect_target(void)
 {
@@ -784,12 +795,14 @@ static void connect_target(void)
     char_count = report_count = report_index = subscribed = 0;
     mode_set = map_finished = security_started = operation_started = cancelled = false;
     map_len = reference_len = 0;
+    LOG_INF("BLE HID phase %u -> %u report %u", (unsigned)phase, (unsigned)CONNECTING, report_index);
     phase = CONNECTING;
     deadline = now + SESSION_TIMEOUT_MS;
     atomic_clear(&advertisements_enabled);
     message("Connecting selected BLE HID device...");
     int result = bt_conn_le_create(&selected, BT_CONN_LE_CREATE_CONN,
                                     BT_LE_CONN_PARAM(9, 18, 30, 400), &peer);
+    LOG_INF("BLE HID create rc %d", result);
     publish_identities();
     if (result) {
         peer = NULL; phase = IDLE;
@@ -800,11 +813,34 @@ static void connect_target(void)
         scanner_state();
     }
 }
+static bool input_name_hint(const char *name)
+{
+    /* Whole ASCII words only: generic BLE/brand names and smart-home names
+     * are not input-device evidence. This is a discovery hint, not trust. */
+    static const char *const words[] = {"mouse", "trackpad", "touchpad", "g705",
+                                       "cheerpod", "cheerpod2"};
+    while (*name) {
+        char token[24];
+        unsigned length = 0;
+        while (*name && !((*name >= 'A' && *name <= 'Z') ||
+               (*name >= 'a' && *name <= 'z') || (*name >= '0' && *name <= '9'))) { name++; }
+        while ((*name >= 'A' && *name <= 'Z') || (*name >= 'a' && *name <= 'z') ||
+               (*name >= '0' && *name <= '9')) {
+            char ch = *name++;
+            if (length < sizeof(token) - 1) { token[length++] = ch >= 'A' && ch <= 'Z' ? ch + ('a' - 'A') : ch; }
+        }
+        token[length] = 0;
+        for (unsigned i = 0; i < sizeof(words) / sizeof(words[0]); i++) {
+            if (!strcmp(token, words[i])) { return true; }
+        }
+    }
+    return false;
+}
 static bool candidate_eligible(const struct candidate *candidate)
 {
-    /* A name is only a user-selectable discovery hint, NOT HID validation.
-     * Actual service and relative Report Map validation remain mandatory. */
-    return candidate->connectable && (candidate->has_name || candidate->hid_hint);
+    /* Aggregate ADV + SCAN_RSP first. Strict HIDS and relative Report Map
+     * validation after selection remains mandatory, including named devices. */
+    return candidate->connectable && (candidate->hid_hint || candidate->name_hint);
 }
 static void handle_advertisement(const struct ad_event *event)
 {
@@ -836,7 +872,7 @@ static void handle_advertisement(const struct ad_event *event)
     struct candidate *c = &ad_cache[cache];
     if (c->public.valid && event->seen - c->seen > 2000) {
         /* A fresh partial response must not inherit an expired name or hint. */
-        c->connectable = c->hid_hint = c->has_name = c->name_complete = false;
+        c->connectable = c->hid_hint = c->has_name = c->name_complete = c->name_hint = false;
         c->public.name[0] = 0;
     }
     c->public.valid = true; c->seen = event->seen;
@@ -844,6 +880,9 @@ static void handle_advertisement(const struct ad_event *event)
     if (event->connectable) { c->last_connectable_seen = event->seen; }
     c->hid_hint |= event->hid_hint;
     c->public.rssi = event->rssi;
+    /* Preserve evidence from a recent shortened name when the complete name
+     * arrives, without changing the fixed slot or its click token. */
+    c->name_hint |= input_name_hint(event->name);
     if (event->name[0] && (!c->name_complete || event->name_complete)) {
         snprintf(c->public.name, sizeof(c->public.name), "%s", event->name);
         c->has_name = true;
@@ -906,6 +945,7 @@ static void handle_command(struct command_event request)
                     candidate_eligible(c) && now - c->seen <= 2000 &&
                     now - c->last_connectable_seen <= 2000;
             if (valid) {
+                LOG_INF("BLE HID selected candidate %u name %s", request.index + 1, c->public.name);
                 bt_addr_le_copy(&selected, &c->addr);
                 selected_seen = c->last_connectable_seen;
                 advertisement_pending = newly_selected = true;
@@ -955,6 +995,13 @@ static void handle_event(struct bt_event *event)
         publish_identities(); scanner_state(); return;
     }
     if (!peer || event->conn != peer) { return; }
+    if (event->kind == EV_CONNECTED) {
+        LOG_INF("BLE HID connected error %u phase %u", event->error, (unsigned)phase);
+    } else if (event->kind == EV_DISCONNECTED) {
+        LOG_INF("BLE HID disconnected reason %u phase %u", event->error, (unsigned)phase);
+    } else if (event->kind == EV_SECURITY) {
+        LOG_INF("BLE HID security level %u error %u phase %u", event->level, event->error, (unsigned)phase);
+    }
     if (event->kind == EV_DISCONNECTED || (event->kind == EV_CONNECTED && event->error)) {
         finish_session(); message("Mouse disconnected; await advertisement"); return;
     }
@@ -1011,7 +1058,11 @@ static void handle_event(struct bt_event *event)
             }
         }
     } else if (event->kind == EV_READ) {
-        if (event->error) { fail("HID read failed / invalid length"); return; }
+        if (event->error) {
+            /* 0xff can also be our local length guard, not a remote ATT code. */
+            LOG_WRN("BLE HID read error/status %u phase %u report %u", event->error, (unsigned)phase, event->report);
+            fail("HID read failed / invalid length"); return;
+        }
         if (phase == MAP) {
             if (event->length > sizeof(map) - map_len) { fail("HID map exceeds 1024 bytes"); return; }
             memcpy(map + map_len, event->data, event->length); map_len += event->length;
@@ -1034,6 +1085,7 @@ static void handle_event(struct bt_event *event)
             }
         }
     } else if (event->kind == EV_SUBSCRIBED && phase == SUBSCRIBE && event->report == report_index) {
+        LOG_INF("BLE HID subscribed report %u ATT error %u", event->report, event->error);
         if (event->error) { fail("Mouse subscribe failed"); }
         else { subscribed++; report_index++; advance(DESCRIPTORS); }
     }
@@ -1046,7 +1098,9 @@ static void progress(void)
             if (security_started) { return; }
             security_started = true;
             if (bt_conn_get_security(peer) >= BT_SECURITY_L2) { advance(SERVICE); continue; }
-            if (bt_conn_set_security(peer, BT_SECURITY_L2)) { fail("Pairing failed; PIN unsupported"); }
+            int result = bt_conn_set_security(peer, BT_SECURITY_L2);
+            LOG_INF("BLE HID set security level %u rc %d", BT_SECURITY_L2, result);
+            if (result) { fail("Pairing failed; PIN unsupported"); }
             return;
         }
         if (phase == SERVICE) {
@@ -1060,6 +1114,8 @@ static void progress(void)
             k_mutex_lock(&report_lock, K_FOREVER);
             enum lism_hid_error error = lism_hid_parse(map, map_len, &descriptor);
             k_mutex_unlock(&report_lock);
+            LOG_INF("BLE HID map bytes %u parser error %u fields %u reports %u", (unsigned)map_len,
+                    (unsigned)error, descriptor.field_count, descriptor.report_count);
             if (error || !descriptor.field_count) {
                 k_mutex_lock(&state_lock, K_FOREVER); status.unsupported = true; k_mutex_unlock(&state_lock);
                 fail("Unsupported HID (no relative mouse)"); return;
@@ -1067,7 +1123,9 @@ static void progress(void)
             if (mode_handle && !mode_set) {
                 if (!(mode_properties & BT_GATT_CHRC_WRITE_WITHOUT_RESP)) { fail("Protocol Mode cannot write"); return; }
                 uint8_t mode = 1;
-                if (bt_gatt_write_without_response(peer, mode_handle, &mode, 1, false)) {
+                int result = bt_gatt_write_without_response(peer, mode_handle, &mode, 1, false);
+                LOG_INF("BLE HID report mode handle %u rc %d", mode_handle, result);
+                if (result) {
                     fail("Cannot select HID Report Mode"); return;
                 }
                 mode_set = true;
@@ -1077,6 +1135,7 @@ static void progress(void)
         if (phase == DESCRIPTORS) {
             if (report_index == report_count) {
                 if (!subscribed) { fail("No supported mouse notifications"); return; }
+                LOG_INF("BLE HID phase %u -> %u report %u", (unsigned)phase, (unsigned)READY, report_index);
                 phase = READY; newly_selected = false;
                 k_mutex_lock(&state_lock, K_FOREVER);
                 status.ready = true;
@@ -1113,7 +1172,9 @@ static void progress(void)
                 .min_security = BT_SECURITY_L2};
             atomic_set_bit(r->sub.flags, BT_GATT_SUBSCRIBE_FLAG_VOLATILE);
             operation_started = true;
-            if (bt_gatt_subscribe(peer, &r->sub)) { fail("Mouse subscribe request failed"); }
+            int result = bt_gatt_subscribe(peer, &r->sub);
+            LOG_INF("BLE HID subscribe report %u value %u ccc %u rc %d", report_index, r->value, r->ccc, result);
+            if (result) { fail("Mouse subscribe request failed"); }
             return;
         }
         return;
@@ -1153,7 +1214,10 @@ static void control(struct k_work *work)
     }
     if (peer && elapsed(now, deadline)) {
         if (phase == DISCONNECTING) { begin_close("Waiting for mouse teardown"); }
-        else if (phase != READY) { fail("Mouse setup timed out / PIN unsupported"); }
+        else if (phase != READY) {
+            LOG_WRN("BLE HID setup timeout phase %u report %u operation %u", (unsigned)phase, report_index, operation_started);
+            fail("Mouse setup timed out / PIN unsupported");
+        }
     }
     connect_target();
     progress();

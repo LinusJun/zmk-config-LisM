@@ -18,6 +18,11 @@ prelude=r'''
 #include <stddef.h>
 #include <stdio.h>
 #include "xiao147_orientation.h"
+#include "xiao147_settings_touch.h"
+static struct xiao147_settings_gesture settings_gesture = {.armed=-1};
+static bool bright;
+static bool xiao147_palette_bright(void) {return bright;}
+static void xiao147_palette_set_bright(bool v) {bright=v;}
 #define TOUCH_BATCH_LIMIT 8
 #define TOUCH_FRAME_MS 33
 #define SCREEN_W 320
@@ -37,7 +42,7 @@ static uint8_t previous_touch_fingers,brightness=100;
 static bool slider_drag,usb_powered=true,imu;
 static enum rotation_mode rotation=ROTATION_LANDSCAPE;
 static enum xiao147_orientation pose;
-static int page_atomic=XIAO147_PAGE_SETTINGS,auto_rotate_mode;
+static int page_atomic=XIAO147_PAGE_SETTINGS,auto_rotate_mode,menu_contact_down;
 static unsigned now,updates,pwm_calls,redraws,cancels;
 static int atomic_get(int *p) {return *p;}
 static void atomic_set(int *p,int v) {*p=v;}
@@ -106,6 +111,25 @@ int main(void) {
     send(1,301,52);send(0,0,0);frame();
     assert(brightness==100&&!slider_drag&&!previous_touch_fingers&&redraws==prior_redraws);
     assert(cancels>30);
+    /* Two final-row controls must remain distinct in both aspects. */
+    unsigned prior=redraws;
+    send(1,280,146);send(0,0,0);frame();assert(bright&&!imu&&redraws==prior+1);
+    send(1,280,146);send(1,80,146);send(0,0,0);frame();assert(bright&&!imu);
+    send(1,280,146);send(2,280,146);send(0,0,0);frame();assert(bright&&!imu);
+    send(1,280,146);send(XIAO147_TOUCH_CANCEL,0,0);send(0,0,0);frame();assert(bright);
+    pose=XIAO147_BUTTONS_BOTTOM;send(1,130,290);send(0,0,0);frame();assert(!bright&&!imu);
+    /* Held contact after CANCEL/rotation/page change cannot become a new tap. */
+    send(1,130,290);frame();xiao147_settings_cancel(&settings_gesture);
+    send(1,130,290);send(0,0,0);frame();assert(!bright);
+    send(1,130,290);send(0,0,0);frame();assert(bright);
+    send(1,130,290);frame();page_atomic=XIAO147_PAGE_DEVICES;send(1,130,290);frame();
+    page_atomic=XIAO147_PAGE_SETTINGS;send(1,130,290);send(0,0,0);frame();assert(bright);
+    send(1,130,290);send(0,0,0);frame();assert(!bright);
+    send(1,130,290);frame();xiao147_settings_cancel(&settings_gesture);
+    pose=XIAO147_USB_LEFT;send(1,280,146);send(0,0,0);frame();assert(!bright);
+    send(1,280,146);send(0,0,0);frame();assert(bright);
+    pose=XIAO147_BUTTONS_BOTTOM;
+    send(1,130,250);send(0,0,0);frame();assert(imu&&bright);
     puts("PASS: actual slider handler: bounded batches, latest value, release/cancel, 33ms non-postponed schedule, no full redraw during drag");
 }
 '''

@@ -20,11 +20,11 @@ manifest:
       import: app/west.yml
     - name: zmk-driver-paw3222
       remote: sekigon-gonnoc
-      revision: main
+      revision: df652881be2520bde4f64ab6ca35e4c5708f4f9b
     - name: zmk-rgbled-widget
       remote: caksoylar
       # v0.3 is for ZMK v0.3; main tracks current ZMK/Zephyr 4.x.
-      revision: main
+      revision: e6b467792a1dabef8cfa5c9fd26bfefc9c16662b
     - name: zmk-feature-charge-indicator
       remote: 4mplelab
       revision: f0d311ed7804cda0e5837ef902f0419aeace4a88

@@ -16,7 +16,7 @@ int main(void)
     connected[2] = false;
     uint8_t slot = xiao147_active_joystick_slot(connected);
     assert(slot == 3 && battery[slot] == 18 && rssi[slot + 1] == -85);
-    assert(xiao147_battery_color(battery[slot]) == 0xe46464);
+    assert(xiao147_battery_color(battery[slot]) == 0xb77979);
     connected[3] = false;
     slot = xiao147_active_joystick_slot(connected);
     assert(!connected[slot]); /* Callers must render unknown, not stale data. */
@@ -24,12 +24,12 @@ int main(void)
     slot = xiao147_active_joystick_slot(connected);
     assert(slot == 2 && battery[slot] == 32 && rssi[slot + 1] == -75);
     assert(xiao147_battery_color(battery[slot]) == 0xc08040);
-    assert(xiao147_battery_color(0) == 0xe46464);
-    assert(xiao147_battery_color(20) == 0xe46464);
+    assert(xiao147_battery_color(0) == 0xb77979);
+    assert(xiao147_battery_color(20) == 0xb77979);
     assert(xiao147_battery_color(21) == 0xc08040);
     assert(xiao147_battery_color(49) == 0xc08040);
-    assert(xiao147_battery_color(50) == 0xffcc00);
-    assert(xiao147_battery_color(74) == 0xffcc00);
+    assert(xiao147_battery_color(50) == 0xb4a264);
+    assert(xiao147_battery_color(74) == 0xb4a264);
     assert(xiao147_battery_color(75) == 0x54806c);
     assert(xiao147_battery_color(100) == 0x54806c);
     puts("PASS: stable joystick selection, disconnect/fallback data alignment, battery boundaries");

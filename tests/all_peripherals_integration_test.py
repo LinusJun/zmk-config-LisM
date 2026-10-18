@@ -15,7 +15,7 @@ def read(path):
 
 
 baseline = json.loads((ROOT / "tests/lism_keyboard_baseline.json").read_text())
-keymap = read("config/lism.keymap").split("keymap {", 1)[1]
+keymap = read("tests/fixtures/keymap_editor_baseline.keymap").split("keymap {", 1)[1]
 layers = {}
 for match in re.finditer(r"(default_layer|layer_\d+)\s*\{.*?bindings\s*=\s*<(.*?)>;", keymap, re.S):
     layers[match[1]] = [" ".join(value.split()) for value in

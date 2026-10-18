@@ -1,0 +1,321 @@
+#define ZMK_POINTING_DEFAULT_SCRL_VAL 200
+/* Independent stick rate; do not alter existing mouse/encoder scroll speed. */
+#define LISM_4WAY_SCROLL_SPEED 25
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+
+#include <dt-bindings/zmk/mouse.h>
+#include <behaviors.dtsi>
+#include <dt-bindings/zmk/bt.h>
+#include <dt-bindings/zmk/keys.h>
+#include <dt-bindings/zmk/outputs.h>
+#include <dt-bindings/zmk/pointing.h>
+
+&mt {
+    tapping-term-ms = <200>;
+    require-prior-idle-ms = <125>;
+    flavor = "balanced";
+};
+
+&lt { quick-tap-ms = <300>; };
+
+/ {
+    macros {
+        emoji: emoji_macro {
+            compatible = "zmk,behavior-macro";
+            label = "EMOJI";
+            #binding-cells = <0>;
+            bindings =
+                <&macro_press>,
+                <&kp CAPSLOCK>,
+                <&macro_tap>,
+                <&kp E>,
+                <&macro_release>,
+                <&kp CAPSLOCK>;
+        };
+    };
+
+    stick_scroll_listener {
+        compatible = "zmk,input-listener";
+        device = <&stick_scroll>;
+    };
+
+    behaviors {
+        stick_scroll: stick_scroll {
+            compatible = "zmk,behavior-input-two-axis";
+            #binding-cells = <1>;
+            x-input-code = <INPUT_REL_HWHEEL>;
+            y-input-code = <INPUT_REL_WHEEL>;
+            delay-ms = <0>;
+            time-to-max-speed-ms = <0>;
+            acceleration-exponent = <0>; /* Uniform scroll, matching the stock msc behavior. */
+        };
+
+        encoder_msc: sensor_rotate_msc {
+            compatible = "zmk,behavior-sensor-rotate-var";
+            #sensor-binding-cells = <2>;
+            bindings = <&msc>, <&msc>;
+
+            tap-ms = <20>;
+        };
+
+        encoder_kp: sensor_rotate_kp {
+            compatible = "zmk,behavior-sensor-rotate-var";
+            #sensor-binding-cells = <2>;
+            bindings = <&kp>, <&kp>;
+        };
+    };
+
+    combos {
+        compatible = "zmk,combos";
+
+        MleftClkR {
+            bindings = <&mkp MB1>;
+            key-positions = <16 17>;
+        };
+
+        MrightClkR {
+            bindings = <&mkp MB2>;
+            key-positions = <18 17>;
+        };
+
+        MmidClkR {
+            bindings = <&mkp MB3>;
+            key-positions = <18 16>;
+        };
+
+        comboTb {
+            bindings = <&kp TAB>;
+            key-positions = <11 12>;
+            layers = <0>;
+        };
+
+        SftTb {
+            bindings = <&kp LS(TAB)>;
+            key-positions = <12 13>;
+            layers = <0>;
+        };
+
+        Cp {
+            bindings = <&kp LC(C)>;
+            key-positions = <21 22>;
+            layers = <0>;
+        };
+
+        Pst {
+            bindings = <&kp LC(V)>;
+            key-positions = <22 23>;
+            layers = <0>;
+        };
+
+        Ct {
+            bindings = <&kp LC(X)>;
+            key-positions = <23 21>;
+            layers = <0>;
+        };
+
+        ScrnSht {
+            bindings = <&kp LG(LS(S))>;
+            key-positions = <10 11>;
+            layers = <0>;
+        };
+
+        MRightClkL {
+            bindings = <&mkp MB2>;
+            key-positions = <1 2>;
+            layers = <0>;
+        };
+
+        MLeftClkL {
+            bindings = <&mkp MB1>;
+            key-positions = <2 3>;
+            layers = <0>;
+        };
+
+        MmidClkL {
+            bindings = <&mkp MB3>;
+            key-positions = <1 3>;
+            layers = <0>;
+        };
+
+        ScrnShtMac {
+            bindings = <&kp LG(LS(NUMBER_4))>;
+            key-positions = <0 1>;
+            layers = <0>;
+        };
+
+        rleftclk2 {
+            bindings = <&mkp MB1>;
+            key-positions = <6 7>;
+        };
+
+        rrightclk2 {
+            bindings = <&mkp MB2>;
+            key-positions = <8 7>;
+        };
+
+        Allslct {
+            bindings = <&kp LC(A)>;
+            key-positions = <11 13>;
+            layers = <0>;
+        };
+
+        MmidClkR2 {
+            bindings = <&mkp MB3>;
+            key-positions = <6 8>;
+        };
+
+        capscombo {
+            bindings = <&kp CAPSLOCK>;
+            key-positions = <35 36>;
+        };
+
+        gameI {
+            bindings = <&kp I>;
+            key-positions = <23 22>;
+            layers = <1>;
+        };
+
+        gameT {
+            bindings = <&kp T>;
+            key-positions = <4 3>;
+            layers = <1>;
+        };
+
+        gameH {
+            bindings = <&kp H>;
+            key-positions = <23 21>;
+            layers = <1>;
+        };
+
+        gameTab {
+            bindings = <&kp TAB>;
+            key-positions = <11 12>;
+            layers = <1>;
+        };
+
+        gameC {
+            bindings = <&kp C>;
+            key-positions = <32 31>;
+            layers = <1>;
+        };
+
+        gameY {
+            bindings = <&kp Y>;
+            key-positions = <30 31>;
+            layers = <1>;
+        };
+
+        gameM {
+            bindings = <&kp M>;
+            key-positions = <21 22>;
+            layers = <1>;
+        };
+    };
+
+    keymap {
+        compatible = "zmk,keymap";
+
+        default_layer {
+            display-name = "Base";
+            bindings = <
+&kp Q           &kp W       &kp E          &kp R             &kp T                                      &kp Y        &kp U           &kp I        &kp O       &kp P
+&mt LEFT_GUI A  &mt LALT S  &mt LCTRL D    &mt LEFT_SHIFT F  &kp G                                      &kp H        &mt RSHIFT J    &mt RCTRL K  &mt RALT L  &mt RGUI SEMICOLON
+&kp Z           &kp X       &kp C          &kp V             &kp B                                      &kp N        &kp M           &kp COMMA    &kp DOT     &kp SLASH
+&lt 4 DELETE    &kp F1      &kp BACKSPACE  &kp LS(LG(N4))    &lt 2 SPACE  &lt 3 ESC    &lt 3 BACKSPACE  &lt 2 ENTER  &kp LS(LG(N4))  &kp F1       &kp F2      &lt 4 ESC
+&kp W  &kp S  &kp A  &kp D  &kp SPACE  &kp LEFT_SHIFT  /* JP19 42..47 */
+&kp W  &kp S  &kp A  &kp D  &none      &kp LEFT_SHIFT  /* Circle Pad 48..53 */
+&kp UP  &kp RIGHT  &kp DOWN  &kp LEFT  /* Base: Up Right Down Left. */
+            >;
+
+            sensor-bindings = <&encoder_msc SCRL_DOWN SCRL_UP>;
+        };
+
+        layer_1 {
+            display-name = "Game";
+            bindings = <
+&kp ESC       &kp Q  &kp W  &kp E   &kp R                                &to 0      &mkp MB4  &mkp MB5  &kp LEFT_SHIFT  &kp I
+&kp NUMBER_1  &kp A  &kp S  &kp D   &kp NUMBER_2                         &kp M      &mkp MB1  &mkp MB2  &mkp MB3        &kp T
+&kp NUMBER_3  &kp G  &kp X  &kp V   &kp NUMBER_4                         &kp Y      &kp T     &kp C     &kp Y           &kp H
+&kp Z         &kp Y  &kp C  &trans  &kp SPACE     &kp F    &kp LEFT_GUI  &kp ENTER  &trans    &trans    &kp LEFT_ALT    &kp LS(F2)
+&trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans
+&kp LEFT_SHIFT  &kp LEFT_GUI  &kp LEFT_CONTROL  &kp LEFT_ALT  /* Game: Up Right Down Left. */
+            >;
+        };
+
+        layer_2 {
+            display-name = "Nav";
+            bindings = <
+&kp LG(LS(LEFT))  &kp HOME      &kp UP         &kp END        &kp LS(LG(RIGHT))                                     &kp KP_EQUAL     &kp KP_N7  &kp KP_N8  &kp KP_N9   &kp KP_NUMLOCK
+&kp LS(LC(TAB))   &kp LEFT      &kp DOWN       &kp RIGHT      &kp LC(TAB)                                           &kp KP_PLUS      &kp KP_N4  &kp KP_N5  &kp KP_N6   &kp KP_MINUS
+&kp LEFT_SHIFT    &kp PAGE_UP   &kp C_AC_HOME  &kp PAGE_DOWN  &kp LC(LS(C_AC_BACK))                                 &kp KP_MULTIPLY  &kp KP_N1  &kp KP_N2  &kp KP_N3   &kp KP_DIVIDE
+&kp LCTRL         &kp LEFT_WIN  &kp LEFT_ALT   &trans         &kp K_BACK             &kp C_AC_BACK    &kp KP_ENTER  &kp KP_N0        &trans     &kp KP_N0  &kp KP_DOT  &kp KP_DOT
+&trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans
+&stick_scroll MOVE_Y(-LISM_4WAY_SCROLL_SPEED)  &stick_scroll MOVE_X(-LISM_4WAY_SCROLL_SPEED)  &stick_scroll MOVE_Y(LISM_4WAY_SCROLL_SPEED)  &stick_scroll MOVE_X(LISM_4WAY_SCROLL_SPEED)  /* Nav U/R/D/L: scroll Down/Left/Up/Right, continuous while held. */
+            >;
+
+            #sensor-bindings = <&encoder_kp C_VOL_UP C_VOL_DN>;
+        };
+
+        layer_3 {
+            display-name = "Mark";
+            bindings = <
+&kp EXCLAMATION  &kp AT_SIGN   &kp HASH              &kp DOLLAR             &kp PERCENT                       &kp CARET        &kp AMPERSAND     &kp ASTERISK       &kp SINGLE_QUOTE  &kp DOUBLE_QUOTES
+&kp NUMBER_1     &kp NUMBER_2  &kp NUMBER_3          &kp NUMBER_4           &kp NUMBER_5                      &kp NUMBER_6     &kp NUMBER_7      &kp NUMBER_8       &kp NUMBER_9      &kp NUMBER_0
+&kp TILDE        &kp GRAVE     &kp LEFT_PARENTHESIS  &kp RIGHT_PARENTHESIS  &kp LEFT_BRACE                    &kp RIGHT_BRACE  &kp LEFT_BRACKET  &kp RIGHT_BRACKET  &kp PIPE          &kp BACKSLASH
+&kp F7           &kp F5        &kp F4                &trans                 &kp MINUS       &trans    &trans  &kp UNDERSCORE   &trans            &kp F8             &kp F11           &kp F12
+&trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans
+&kp LEFT_SHIFT  &kp LEFT_GUI  &kp LEFT_CONTROL  &kp LEFT_ALT  /* Mark: Up Right Down Left. */
+            >;
+        };
+
+        layer_4 {
+            display-name = "Device";
+            bindings = <
+&to 1        &to 5           &none         &none         &bt BT_CLR                           &bt BT_SEL 0  &bt BT_SEL 1  &bt BT_SEL 2  &bt BT_SEL 3  &bt BT_SEL 4
+&to 5        &out OUT_BLE    &out OUT_USB  &out OUT_TOG  &trans                               &none         &out OUT_TOG  &out OUT_USB  &out OUT_BLE  &none
+&sys_reset   &none           &none         &none         &none                                &none         &none         &none         &none         &sys_reset
+&bootloader  &bt BT_CLR_ALL  &none         &none         &none       &none    &studio_unlock  &none         &none         &none         &none         &bootloader
+&trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans
+&trans &trans &trans &trans  /* Left 4waystick: Up Right Down Left. */
+            >;
+        };
+
+        layer_5 {
+            display-name = "GameJoystick";
+            bindings = <
+&kp TAB       &kp Q  &kp W    &kp E   &kp NUMBER_1                  &trans  &trans  &trans  &trans        &kp I
+&kp R         &kp A  &kp S    &kp D   &kp NUMBER_2                  &trans  &trans  &trans  &trans        &kp T
+&kp NUMBER_3  &kp Z  &kp X    &kp G   &kp V                         &trans  &trans  &trans  &kp Y         &kp H
+&kp NUMBER_4  &kp M  &kp ESC  &trans  &kp SPACE     &kp F    &to 0  &trans  &trans  &trans  &kp LEFT_GUI  &kp C
+&trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans
+&kp W  &kp D  &kp S  &kp A  /* GameJoystick: Up Right Down Left. */
+            >;
+        };
+
+        layer_6 {
+            status = "okay";
+            display-name = "StickWASD";
+            bindings = <
+&trans  &to 0  &trans  &trans  &trans                    &trans  &trans  &trans  &trans  &trans
+&trans  &trans  &trans  &trans  &trans                    &trans  &trans  &trans  &trans  &trans
+&trans  &trans  &trans  &trans  &trans                    &trans  &trans  &trans  &trans  &trans
+&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
+&trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans
+&kp W  &kp D  &kp S  &kp A  /* Left 4waystick: Up Right Down Left. */
+            >;
+        };
+
+        layer_7 {
+            status = "reserved";
+            display-name = "Brank Layer";
+            bindings = <
+&trans  &trans  &trans  &trans  &trans                    &trans  &trans  &trans  &trans  &trans
+&trans  &trans  &trans  &trans  &trans                    &trans  &trans  &trans  &trans  &trans
+&trans  &trans  &trans  &trans  &trans                    &trans  &trans  &trans  &trans  &trans
+&trans  &trans  &trans  &trans  &trans  &trans    &trans  &trans  &trans  &trans  &trans  &trans
+&trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans &trans
+&trans &trans &trans &trans  /* Left 4waystick: Up Right Down Left. */
+            >;
+        };
+    };
+};

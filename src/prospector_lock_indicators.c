@@ -140,6 +140,13 @@ ZMK_DISPLAY_WIDGET_LISTENER(widget_lism_lock_indicators, struct lock_indicator_s
                             lock_indicator_update_cb, lock_indicator_get_state)
 ZMK_SUBSCRIPTION(widget_lism_lock_indicators, zmk_hid_indicators_changed);
 
+#ifdef CONFIG_LISM_XIAO147_TOUCH
+void xiao147_locks_refresh_colors(void) {
+    if (!caps_label || !num_label) { return; }
+    lock_indicator_update_cb(lock_indicator_get_state(NULL));
+}
+#endif
+
 static void display_init_work_handler(struct k_work *work) {
     widget_lism_lock_indicators_init();
 }

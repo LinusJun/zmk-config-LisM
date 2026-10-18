@@ -12,12 +12,17 @@
 #include <zephyr/bluetooth/conn.h>
 #include <zmk/battery.h>
 #include <hal/nrf_power.h>
+#include <zephyr/logging/log.h>
+#include <errno.h>
 #include "lism_charge.h"
 #include "lism_battery_presence.h"
+LOG_MODULE_REGISTER(lism_charge, LOG_LEVEL_INF);
 
 #define CHARGE_SERVICE_UUID BT_UUID_128_ENCODE(0xf4f64a90, 0x712a, 0x4e2e, 0xa275, 0x64809f58e101)
 #define CHARGE_STATE_UUID BT_UUID_128_ENCODE(0xf4f64a91, 0x712a, 0x4e2e, 0xa275, 0x64809f58e101)
+#define CHARGE_DIAG_UUID BT_UUID_128_ENCODE(0xf4f64a92, 0x712a, 0x4e2e, 0xa275, 0x64809f58e101)
 static struct bt_uuid_128 state_uuid = BT_UUID_INIT_128(CHARGE_STATE_UUID);
+static struct bt_uuid_128 diag_uuid = BT_UUID_INIT_128(CHARGE_DIAG_UUID);
 static const struct device *const charge_port = DEVICE_DT_GET(DT_NODELABEL(gpio0));
 K_MUTEX_DEFINE(charge_lock);
 static struct lism_charge_filter local_filter;
@@ -31,6 +36,8 @@ static uint32_t power_changed_at;
 static uint32_t power_epoch, fetch_epoch;
 static bool fetch_pending, fetch_started_settled;
 static uint32_t last_adc_request_at;
+static uint16_t diagnostic_mv;
+static int diagnostic_result = -EAGAIN, diagnostic_stat = -EAGAIN;
 extern void lism_charge_request_battery_sample(void);
 
 /* charge_lock held. A physical source transition invalidates the old ADC
@@ -69,13 +76,16 @@ void lism_charge_begin_battery_sample(void) {
 void lism_charge_note_battery_sample(int result) {
     const struct device *battery = DEVICE_DT_GET(DT_CHOSEN(zmk_battery));
     struct sensor_value voltage;
-    bool valid = result == 0 && device_is_ready(battery) &&
-        sensor_channel_get(battery, SENSOR_CHAN_GAUGE_VOLTAGE, &voltage) == 0;
+    int channel_result = result ? result : !device_is_ready(battery) ? -ENODEV :
+        sensor_channel_get(battery, SENSOR_CHAN_GAUGE_VOLTAGE, &voltage);
+    bool valid = channel_result == 0;
     int32_t mv = valid ? voltage.val1 * 1000 + voltage.val2 / 1000 : 0;
     valid = valid && mv >= 2800 && mv <= 4300;
     k_mutex_lock(&charge_lock, K_FOREVER);
     uint32_t now = k_uptime_get_32();
     observe_power_locked(nrf_power_usbregstatus_vbusdet_get(NRF_POWER), now);
+    diagnostic_mv = mv > 0 && mv <= 65535 ? mv : 0;
+    diagnostic_result = channel_result ? channel_result : valid ? 0 : -ERANGE;
     /* Do not relabel a transition/transient sample as a new-source sample.
      * Only a subsequent real battery-worker fetch can restore validity. */
     valid = valid && fetch_pending && fetch_epoch == power_epoch && fetch_started_settled;
@@ -83,7 +93,12 @@ void lism_charge_note_battery_sample(int result) {
     if (valid) { power_settling = false; }
     /* Never process an epoch-mismatched or unsettled reading as evidence. */
     if (fetch_started_settled && fetch_epoch == power_epoch) {
-        lism_presence_sample(&presence, now, valid, mv);
+        /* Out-of-range voltage is a hard veto, not an ADC retry. */
+        if (!channel_result && (mv < 2800 || mv > 4300)) {
+            lism_presence_drop(&presence, LISM_PRESENCE_RANGE);
+        } else { lism_presence_sample(&presence, now, valid, mv); }
+    } else if (fetch_epoch != power_epoch) {
+        presence.last_reason = LISM_PRESENCE_EPOCH;
     }
     battery_sample_valid = valid;
     battery_sample_percent = zmk_battery_state_of_charge();
@@ -95,8 +110,8 @@ void lism_charge_note_battery_sample(int result) {
     k_mutex_unlock(&charge_lock);
 }
 
-struct lism_charge_state lism_charge_local(void) {
-    k_mutex_lock(&charge_lock, K_FOREVER);
+/* charge_lock held: state and optional diagnostics share one snapshot. */
+static struct lism_charge_state charge_local_locked(void) {
     bool usb = nrf_power_usbregstatus_vbusdet_get(NRF_POWER);
     observe_power_locked(usb, k_uptime_get_32());
     struct lism_charge_state s = local_filter.state;
@@ -113,6 +128,12 @@ struct lism_charge_state lism_charge_local(void) {
         s.flags &= ~(LISM_CHARGE_LEVEL_VALID | LISM_CHARGE_BATTERY_CONFIRMED |
                      LISM_CHARGE_BATTERY_INFERRED);
     }
+    return s;
+}
+
+struct lism_charge_state lism_charge_local(void) {
+    k_mutex_lock(&charge_lock, K_FOREVER);
+    struct lism_charge_state s = charge_local_locked();
     k_mutex_unlock(&charge_lock);
     return s;
 }
@@ -128,15 +149,27 @@ static void sample_charge(struct k_work *work) {
     k_mutex_lock(&charge_lock, K_FOREVER);
     bool usb = nrf_power_usbregstatus_vbusdet_get(NRF_POWER);
     int stat = gpio_ready ? gpio_pin_get_raw(charge_port, 17) : -ENODEV;
+    diagnostic_stat = stat;
     observe_power_locked(usb, k_uptime_get_32());
     uint32_t now = k_uptime_get_32();
     bool valid = battery_sample_valid && now - battery_sample_at <=
         (usb ? 3500U : CONFIG_ZMK_BATTERY_REPORT_INTERVAL * 1000U + 5000U);
-    if (!valid && !power_settling) { lism_presence_invalidate(&presence); }
+    if (!valid && !power_settling) {
+        /* A completed failed fetch already revoked evidence with its actual
+         * reason. Only a once-valid, genuinely expired sample is a GAP. */
+        if (battery_sample_valid) { lism_presence_retry(&presence, now, LISM_PRESENCE_GAP); }
+        else if (presence.handoff && now - presence.seed_at > 7000U) {
+            lism_presence_drop(&presence, LISM_PRESENCE_TIMEOUT);
+        }
+    }
     bool known = valid && presence.present;
     lism_charge_observe(&local_filter, now, usb, stat, known, known, battery_sample_percent);
-    bool request_adc = (usb || now - power_changed_at < 5000U) &&
-                       now - last_adc_request_at >= 1000U;
+    /* A 60s normal BAS period made the pre-USB evidence older than the 5s
+     * handoff window almost every time a keyboard was plugged in. Keep a
+     * recent battery-powered observation through the SAME ADC work owner.
+     * USB cold boots still remain unknown; STAT LOW alone is not a battery. */
+    uint32_t sample_interval = usb || now - power_changed_at < 5000U ? 1000U : 2000U;
+    bool request_adc = now - last_adc_request_at >= sample_interval;
     if (request_adc) { last_adc_request_at = now; }
     k_mutex_unlock(&charge_lock);
     if (request_adc) { lism_charge_request_battery_sample(); }
@@ -150,10 +183,36 @@ static ssize_t read_charge(struct bt_conn *conn, const struct bt_gatt_attr *attr
     uint8_t wire[LISM_CHARGE_WIRE_SIZE] = {LISM_CHARGE_VERSION, s.flags, s.percent, 0};
     return bt_gatt_attr_read(conn, attr, buf, len, offset, wire, sizeof(wire));
 }
+static ssize_t read_charge_diagnostics(struct bt_conn *conn,const struct bt_gatt_attr *attr,
+                                      void *buf,uint16_t len,uint16_t offset) {
+    k_mutex_lock(&charge_lock,K_FOREVER);
+    struct lism_charge_state s=charge_local_locked();
+    uint8_t wire[LISM_CHARGE_DIAG_SIZE]={2,s.flags,s.percent};
+    uint32_t now=k_uptime_get_32();
+    wire[3]=(battery_sample_valid?1:0)|(presence.present?2:0)|(presence.inferred?4:0)|
+            (presence.handoff?8:0)|(presence.candidate?16:0)|(presence.reference_valid?32:0)|
+            (power_settling?64:0);
+    wire[4]=diagnostic_mv;wire[5]=diagnostic_mv>>8;
+    wire[6]=diagnostic_stat==0?0:diagnostic_stat==1?1:255;
+    wire[7]=(uint8_t)(int8_t)(diagnostic_result < -128 ? -128 : diagnostic_result > 127 ? 127 : diagnostic_result);
+    uint32_t age=battery_sample_at?(now-battery_sample_at)/100:65535;
+    if(age>65535)age=65535;
+    wire[8]=age;wire[9]=age>>8;
+    uint32_t uptime=now/1000;wire[10]=uptime;wire[11]=uptime>>8;
+    wire[12]=presence.handoff_mv;wire[13]=presence.handoff_mv>>8;
+    wire[14]=presence.last_reason;wire[15]=presence.candidate_count;
+    uint32_t seed_age=presence.handoff?(now-presence.seed_at)/100:65535;
+    if(seed_age>65535)seed_age=65535;
+    wire[16]=seed_age;wire[17]=seed_age>>8;
+    k_mutex_unlock(&charge_lock);
+    return bt_gatt_attr_read(conn,attr,buf,len,offset,wire,sizeof(wire));
+}
 BT_GATT_SERVICE_DEFINE(lism_charge_service,
     BT_GATT_PRIMARY_SERVICE(BT_UUID_DECLARE_128(CHARGE_SERVICE_UUID)),
     BT_GATT_CHARACTERISTIC(&state_uuid.uuid, BT_GATT_CHRC_READ,
-                           BT_GATT_PERM_READ_ENCRYPT, read_charge, NULL, NULL));
+                           BT_GATT_PERM_READ_ENCRYPT, read_charge, NULL, NULL),
+    BT_GATT_CHARACTERISTIC(&diag_uuid.uuid,BT_GATT_CHRC_READ,
+                           BT_GATT_PERM_READ_ENCRYPT,read_charge_diagnostics,NULL,NULL));
 #endif
 
 #if IS_ENABLED(CONFIG_LISM_XIAO147_TOUCH)
@@ -164,7 +223,7 @@ struct charge_peer {
     struct bt_gatt_read_params read;
     bool pending, valid, observed;
     struct lism_charge_state state;
-    uint32_t sampled_at, next_at, requested_at;
+    uint32_t sampled_at, next_at, requested_at, diag_at;
 };
 static struct charge_peer peers[XIAO147_PERIPHERAL_COUNT];
 K_MUTEX_DEFINE(peers_lock);
@@ -213,6 +272,33 @@ static uint8_t charge_read_done(struct bt_conn *conn, uint8_t err,
      * prevents continuation/long reads from using them after this callback. */
     return BT_GATT_ITER_STOP;
 }
+static uint8_t charge_diagnostics_done(struct bt_conn *conn,uint8_t err,
+                                      struct bt_gatt_read_params *params,
+                                      const void *data,uint16_t len) {
+    struct charge_peer *p=CONTAINER_OF(params,struct charge_peer,read);
+    unsigned slot=p-peers;
+    k_mutex_lock(&peers_lock,K_FOREVER);
+    bool valid=p->conn==conn && matching_peer(conn,slot) && !err && data &&
+        k_uptime_get_32()-p->requested_at<=5000 &&
+        ((len==LISM_CHARGE_DIAG_V1_SIZE && ((const uint8_t *)data)[0]==1) ||
+         (len==LISM_CHARGE_DIAG_SIZE && ((const uint8_t *)data)[0]==2));
+    if(valid) {
+        const uint8_t *b=data;
+        LOG_INF("Charge slot %u flags=0x%02x percent=%u evidence=0x%02x mv=%u STAT=%u adc_rc=%d age_ms=%u uptime_s_mod65536=%u",
+                slot,b[1],b[2],b[3],b[4]|(b[5]<<8),b[6],(int8_t)b[7],
+                (b[8]|(b[9]<<8))*100U,b[10]|(b[11]<<8));
+        if (b[0]==2) {
+            LOG_INF("Charge slot %u recovery baseline_mv=%u last_reason=%u votes=%u seed_age_ms=%u",
+                    slot,b[12]|(b[13]<<8),b[14],b[15],(b[16]|(b[17]<<8))*100U);
+        }
+    } else {
+        p->diag_at=k_uptime_get_32()+60000;
+        LOG_INF("Charge slot %u diagnostics unavailable err=%u len=%u",slot,err,len);
+    }
+    p->pending=false;
+    k_mutex_unlock(&peers_lock);
+    return BT_GATT_ITER_STOP;
+}
 
 static void poll_peer(struct bt_conn *conn, void *unused) {
     ARG_UNUSED(unused);
@@ -227,16 +313,23 @@ static void poll_peer(struct bt_conn *conn, void *unused) {
         *p = (struct charge_peer){.conn = bt_conn_ref(conn), .next_at = k_uptime_get_32()};
     }
     uint32_t now = k_uptime_get_32();
-    if ((int32_t)(now - p->next_at) < 0) { k_mutex_unlock(&peers_lock); return; }
-    p->read = (struct bt_gatt_read_params){.func = charge_read_done, .handle_count = 0,
-        .by_uuid = {.start_handle = 1, .end_handle = 0xffff, .uuid = &state_uuid.uuid}};
+    bool diagnostics=p->valid && (p->state.flags & LISM_CHARGE_USB) &&
+        !(p->state.flags & LISM_CHARGE_LEVEL_VALID) && (int32_t)(now-p->diag_at)>=0;
+    if (!diagnostics && (int32_t)(now - p->next_at) < 0) { k_mutex_unlock(&peers_lock); return; }
+    p->read = (struct bt_gatt_read_params){.func = diagnostics?charge_diagnostics_done:charge_read_done,
+        .handle_count = 0,.by_uuid = {.start_handle = 1, .end_handle = 0xffff,
+                                     .uuid = diagnostics?&diag_uuid.uuid:&state_uuid.uuid}};
+    if(diagnostics)p->diag_at=now+10000;
     p->pending = true;
     p->requested_at = now;
     k_mutex_unlock(&peers_lock);
     int rc = bt_gatt_read(conn, &p->read);
     if (rc) {
         k_mutex_lock(&peers_lock, K_FOREVER);
-        p->pending = false; p->valid = false; p->next_at = now + 3000;
+        p->pending = false;
+        /* Optional diagnostics must never invalidate a good state report. */
+        if (diagnostics) { p->diag_at = now + 60000; }
+        else { p->valid = false; p->next_at = now + 3000; }
         k_mutex_unlock(&peers_lock);
     }
 }

@@ -1166,9 +1166,9 @@
     "config/west.yml": "a6e4d93b8aca42dcd85f45aeaf05e71d967b57669905e8b5ae3ad901a7e938bc",
     "src/kscan_resistive_joystick.c": "20f28d12254c5692c37f0f00af255bb50233e50bdcdf53ebb7ec87f0774c09a6",
     "src/joystick_sector.h": "68fd8b13c90c1d6f14b94562896ca8f6ece41ecad50581acb73a399ad4a18ef6",
-    "src/xiao147_ui.c": "3afb3b425ba21e5aaf99f72cfc7cbf296bd9483a967011e2f2bf3c6ff604c46c",
-    "src/xiao147_battery_rings.c": "b4d116a769d803271ad4ce8414fc1543dffaa624657b69954223f8b00e3ef8d9",
+    "src/xiao147_ui.c": "f511c7e684db4b0e99ebb5174566febdb594c6316184642469fd36ff0385924f",
+    "src/xiao147_battery_rings.c": "b52b3a827a0d99a1b8901bf6434db6875f9d3218a4be4afc3bc462e9c7efaa66",
     "src/xiao147_rssi.c": "25ad196092037437677bff32bf8f095e48d825d67a8db9a704c3d6335392c1d2",
-    "src/xiao147_peripheral_roles.h": "874800756dbfe3fef574b45d6c06e94148836c1f0605545a4b383819aa87e196"
+    "src/xiao147_peripheral_roles.h": "133cad413e353c25a86b02536f9e85d6bb63f3670ff202099e430a86260f6ba6"
   }
 }

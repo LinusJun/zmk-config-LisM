@@ -1,0 +1,83 @@
+name: Keymap Editor - complete firmware
+on:
+  push:
+    branches: [keymap-editor]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: keymap-editor-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: zmkfirmware/zmk
+          ref: 9ebbeff0a8b69a42f14aec022cdf16c7a107b9e0
+          path: _ci/zmk
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: zmkfirmware/zephyr
+          ref: 10ba6d0cb38bc3d258775d27982f707599320085
+          path: _ci/zephyr
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: carrefinho/prospector-zmk-module
+          ref: ed98221f3b52b7066dbb10ba3af8a29150b93a5a
+          path: _ci/prospector
+      - name: Guard keymap and run regression suite
+        env:
+          LISM_ZMK_APP: ${{ github.workspace }}/_ci/zmk/app
+          LISM_ZEPHYR_BASE: ${{ github.workspace }}/_ci/zephyr
+          LISM_PROSPECTOR_MODULE: ${{ github.workspace }}/_ci/prospector
+        run: python3 tools/ci_regressions.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: keymap-regression-report
+          path: ci-results/
+  firmware:
+    needs: regression
+    runs-on: ubuntu-latest
+    container: zmkfirmware/zmk-build-arm@sha256:fcbcc6a01c0f718699ec350800dc5d4083e620b50c5cf352bf3cb84f6695b401
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [dongle, left, right, jp19, circlepad, reset]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Compile and check complete configuration
+        run: python3 tools/ci_firmware.py --target '${{ matrix.target }}'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: keymap-firmware-${{ matrix.target }}
+          path: ci-artifacts/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: failure()
+        with:
+          name: keymap-build-diagnostics-${{ matrix.target }}
+          path: |
+            ci-workspace/build/zephyr/.config
+            ci-workspace/build/zephyr/zephyr.dts
+            ci-workspace/build/CMakeCache.txt
+  package:
+    needs: firmware
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: keymap-firmware-*
+          path: ci-artifacts
+          merge-multiple: true
+      - name: Verify complete package
+        run: python3 tools/ci_package.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: LisM-complete-firmware
+          path: ci-artifacts/
+          if-no-files-found: error

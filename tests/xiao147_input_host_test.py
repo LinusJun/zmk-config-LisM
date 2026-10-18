@@ -16,6 +16,8 @@ def function(signature):
 toggle = function("void xiao147_ui_toggle_imu(void)")
 sleep_query = function("bool xiao147_ui_is_sleeping(void)")
 callback = function("static void imu_button_input(struct input_event *evt, void *user_data)")
+usr1_down_definition = re.search(r"^static atomic_t usr1_down;", ui, re.M)
+assert usr1_down_definition, "production USR1 held-edge guard must exist"
 # Unmodified upstream fixture from the pinned ZMK revision, MIT licensed.
 listener = (root / "tests/fixtures/zmk_input_listener.c").read_text()
 listener_types = listener[listener.index("enum input_listener_xy_data_mode"):
@@ -79,7 +81,7 @@ struct device {void *data; const void *config;};
 struct input_event {uint8_t type;uint16_t code;int value;bool sync;const struct device *dev;};
 static void route_event(uint8_t type,uint16_t code,int value,bool sync,const struct device *dev);
 static uint32_t now;
-static int page,read_error,nrel,nkey,nsample,submitted,cancel_samples,extended_calls;
+static int page,read_error,nrel,nkey,nsample,submitted,cancel_samples,extended_calls,ui_releases;
 static bool reject_extended;
 static unsigned touch_io_phase, settle_calls;
 static enum xiao147_orientation pose;
@@ -122,7 +124,7 @@ static int input_report_key(const struct device*d,int c,int v,bool sync,int wait
 static enum xiao147_page xiao147_ui_page(void) {return page;}
 static enum xiao147_orientation xiao147_rotation_get(void) {return pose;}
 static bool xiao147_ui_wake_on_touch(void) {return false;}
-static void xiao147_ui_touch(uint8_t f,uint16_t x,uint16_t y,enum xiao147_orientation o) {assert(f==XIAO147_TOUCH_CANCEL||o==pose);if(f==XIAO147_TOUCH_CANCEL){cancel_samples++;}else if(f){sample_x=x;sample_y=y;nsample++;}}
+static void xiao147_ui_touch(uint8_t f,uint16_t x,uint16_t y,enum xiao147_orientation o) {assert(f==XIAO147_TOUCH_CANCEL||o==pose);if(f==XIAO147_TOUCH_CANCEL){cancel_samples++;}else if(f){sample_x=x;sample_y=y;nsample++;}else{ui_releases++;}}
 typedef int atomic_val_t;
 typedef int atomic_t;
 static int imu_mode,auto_rotate_mode,restore_landscape,sleeping;
@@ -233,7 +235,7 @@ static void ordinary_failure_tests(void) {
     assert(nkey==2&&!hid_buttons&&!d.pending_button&&!xiao147_touch_button_pending());
     assert(d.swallow_until_release);poll(&d);assert(nkey==2);
     read_error=0;page=0;poll(&d);assert(d.swallow_until_release);
-    sensor[1]=0;poll(&d);assert(!d.swallow_until_release);
+    int released=ui_releases;sensor[1]=0;poll(&d);assert(!d.swallow_until_release&&ui_releases==released+1);
     sensor[1]=1;poll(&d);sensor[1]=0;poll(&d);assert(nkey==4&&!hid_buttons);
 
     /* A large discontinuity followed by lift cannot generate a phantom click. */
@@ -414,8 +416,16 @@ int main(void) {
     assert(cancel_samples==2&&d.swallow_until_release&&d.fingers==0);
     poll(&d);assert(cancel_samples==2&&d.swallow_until_release);
     read_error=0;contact(0,80,140);poll(&d);assert(nsample==samples&&d.swallow_until_release);
-    sensor[1]=0;poll(&d);assert(!d.swallow_until_release);
+    int menu_released=ui_releases;sensor[1]=0;poll(&d);
+    assert(!d.swallow_until_release&&ui_releases==menu_released+1);
     sensor[1]=1;poll(&d);assert(nsample==samples+1);
+    /* First valid zero and a context change in the SAME polling frame still
+     * notify UI of release, so its next new tap need not be swallowed. */
+    int simultaneous_release=ui_releases;pose^=2;sensor[1]=0;poll(&d);
+    assert(ui_releases==simultaneous_release+1&&!d.swallow_until_release);
+    sensor[1]=1;poll(&d);simultaneous_release=ui_releases;
+    page=XIAO147_PAGE_STATUS;sensor[1]=0;poll(&d);
+    assert(ui_releases==simultaneous_release+1&&!d.swallow_until_release);
     page=0;pose=0;sensor[1]=0;poll(&d);
     contact(0,40,70);contact(1,60,90);sensor[1]=2;poll(&d);
     contact(0,48,78);contact(1,68,98);nrel=0;poll(&d);
@@ -513,7 +523,7 @@ int main(void) {
 with tempfile.TemporaryDirectory(prefix="xiao147-input-") as directory:
     c=Path(directory)/"test.c"
     c.write_text(prelude+listener_types+hid_mocks+listener_functions+hid_route+
-                 source+imu_source+toggle+sleep_query+callback+test)
+                 source+imu_source+usr1_down_definition.group(0)+"\n"+toggle+sleep_query+callback+test)
     binary=Path(directory)/"test"
     subprocess.run(["cc","-std=gnu11","-Wall","-Wextra","-Werror",
                     "-Wno-unused-parameter","-fsanitize=address,undefined",

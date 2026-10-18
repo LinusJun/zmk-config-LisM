@@ -1003,6 +1003,10 @@ static void axs_poll(struct k_work *work)
 
     enum xiao147_page page = xiao147_ui_page();
     enum xiao147_orientation orientation = xiao147_rotation_get();
+    /* Preserve a pending menu release before context cancellation clears the
+     * old contact. Rotation/page change may coincide with the first zero. */
+    bool release_to_ui = data->swallow_until_release ||
+        (data->last_page != XIAO147_PAGE_STATUS && data->fingers != 0);
     if (page != data->last_page || orientation != data->last_orientation) {
         /* Also cancel a queued settings drag in its original orientation. */
         cancel_contact(data);
@@ -1012,7 +1016,9 @@ static void axs_poll(struct k_work *work)
     }
 
     if (fingers == 0) {
-        if (page != XIAO147_PAGE_STATUS && data->fingers != 0 && !data->swallow_until_release) {
+        if (release_to_ui || (page != XIAO147_PAGE_STATUS && data->fingers != 0)) {
+            /* Cancellation is not a click, but the UI must learn when all
+             * contacts really lift so its cancel-until-release latch can end. */
             xiao147_ui_touch(0, 0, 0, orientation);
         }
         end_contact(data, page == XIAO147_PAGE_STATUS

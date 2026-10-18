@@ -29,10 +29,20 @@
 #include "xiao147_rssi.h"
 #include "xiao147_battery_colors.h"
 #include "xiao147_operator_colors.h"
+#include "xiao147_settings_touch.h"
 #include "lism_charge.h"
 #if defined(CONFIG_LISM_BLE_HID_BRIDGE)
 #include "lism_hid_host.h"
 #endif
+#if defined(CONFIG_LISM_BLE_INPUT_BRIDGE)
+#include "xiao147_inputs_ui.h"
+#include "xiao147_usr1_click.h"
+#endif
+extern uint8_t xiao147_output_profile_count(void);
+extern void xiao147_output_refresh_colors(void);
+extern void xiao147_layer_name_refresh_colors(void);
+extern void xiao147_modifiers_refresh_colors(void);
+extern void xiao147_locks_refresh_colors(void);
 
 LV_FONT_DECLARE(FG_Medium_20);
 LV_FONT_DECLARE(FR_Medium_32);
@@ -76,6 +86,7 @@ static atomic_t imu_mode = ATOMIC_INIT(0);
 static atomic_t restore_landscape = ATOMIC_INIT(0);
 static atomic_t auto_rotate_mode = ATOMIC_INIT(0);
 static atomic_t auto_orientation = ATOMIC_INIT(XIAO147_USB_LEFT);
+static atomic_t menu_contact_down;
 static uint32_t last_activity_ms;
 static uint8_t brightness = 50;
 static uint8_t applied_brightness = 255;
@@ -84,12 +95,13 @@ static enum rotation_mode rotation = ROTATION_LANDSCAPE;
 static uint8_t previous_touch_fingers;
 static struct touch_sample last_touch;
 static bool slider_drag;
+static struct xiao147_settings_gesture settings_gesture = {.armed = -1};
 
 static lv_obj_t *panel;
 static lv_obj_t *title_label;
 static lv_obj_t *settings_group;
-static lv_obj_t *settings_labels[5];
-static lv_obj_t *settings_switches[4];
+static lv_obj_t *settings_labels[6];
+static lv_obj_t *settings_switches[5];
 static lv_obj_t *settings_slider;
 static lv_obj_t *brightness_value;
 static lv_obj_t *devices_group;
@@ -101,6 +113,8 @@ static lv_obj_t *device_battery_fills[4];
 static lv_obj_t *device_charge_icons[4];
 #if defined(CONFIG_LISM_BLE_HID_BRIDGE)
 static lv_obj_t *hid_group;
+#endif
+#if defined(CONFIG_LISM_BLE_HID_BRIDGE) && !defined(CONFIG_LISM_BLE_INPUT_BRIDGE)
 static lv_obj_t *hid_message;
 static lv_obj_t *hid_limit;
 static lv_obj_t *hid_action;
@@ -129,6 +143,108 @@ static struct k_work redraw_work;
 static struct k_work_delayable touch_work;
 static struct k_work_delayable init_retry_work;
 static struct k_work_delayable periodic_work;
+static atomic_t usr1_down;
+#if defined(CONFIG_LISM_BLE_INPUT_BRIDGE)
+struct usr1_edge {
+    uint32_t time, context;
+    enum xiao147_orientation orientation;
+    bool pressed;
+};
+K_MSGQ_DEFINE(usr1_edges, sizeof(struct usr1_edge), 16, 4);
+static atomic_t usr1_context = ATOMIC_INIT(1);
+static uint32_t usr1_press_context;
+static bool usr1_navigation_press;
+static struct xiao147_usr1_click usr1_click;
+static uint32_t usr1_worker_context, usr1_capture;
+static void usr1_navigation_work(struct k_work *work);
+K_WORK_DELAYABLE_DEFINE(usr1_navigation, usr1_navigation_work);
+
+/* Safe from input/IMU queues: only the display queue touches the click state
+ * and LVGL focus. Context also invalidates already queued press/release edges. */
+static void usr1_invalidate_context(void)
+{
+    atomic_inc(&usr1_context);
+    if (zmk_display_is_initialized()) {
+        k_work_reschedule_for_queue(zmk_display_work_q(), &usr1_navigation, K_NO_WAIT);
+    }
+}
+
+static void usr1_apply_action(uint8_t action, uint32_t context)
+{
+    if (context != (uint32_t)atomic_get(&usr1_context) ||
+        xiao147_ui_page() != XIAO147_PAGE_BLE_MOUSE) { return; }
+    if (action & (XIAO147_USR1_MOVE | XIAO147_USR1_CANCEL)) {
+        xiao147_inputs_focus_cancel_pending();
+        usr1_capture = 0;
+    }
+    if (action & XIAO147_USR1_MOVE) { xiao147_inputs_focus_next(); }
+    /* A refresh inside MOVE may discover an authentication/candidate change.
+     * Never re-capture the replacement page with the old click's intent. */
+    if (context != (uint32_t)atomic_get(&usr1_context)) { return; }
+    if (action & XIAO147_USR1_CAPTURE) { usr1_capture = xiao147_inputs_focus_capture(); }
+    if (action & XIAO147_USR1_ACTIVATE) {
+        uint32_t capture = usr1_capture;
+        usr1_capture = 0;
+        if (capture) { xiao147_inputs_focus_activate(capture); }
+    }
+}
+
+static void usr1_navigation_work(struct k_work *work)
+{
+    ARG_UNUSED(work);
+    /* Snapshot the timeout watermark before draining. A new edge queued while
+     * this worker runs cannot be older than this watermark, and must not be
+     * overtaken by a later processing-clock expiration. */
+    uint32_t cutoff = k_uptime_get_32();
+    if (xiao147_ui_page() == XIAO147_PAGE_BLE_MOUSE) {
+        xiao147_inputs_draw(xiao147_rotation_is_portrait());
+    }
+    uint32_t context = atomic_get(&usr1_context);
+    if (usr1_worker_context != context || xiao147_ui_page() != XIAO147_PAGE_BLE_MOUSE) {
+        (void)xiao147_usr1_click_cancel(&usr1_click);
+        xiao147_inputs_focus_cancel_pending();
+        usr1_capture = 0;
+        usr1_worker_context = context;
+    }
+    struct usr1_edge edge;
+    while (k_msgq_get(&usr1_edges, &edge, K_NO_WAIT) == 0) {
+        if (edge.context == context && xiao147_ui_page() == XIAO147_PAGE_BLE_MOUSE) {
+            /* Refresh before interpreting queued intent. The context callback
+             * revokes old edges if a new pairing dialog arrived meanwhile. */
+            xiao147_inputs_draw(xiao147_rotation_is_portrait());
+        }
+        if (edge.context != context || context != (uint32_t)atomic_get(&usr1_context) ||
+            xiao147_ui_page() != XIAO147_PAGE_BLE_MOUSE) { continue; }
+        if (edge.orientation != xiao147_rotation_get()) { usr1_invalidate_context(); continue; }
+        usr1_apply_action(xiao147_usr1_click_edge(&usr1_click, edge.pressed, edge.time), context);
+    }
+    if (context != (uint32_t)atomic_get(&usr1_context)) {
+        k_work_reschedule_for_queue(zmk_display_work_q(), &usr1_navigation, K_NO_WAIT);
+        return;
+    }
+    /* Drain original-time edges BEFORE expiring the processing-clock timer:
+     * a late display worker must not turn a real double click into two singles. */
+    usr1_apply_action(xiao147_usr1_click_timeout(&usr1_click, cutoff), context);
+    uint32_t now = k_uptime_get_32();
+    uint32_t deadline;
+    if (xiao147_usr1_click_next_deadline(&usr1_click, &deadline)) {
+        int32_t wait = (int32_t)(deadline - now);
+        k_work_reschedule_for_queue(zmk_display_work_q(), &usr1_navigation,
+                                    wait > 0 ? K_MSEC(wait) : K_NO_WAIT);
+    }
+}
+
+static void usr1_queue_edge(bool pressed)
+{
+    struct usr1_edge edge = {.pressed = pressed, .time = k_uptime_get_32(),
+        .context = usr1_press_context, .orientation = xiao147_rotation_get()};
+    if (k_msgq_put(&usr1_edges, &edge, K_NO_WAIT) != 0) {
+        /* A lost edge must never become an accidental confirmation. */
+        usr1_invalidate_context();
+    }
+    k_work_reschedule_for_queue(zmk_display_work_q(), &usr1_navigation, K_NO_WAIT);
+}
+#endif
 
 static void redraw(struct k_work *work);
 static void apply_brightness(void);
@@ -177,17 +293,17 @@ static void layout_settings(bool portrait)
     lv_obj_set_pos(settings_slider, 14, portrait ? 77 : 52);
     lv_obj_set_size(settings_slider, portrait ? 142 : 287, 6);
     if (portrait) {
-        const int row_y[4] = {110, 151, 192, 238};
-        for (int i = 0; i < 4; i++) {
+        const int row_y[5] = {110, 151, 192, 238, 280};
+        for (int i = 0; i < 5; i++) {
             lv_obj_set_pos(settings_labels[i + 1], 12, row_y[i] + 3);
             lv_obj_set_pos(settings_switches[i], 116, row_y[i]);
         }
     } else {
-        const int label_x[4] = {12, 12, 166, 12};
-        const int label_y[4] = {72, 108, 108, 140};
-        const int switch_x[4] = {264, 107, 264, 264};
-        const int switch_y[4] = {68, 104, 104, 136};
-        for (int i = 0; i < 4; i++) {
+        const int label_x[5] = {12, 12, 166, 12, 166};
+        const int label_y[5] = {72, 108, 108, 140, 140};
+        const int switch_x[5] = {264, 107, 264, 107, 264};
+        const int switch_y[5] = {68, 104, 104, 136, 136};
+        for (int i = 0; i < 5; i++) {
             lv_obj_set_pos(settings_labels[i + 1], label_x[i], label_y[i]);
             lv_obj_set_pos(settings_switches[i], switch_x[i], switch_y[i]);
         }
@@ -213,6 +329,7 @@ static void draw_settings(void)
     set_switch(settings_switches[1], rotation == ROTATION_LANDSCAPE && !xiao147_ui_imu_enabled());
     set_switch(settings_switches[2], rotation == ROTATION_PORTRAIT);
     set_switch(settings_switches[3], xiao147_ui_imu_enabled());
+    set_switch(settings_switches[4], xiao147_palette_bright());
     /* Six-axis mode owns portrait orientation, so its lock controls are read-only. */
     for (int i = 0; i < 3; i++) {
         lv_obj_set_style_opa(settings_switches[i], xiao147_ui_imu_enabled() ?
@@ -245,7 +362,7 @@ static void layout_devices(bool portrait)
     }
 }
 
-#if defined(CONFIG_LISM_BLE_HID_BRIDGE)
+#if defined(CONFIG_LISM_BLE_HID_BRIDGE) && !defined(CONFIG_LISM_BLE_INPUT_BRIDGE)
 static void hid_mouse_draw_snapshot(const struct lism_hid_status *status)
 {
     if (!hid_drawn_valid || status->generation != hid_drawn_status.generation) {
@@ -410,6 +527,9 @@ static void draw_devices(void)
     k_mutex_lock(&peripheral_lock, K_FOREVER);
     copy = peripheral;
     k_mutex_unlock(&peripheral_lock);
+#if defined(CONFIG_LISM_TWO_KEYBOARD_SETS)
+    lism_split_sets_connected_snapshot(copy.connected);
+#endif
     int8_t signal_values[XIAO147_RSSI_COUNT];
     bool signal_valid[XIAO147_RSSI_COUNT];
     xiao147_rssi_snapshot(signal_values, signal_valid);
@@ -418,7 +538,8 @@ static void draw_devices(void)
     bool portrait = xiao147_rotation_is_portrait();
     uint8_t joystick_slot = xiao147_active_joystick_slot(copy.connected);
     for (int row = 0; row < 4; row++) {
-        uint8_t source_slot = row == 0 ? 0 : row == 3 ? joystick_slot : row - 1;
+        uint8_t source_slot = row == 0 ? 0 : row == 3 ? joystick_slot :
+                             xiao147_active_keyboard_slot(row - 1);
         uint8_t signal_index = row == 0 ? 0 : source_slot + 1;
         bool active = row == 0 || copy.connected[source_slot];
         uint8_t level = 0;
@@ -575,15 +696,14 @@ static void layout_status(bool portrait)
             lv_obj_set_pos(button, portrait ? (int)i * 79 : (int)i * 58, 0);
             lv_obj_set_size(button, portrait ? 77 : 56, 29);
         }
-        uint32_t profile_count = output_children - 2;
-        int width = (portrait ? 156 : 116) - ((int)profile_count - 1) * 2;
-        width /= profile_count;
-        int start_x = portrait ? ((156 - ((int)profile_count * width +
-                                         ((int)profile_count - 1) * 2)) / 2) : 0;
+        uint32_t profile_count = xiao147_output_profile_count();
+        int row_width = portrait ? 156 : 116;
         for (uint32_t i = 0; i < profile_count; i++) {
             lv_obj_t *slot = lv_obj_get_child(output, i + 2);
-            lv_obj_set_pos(slot, start_x + (int)i * (width + 2), portrait ? 36 : 33);
-            lv_obj_set_size(slot, width, 29);
+            int x = (int)i * (row_width + 2) / (int)profile_count;
+            int end = (int)(i + 1) * (row_width + 2) / (int)profile_count - 2;
+            lv_obj_set_pos(slot, x, portrait ? 36 : 33);
+            lv_obj_set_size(slot, end - x, 29);
         }
     }
     lv_obj_set_style_transform_pivot_x(output, 0, LV_PART_MAIN);
@@ -621,26 +741,61 @@ static void redraw(struct k_work *work)
     static enum xiao147_page drawn_page = XIAO147_PAGE_STATUS;
     static enum xiao147_orientation drawn_orientation;
     if (page != drawn_page || orientation != drawn_orientation) {
+#if defined(CONFIG_LISM_BLE_INPUT_BRIDGE)
+        usr1_invalidate_context();
+#endif
         k_msgq_purge(&touch_queue);
         previous_touch_fingers = 0;
         slider_drag = false;
+        xiao147_settings_cancel(&settings_gesture);
+        /* A physical release may already be queued and about to be purged.
+         * Do not swallow the next fresh tap if the producer saw that release. */
+        if (!atomic_get(&menu_contact_down)) {
+            xiao147_settings_touch(&settings_gesture, portrait, 0, 0, 0, false);
+        }
         last_touch = (struct touch_sample){0};
 #if defined(CONFIG_LISM_BLE_HID_BRIDGE)
+#if defined(CONFIG_LISM_BLE_INPUT_BRIDGE)
+        if (page != XIAO147_PAGE_BLE_MOUSE) { xiao147_inputs_cancel(); }
+        else { xiao147_inputs_press(UINT16_MAX, UINT16_MAX); }
+#else
         hid_tap_active = false;
         hid_drawn_valid = false;
         hid_forget_deadline = 0;
+#endif
 #endif
         drawn_page = page;
         drawn_orientation = orientation;
         LOG_INF("UI page %d, orientation %d, IMU %d", page, orientation, xiao147_ui_imu_enabled());
     }
     xiao147_rotation_set(orientation);
+#if defined(CONFIG_LISM_BLE_INPUT_BRIDGE)
+    xiao147_inputs_status_draw(portrait, page == XIAO147_PAGE_STATUS);
+#endif
     lv_obj_set_size(panel, portrait ? SCREEN_H : SCREEN_W,
                     portrait ? SCREEN_W : SCREEN_H);
     lv_obj_set_pos(title_label, 0, portrait ? 8 : 3);
     lv_obj_set_width(title_label, portrait ? SCREEN_H : SCREEN_W);
     lv_obj_set_style_text_align(title_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     layout_status(portrait);
+    /* No object rebuild, radio activity or fake key events on palette changes.
+     * This also applies a preference loaded after initial widget creation. */
+    static int drawn_palette = -1;
+    if (drawn_palette != (int)xiao147_palette_bright()) {
+        drawn_palette = xiao147_palette_bright();
+        xiao147_output_refresh_colors();
+        xiao147_layer_name_refresh_colors();
+        xiao147_modifiers_refresh_colors();
+        xiao147_locks_refresh_colors();
+        lv_obj_set_style_text_color(title_label, lv_color_hex(COLOR_ACCENT), LV_PART_MAIN);
+        lv_obj_set_style_text_color(brightness_value, lv_color_hex(COLOR_ACCENT), LV_PART_MAIN);
+        lv_obj_set_style_bg_color(settings_slider, lv_color_hex(XIAO147_SLIDER_BLUE), LV_PART_INDICATOR);
+        for (int i = 0; i < 5; i++) {
+            lv_obj_set_style_bg_color(settings_switches[i], lv_color_hex(XIAO147_SWITCH_GREEN),
+                                      LV_PART_INDICATOR | LV_STATE_CHECKED);
+        }
+        lv_obj_set_style_border_color(device_cards[0], lv_color_hex(XIAO147_DEVICE_BORDER), LV_PART_MAIN);
+    }
     xiao147_rssi_set_active(page == XIAO147_PAGE_DEVICES && !atomic_get(&sleeping));
     if (page == XIAO147_PAGE_STATUS) {
         lv_obj_add_flag(panel, LV_OBJ_FLAG_HIDDEN);
@@ -672,7 +827,12 @@ static void redraw(struct k_work *work)
             lv_obj_add_flag(settings_group, LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(devices_group, LV_OBJ_FLAG_HIDDEN);
             lv_obj_clear_flag(hid_group, LV_OBJ_FLAG_HIDDEN);
+#if defined(CONFIG_LISM_BLE_INPUT_BRIDGE)
+            lv_label_set_text(title_label, "");
+            xiao147_inputs_draw(portrait);
+#else
             draw_hid_mouse();
+#endif
         }
 #endif
         else {
@@ -778,7 +938,10 @@ static void touch_handler(struct k_work *work)
     while (processed++ < TOUCH_BATCH_LIMIT &&
            k_msgq_get(&touch_queue, &sample, K_NO_WAIT) == 0) {
         if (sample.fingers == XIAO147_TOUCH_CANCEL) {
-#if defined(CONFIG_LISM_BLE_HID_BRIDGE)
+            xiao147_settings_cancel(&settings_gesture);
+#if defined(CONFIG_LISM_BLE_INPUT_BRIDGE)
+            xiao147_inputs_press(UINT16_MAX, UINT16_MAX);
+#elif defined(CONFIG_LISM_BLE_HID_BRIDGE)
             hid_tap_active = false;
 #endif
             previous_touch_fingers = 0;
@@ -787,7 +950,11 @@ static void touch_handler(struct k_work *work)
             continue;
         }
         if (sample.orientation != xiao147_rotation_get()) {
-#if defined(CONFIG_LISM_BLE_HID_BRIDGE)
+            xiao147_settings_cancel(&settings_gesture);
+            if (!sample.fingers) { xiao147_settings_touch(&settings_gesture, false, 0, 0, 0, false); }
+#if defined(CONFIG_LISM_BLE_INPUT_BRIDGE)
+            xiao147_inputs_press(UINT16_MAX, UINT16_MAX);
+#elif defined(CONFIG_LISM_BLE_HID_BRIDGE)
             hid_tap_active = false;
 #endif
             previous_touch_fingers = 0;
@@ -796,6 +963,17 @@ static void touch_handler(struct k_work *work)
         }
 #if defined(CONFIG_LISM_BLE_HID_BRIDGE)
         if (atomic_get(&page_atomic) == XIAO147_PAGE_BLE_MOUSE) {
+#if defined(CONFIG_LISM_BLE_INPUT_BRIDGE)
+            if (sample.fingers == 1 && previous_touch_fingers == 0) {
+                xiao147_inputs_press(sample.x, sample.y);
+                last_touch = sample;
+            } else if (sample.fingers > 1) { xiao147_inputs_press(UINT16_MAX, UINT16_MAX); }
+            if (sample.fingers == 0 && previous_touch_fingers == 1) {
+                xiao147_inputs_release(last_touch.x, last_touch.y);
+                redraw(NULL);
+            }
+            if (sample.fingers == 1) { last_touch = sample; }
+#else
             if (sample.fingers == 1 && previous_touch_fingers == 0) {
                 hid_mouse_press();
                 hid_tap_x = sample.x;
@@ -812,17 +990,22 @@ static void touch_handler(struct k_work *work)
                 }
                 hid_tap_active = false;
             }
+#endif
             previous_touch_fingers = sample.fingers;
             slider_drag = false;
             continue;
         }
 #endif
         if (atomic_get(&page_atomic) != XIAO147_PAGE_SETTINGS) {
+            xiao147_settings_cancel(&settings_gesture);
+            if (!sample.fingers) { xiao147_settings_touch(&settings_gesture, false, 0, 0, 0, false); }
             previous_touch_fingers = sample.fingers;
             slider_drag = false;
             continue;
         }
         bool portrait = xiao147_rotation_is_portrait();
+        int action = xiao147_settings_touch(&settings_gesture, portrait,
+            sample.fingers, sample.x, sample.y, slider_drag);
         if (sample.fingers == 1 && (slider_drag ||
             (sample.y >= (portrait ? 64 : 42) && sample.y <= (portrait ? 94 : 66)))) {
             slider_drag = true;
@@ -837,23 +1020,23 @@ static void touch_handler(struct k_work *work)
             }
         } else if (sample.fingers == 0 && previous_touch_fingers == 1) {
             bool controls_changed = false;
-            uint16_t y = last_touch.y;
-            uint16_t x = last_touch.x;
-            if (!slider_drag && y >= (portrait ? 103 : 65) && y < (portrait ? 141 : 98)) {
+            if (!slider_drag && action == 0) {
                 if (!xiao147_ui_imu_enabled()) {
                     rotation = rotation == ROTATION_AUTO ? ROTATION_LANDSCAPE : ROTATION_AUTO;
                     atomic_set(&auto_rotate_mode, rotation == ROTATION_AUTO);
                     controls_changed = true;
                 }
-            } else if (!slider_drag && y >= (portrait ? 145 : 99) && y < (portrait ? 226 : 133)) {
+            } else if (!slider_drag && (action == 1 || action == 2)) {
                 if (!xiao147_ui_imu_enabled()) {
-                    rotation = portrait ? (y < 185 ? ROTATION_LANDSCAPE : ROTATION_PORTRAIT) :
-                              (x < SCREEN_W / 2 ? ROTATION_LANDSCAPE : ROTATION_PORTRAIT);
+                    rotation = action == 1 ? ROTATION_LANDSCAPE : ROTATION_PORTRAIT;
                     atomic_set(&auto_rotate_mode, 0);
                     controls_changed = true;
                 }
-            } else if (!slider_drag && y >= (portrait ? 232 : 134) && y < (portrait ? 274 : 170)) {
+            } else if (!slider_drag && action == 3) {
                 xiao147_ui_toggle_imu();
+                controls_changed = true;
+            } else if (!slider_drag && action == 4) {
+                xiao147_palette_set_bright(!xiao147_palette_bright());
                 controls_changed = true;
             }
             slider_drag = false;
@@ -931,7 +1114,13 @@ static void create_ui(struct k_work *work)
     settings_group = lv_obj_create(panel);
     devices_group = lv_obj_create(panel);
 #if defined(CONFIG_LISM_BLE_HID_BRIDGE)
+#if defined(CONFIG_LISM_BLE_INPUT_BRIDGE)
+    hid_group = xiao147_inputs_init(panel);
+    xiao147_inputs_focus_set_context_callback(usr1_invalidate_context);
+    xiao147_inputs_status_init(screen);
+#else
     hid_group = lv_obj_create(panel);
+#endif
 #endif
     lv_obj_t *groups[] = {settings_group, devices_group,
 #if defined(CONFIG_LISM_BLE_HID_BRIDGE)
@@ -946,7 +1135,7 @@ static void create_ui(struct k_work *work)
         lv_obj_set_style_pad_all(groups[i], 0, LV_PART_MAIN);
         lv_obj_clear_flag(groups[i], LV_OBJ_FLAG_SCROLLABLE);
     }
-#if defined(CONFIG_LISM_BLE_HID_BRIDGE)
+#if defined(CONFIG_LISM_BLE_HID_BRIDGE) && !defined(CONFIG_LISM_BLE_INPUT_BRIDGE)
     hid_message = make_label(hid_group, 9, 25, 302, "", COLOR_TEXT);
     hid_limit = make_label(hid_group, 9, 150, 302, "", COLOR_MUTED);
     hid_action = lv_obj_create(hid_group);
@@ -991,11 +1180,12 @@ static void create_ui(struct k_work *work)
     lv_obj_add_flag(hid_group, LV_OBJ_FLAG_HIDDEN);
 #endif
     const char *const setting_text[] = {
-        "Brightness", "Auto rotate", "Landscape", "Portrait", "6-axis mouse"
+        "Brightness", "Auto rotate", "Landscape", "Portrait", "Air mouse", "Bright"
     };
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 6; i++) {
         settings_labels[i] = make_label(settings_group, 12, 25 + i * 28, 115,
                                         setting_text[i], COLOR_TEXT);
+        if (i > 0) { lv_obj_set_width(settings_labels[i], 95); }
     }
     brightness_value = make_label(settings_group, 266, 25, 45, "50%", COLOR_ACCENT);
     settings_slider = lv_slider_create(settings_group);
@@ -1013,7 +1203,7 @@ static void create_ui(struct k_work *work)
     lv_obj_set_style_bg_opa(settings_slider, LV_OPA_COVER, LV_PART_KNOB);
     lv_obj_set_style_pad_all(settings_slider, 8, LV_PART_KNOB);
     lv_obj_clear_flag(settings_slider, LV_OBJ_FLAG_CLICKABLE);
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 5; i++) {
         settings_switches[i] = lv_switch_create(settings_group);
         style_switch(settings_switches[i]);
     }
@@ -1114,6 +1304,9 @@ void xiao147_ui_toggle_imu(void)
 
 void xiao147_ui_next_page(void)
 {
+#if defined(CONFIG_LISM_BLE_INPUT_BRIDGE)
+    usr1_invalidate_context();
+#endif
     last_activity_ms = k_uptime_get_32();
     if (atomic_set(&sleeping, 0)) {
         if (zmk_display_is_initialized()) { k_work_submit_to_queue(zmk_display_work_q(), &redraw_work); }
@@ -1157,6 +1350,10 @@ bool xiao147_ui_wake_on_motion(void)
 void xiao147_ui_touch(uint8_t fingers, uint16_t x, uint16_t y,
                        enum xiao147_orientation orientation)
 {
+    if (fingers != XIAO147_TOUCH_CANCEL) { atomic_set(&menu_contact_down, fingers != 0); }
+#if defined(CONFIG_LISM_BLE_INPUT_BRIDGE)
+    if (xiao147_ui_page() == XIAO147_PAGE_BLE_MOUSE) { usr1_invalidate_context(); }
+#endif
     struct touch_sample sample = {.fingers = fingers, .x = x, .y = y,
                                   .orientation = orientation};
     if (k_msgq_put(&touch_queue, &sample, K_NO_WAIT) != 0) {
@@ -1183,8 +1380,32 @@ INPUT_CALLBACK_DEFINE(DEVICE_DT_GET(DT_NODELABEL(xiao_touch_menu_button)), menu_
 static void imu_button_input(struct input_event *evt, void *user_data)
 {
     LOG_INF("USR1 type %u code %u value %d", evt->type, evt->code, evt->value);
-    if (evt->type == INPUT_EV_KEY && evt->code == INPUT_BTN_0 && evt->value == 1) {
-        xiao147_ui_toggle_imu();
+    if (evt->type != INPUT_EV_KEY || evt->code != INPUT_BTN_0) { return; }
+    if (evt->value == 1) {
+        if (!atomic_cas(&usr1_down, 0, 1)) { return; }
+#if defined(CONFIG_LISM_BLE_INPUT_BRIDGE)
+        usr1_navigation_press = false;
+#endif
+        if (xiao147_ui_page() == XIAO147_PAGE_STATUS) {
+            /* Preserve immediate status-page press semantics; release never
+             * enters the navigation click machine, even after changing page. */
+            xiao147_ui_toggle_imu();
+        }
+#if defined(CONFIG_LISM_BLE_INPUT_BRIDGE)
+        else if (xiao147_ui_page() == XIAO147_PAGE_BLE_MOUSE && zmk_display_is_initialized()) {
+            if (xiao147_ui_wake_on_touch()) { usr1_invalidate_context(); return; }
+            usr1_press_context = atomic_get(&usr1_context);
+            usr1_navigation_press = true;
+            usr1_queue_edge(true);
+        }
+#endif
+    } else if (evt->value == 0) {
+        if (!atomic_cas(&usr1_down, 1, 0)) { return; }
+#if defined(CONFIG_LISM_BLE_INPUT_BRIDGE)
+        if (usr1_navigation_press && usr1_press_context == (uint32_t)atomic_get(&usr1_context) &&
+            xiao147_ui_page() == XIAO147_PAGE_BLE_MOUSE) { usr1_queue_edge(false); }
+        usr1_navigation_press = false;
+#endif
     }
 }
 INPUT_CALLBACK_DEFINE(DEVICE_DT_GET(DT_NODELABEL(xiao_touch_left_button)), imu_button_input, NULL);

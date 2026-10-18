@@ -1,3 +1,60 @@
+config LISM_BLE_INPUT_BRIDGE
+    bool "Screen-managed standard BLE keyboard and mouse receiver"
+    depends on LISM_BLE_HID_BRIDGE
+    help
+      Two independent standard HOGP input peers. Keyboard, relative mouse and
+      consumer reports with connection-local on-screen pairing. Not Bluetooth
+      Classic, vendor-private touch gestures or gamepad output.
+
+config LISM_INPUT_LEGACY_COMPAT
+    bool "Explicit per-device legacy BLE pairing compatibility"
+    depends on LISM_BLE_INPUT_BRIDGE && LISM_TWO_KEYBOARD_SETS
+    default n
+    help
+      Compile legacy SMP algorithms, but authorize their use only for the
+      explicitly selected generic input connection. Other split, computer and
+      input connections continue requiring Secure Connections. Requires the
+      pinned generated Kconfig root from tools/prepare_input_security.py.
+
+config LISM_INPUT_AUTO_PAIR
+    bool "Automatic compatible pairing for selected standard BLE inputs"
+    depends on LISM_INPUT_LEGACY_COMPAT
+    default n
+    help
+      A user-selected generic BLE input may negotiate SC or legacy encrypted
+      pairing without a separate compatibility toggle. Computer and LisM split
+      connections retain their SC requirement. Keys retain the canonical ABI.
+
+config LISM_BLE_HOST_PROFILES
+    int "Preserved computer profile slots, independent of input bonds"
+    depends on LISM_BLE_INPUT_BRIDGE
+    default 6
+    range 6 6
+
+config LISM_TWO_KEYBOARD_SETS
+    bool "Two registered LisM left/right sets sharing one dongle"
+    depends on LISM_BLE_INPUT_BRIDGE
+    help
+      Keep split slots 0..3 and add left/right in 4/5. Each role uses the same
+      UF2 on both sets; register each hardware Bluetooth identity once on the
+      screen. Only one set is active, with an input cleanup barrier on switch.
+
+config LISM_AUTO_SPLIT_SETS
+    bool "Automatic two-set enrollment for tagged LisM halves"
+    depends on LISM_TWO_KEYBOARD_SETS && LISM_INPUT_LEGACY_COMPAT
+    default n
+    help
+      Register explicitly role-tagged, unpaired LisM halves into empty roles.
+      Never replace saved roles. Conflicting candidates require manual choice.
+
+config LISM_SPLIT_ROLE_TAG
+    bool "LisM left/right discovery role tag"
+    depends on ZMK_SPLIT && !ZMK_SPLIT_ROLE_CENTRAL
+    default y if SHIELD_LISM_L || SHIELD_LISM_R
+    help
+      Add a versioned role declaration to scan responses of unpaired halves.
+      Already bonded peripherals retain their existing directed reconnection.
+
 config LISM_BLE_HID_BRIDGE
     bool "Experimental BLE HID relative mouse bridge"
     depends on LISM_XIAO147_TOUCH && ZMK_SPLIT_ROLE_CENTRAL

@@ -309,6 +309,29 @@ static int st7789v_set_orientation(const struct device *dev,
 	return 0;
 }
 
+/* Reset does not initialize LCD GRAM. Clear while blanked so settings loading
+ * or a delayed first UI frame cannot expose random/stale pixels at startup. */
+static int st7789v_clear_gram(const struct device *dev)
+{
+    const struct st7789v_config *config=dev->config;
+    int ret=st7789v_set_mem_area(dev,0,0,config->width,config->height);
+    if(ret<0)return ret;
+    ret=st7789v_transmit(dev,ST7789V_CMD_RAMWR,NULL,0);
+    if(ret<0)return ret;
+    memset(wire_pixels,0,sizeof(wire_pixels));
+    size_t remaining=(size_t)config->width*config->height;
+    while(remaining) {
+        uint16_t count=MIN(remaining,sizeof(wire_pixels)/2);
+        struct display_buffer_descriptor chunk={.width=count,.height=1,.pitch=count,
+            .buf_size=count*2U,.frame_incomplete=remaining>count};
+        ret=mipi_dbi_write_display(config->mipi_dbi,&config->dbi_config,
+                                  wire_pixels,&chunk,PIXEL_FORMAT_RGB_565);
+        if(ret<0)return ret;
+        remaining-=count;
+    }
+    return 0;
+}
+
 static int st7789v_lcd_init(const struct device *dev)
 {
     const struct st7789v_config *config = dev->config;
@@ -348,6 +371,8 @@ static int st7789v_lcd_init(const struct device *dev)
         if (sequence[i].cmd == 0x3a) { k_sleep(K_MSEC(10)); }
     }
     k_sleep(K_MSEC(120));
+    ret = st7789v_clear_gram(dev);
+    if (ret < 0) { return ret; }
     ret = st7789v_blanking_off(dev);
     k_sleep(K_MSEC(120));
     return ret;

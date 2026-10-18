@@ -2,12 +2,14 @@ name: Draw ZMK keymaps
 on:
   workflow_dispatch:
   push:
+    branches-ignore: [keymap-editor]
     paths:
       - "config/*"
       - "keymap-drawer/config.yaml"
 
 jobs:
   draw:
+    if: github.ref != 'refs/heads/keymap-editor'
     uses: caksoylar/keymap-drawer/.github/workflows/draw-zmk.yml@main
     permissions:
       contents: write

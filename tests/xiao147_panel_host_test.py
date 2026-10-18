@@ -4,9 +4,13 @@ import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[1]
-source = (root / "src/display_jd9853a.c").read_text()
-source = source[source.index("static uint8_t wire_pixels[512];"):
-                source.index("static void st7789v_get_capabilities")]
+driver = (root / "src/display_jd9853a.c").read_text()
+source = driver[driver.index("static uint8_t wire_pixels[512];"):
+                driver.index("static void st7789v_get_capabilities")]
+source += driver[driver.index("static int st7789v_clear_gram"):
+                 driver.index("static int st7789v_lcd_init")]
+init = driver[driver.index("static int st7789v_lcd_init"):driver.index("static int st7789v_init")]
+assert init.index("st7789v_clear_gram(dev)") < init.index("st7789v_blanking_off(dev)")
 prelude = r'''
 #include <assert.h>
 #include <stdint.h>
@@ -48,6 +52,10 @@ test = r'''
 int main(void) {
     struct st7789v_config cfg={.width=320,.height=172};struct device dev={&cfg};
     uint16_t pixels[320*172];
+    memset(expected,0,sizeof(expected));
+    assert(!st7789v_clear_gram(&dev));assert(received==320*172&&!final_incomplete);
+    calls=received=0;fail_at=2;
+    assert(st7789v_clear_gram(&dev)==-EIO&&calls==2);fail_at=0;
     for(int w=1;w<=320;w+=7) for(int h=1;h<=172;h+=17) {
         int pitch=w==320?w:w+1,total=w*h;
         for(int y=0;y<h;y++)for(int x=0;x<pitch;x++) {
