@@ -1,0 +1,135 @@
+{
+  "date_utc": "2026-10-18T14:37:50.184889+00:00",
+  "compiled_local_commit": "86dc197abb1480350d0d6d305e5b5d78f7c14763",
+  "compiled_source_tree": "fc63558643fde8f94652aa661870011ca1d2582a",
+  "identical_github_source_commit": "95f4d0ca4d58b3ef834712cd5898d19a9f57a713",
+  "parent_branch": "codex/lism-runtime-trimode",
+  "parent_commit": "cc4b159dc05333cdee2010b44d1ecfedec80c42e",
+  "branch": "codex/lism-right-standalone",
+  "keymap_unchanged": true,
+  "keymap_sha256": "55523c2d1fcadb1a342443ffd2733be439135cfeeb230d36c1e3c8b926df2099",
+  "hardware_tested": false,
+  "rf_latency_power_stability_measured": false,
+  "zephyr_sdk_build_verified": false,
+  "local_toolchain": "GNU Arm 13.2.1; explicit minimal libc / ESTALE compatibility flag",
+  "tests": [
+    {
+      "test": "lism_standalone_test.py",
+      "passed": true
+    },
+    {
+      "test": "lism_standalone_worker_test.py",
+      "passed": true
+    },
+    {
+      "test": "lism_companion_test.py",
+      "passed": true
+    },
+    {
+      "test": "lism_esb_standalone_test.py",
+      "passed": true
+    },
+    {
+      "test": "lism_esb_transport_test.py",
+      "passed": true
+    },
+    {
+      "test": "lism_esb_peripheral_test.py",
+      "passed": true
+    },
+    {
+      "test": "lism_split_sets_test.py",
+      "passed": true
+    },
+    {
+      "test": "lism_split_auto_test.py",
+      "passed": true
+    },
+    {
+      "test": "lism_input_security_config_test.py",
+      "passed": true
+    },
+    {
+      "test": "lism_battery_hook_test.py",
+      "passed": true
+    },
+    {
+      "test": "lism_charge_host_test.py",
+      "passed": true
+    }
+  ],
+  "builds": [
+    {
+      "target": "dongle",
+      "file": "lism_standalone_dongle_EXPERIMENTAL.uf2",
+      "sha256": "42219a5b14f42f66094607ed3b53bd864eb85321d979414eb5af3060b4a2c657",
+      "source_base": "140d66bc5db8d2508af70f40aa3ecbe2656f0d25",
+      "source_head": "86dc197abb1480350d0d6d305e5b5d78f7c14763",
+      "source_dirty": false,
+      "pins": {
+        "zmk": "9ebbeff0a8b69a42f14aec022cdf16c7a107b9e0",
+        "zephyr": "10ba6d0cb38bc3d258775d27982f707599320085",
+        "nrf": "9b3d2623fdcd9c0fd0284f860beea924568c9826",
+        "nrfxlib": "dfadf17305d8f000eda9aa74a5b9ff1c5647a23e"
+      },
+      "hardware_tested": false,
+      "split_data": "dongle: authenticated ESB; standalone: left BLE to right, right BLE HID to host",
+      "split_control": "encrypted BLE companion enrollment; four right-hand host profiles",
+      "third_host_esb_endpoint": false,
+      "local_minimal_libc": true,
+      "config_sha256": "57f89f0df4f4d63f86e7bbf17095b8119c5270ed76e6372c1804c6cc4139ad70",
+      "full_feature_checks_passed": true,
+      "mpsl_radio_timer_rtc_vectors_checked": true,
+      "flash_bytes": 685740,
+      "ram_bytes": 242592
+    },
+    {
+      "target": "left",
+      "file": "lism_standalone_left_EXPERIMENTAL.uf2",
+      "sha256": "9fc0f5ba77fe00d07bde93c5588f2844feac83848e010f4e837c3c28026c7fc3",
+      "source_base": "140d66bc5db8d2508af70f40aa3ecbe2656f0d25",
+      "source_head": "86dc197abb1480350d0d6d305e5b5d78f7c14763",
+      "source_dirty": false,
+      "pins": {
+        "zmk": "9ebbeff0a8b69a42f14aec022cdf16c7a107b9e0",
+        "zephyr": "10ba6d0cb38bc3d258775d27982f707599320085",
+        "nrf": "9b3d2623fdcd9c0fd0284f860beea924568c9826",
+        "nrfxlib": "dfadf17305d8f000eda9aa74a5b9ff1c5647a23e"
+      },
+      "hardware_tested": false,
+      "split_data": "dongle: authenticated ESB; standalone: left BLE to right, right BLE HID to host",
+      "split_control": "encrypted BLE companion enrollment; four right-hand host profiles",
+      "third_host_esb_endpoint": false,
+      "local_minimal_libc": true,
+      "config_sha256": "5a936d309232165751584bf3ca9abd3713cb6c964e8945350a210e8c1617f094",
+      "full_feature_checks_passed": true,
+      "mpsl_radio_timer_rtc_vectors_checked": true,
+      "flash_bytes": 218936,
+      "ram_bytes": 59872
+    },
+    {
+      "target": "right",
+      "file": "lism_standalone_right_EXPERIMENTAL.uf2",
+      "sha256": "702edfed60863cde5d30e326e7efa17a2112eef9c985d0f81548d5530830a599",
+      "source_base": "140d66bc5db8d2508af70f40aa3ecbe2656f0d25",
+      "source_head": "86dc197abb1480350d0d6d305e5b5d78f7c14763",
+      "source_dirty": false,
+      "pins": {
+        "zmk": "9ebbeff0a8b69a42f14aec022cdf16c7a107b9e0",
+        "zephyr": "10ba6d0cb38bc3d258775d27982f707599320085",
+        "nrf": "9b3d2623fdcd9c0fd0284f860beea924568c9826",
+        "nrfxlib": "dfadf17305d8f000eda9aa74a5b9ff1c5647a23e"
+      },
+      "hardware_tested": false,
+      "split_data": "dongle: authenticated ESB; standalone: left BLE to right, right BLE HID to host",
+      "split_control": "encrypted BLE companion enrollment; four right-hand host profiles",
+      "third_host_esb_endpoint": false,
+      "local_minimal_libc": true,
+      "config_sha256": "80ba810a95a4e409396e0da2a5ef0e02835a60d5e179a6822ebf3bdcbfa5721d",
+      "full_feature_checks_passed": true,
+      "mpsl_radio_timer_rtc_vectors_checked": true,
+      "flash_bytes": 319668,
+      "ram_bytes": 80348
+    }
+  ]
+}
