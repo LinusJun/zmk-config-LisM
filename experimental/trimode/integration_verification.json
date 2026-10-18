@@ -1,0 +1,99 @@
+{
+  "firmware_source_commit": "5b25fdd8a45467d710fe090fe246413160cb67e3",
+  "baseline": "keymap-editor@140d66bc5db8d2508af70f40aa3ecbe2656f0d25",
+  "scope": "Integrated always-ESB split input and commands, USB/BLE host coexistence; BLE split control connections retained",
+  "hardware_tested": false,
+  "third_host_esb_output_and_usb_receiver_implemented": false,
+  "builds": [
+    {
+      "target": "dongle",
+      "file": "lism_esb_dongle_EXPERIMENTAL.uf2",
+      "sha256": "1609f9d38168080515aa9c0b2931e26e41104b1ef5067b373b6d4031cdad891f",
+      "source_base": "140d66bc5db8d2508af70f40aa3ecbe2656f0d25",
+      "source_head": "5b25fdd8a45467d710fe090fe246413160cb67e3",
+      "source_dirty": false,
+      "pins": {
+        "zmk": "9ebbeff0a8b69a42f14aec022cdf16c7a107b9e0",
+        "zephyr": "10ba6d0cb38bc3d258775d27982f707599320085",
+        "nrf": "9b3d2623fdcd9c0fd0284f860beea924568c9826",
+        "nrfxlib": "dfadf17305d8f000eda9aa74a5b9ff1c5647a23e"
+      },
+      "hardware_tested": false,
+      "split_data": "authenticated ESB in every host output mode",
+      "split_control": "encrypted BLE remains connected; session is not persisted",
+      "third_host_esb_endpoint": false,
+      "local_minimal_libc": true,
+      "config_sha256": "fa38ee46e37adc69078854b37548cbecd4862c6637b25f1dbff4ac1a3d15e95a",
+      "full_feature_checks_passed": true,
+      "mpsl_radio_timer_rtc_vectors_checked": true,
+      "flash_bytes": 684772,
+      "ram_bytes": 242464
+    },
+    {
+      "target": "left",
+      "file": "lism_esb_left_EXPERIMENTAL.uf2",
+      "sha256": "c95975090a712b179e8b4e0fb2e6fca58e1746bb750f6b8ed635a6e154969fdf",
+      "source_base": "140d66bc5db8d2508af70f40aa3ecbe2656f0d25",
+      "source_head": "5b25fdd8a45467d710fe090fe246413160cb67e3",
+      "source_dirty": false,
+      "pins": {
+        "zmk": "9ebbeff0a8b69a42f14aec022cdf16c7a107b9e0",
+        "zephyr": "10ba6d0cb38bc3d258775d27982f707599320085",
+        "nrf": "9b3d2623fdcd9c0fd0284f860beea924568c9826",
+        "nrfxlib": "dfadf17305d8f000eda9aa74a5b9ff1c5647a23e"
+      },
+      "hardware_tested": false,
+      "split_data": "authenticated ESB in every host output mode",
+      "split_control": "encrypted BLE remains connected; session is not persisted",
+      "third_host_esb_endpoint": false,
+      "local_minimal_libc": true,
+      "config_sha256": "912c8615eff4b3ca800ca0e8fcff3448896e6c9d05f55d7311df6f03213cf826",
+      "full_feature_checks_passed": true,
+      "mpsl_radio_timer_rtc_vectors_checked": true,
+      "flash_bytes": 215028,
+      "ram_bytes": 55936
+    },
+    {
+      "target": "right",
+      "file": "lism_esb_right_EXPERIMENTAL.uf2",
+      "sha256": "d040e7361a78a4bc8eb88542250dcb1d3a0e9fc22814dd5566d524d2e961a154",
+      "source_base": "140d66bc5db8d2508af70f40aa3ecbe2656f0d25",
+      "source_head": "5b25fdd8a45467d710fe090fe246413160cb67e3",
+      "source_dirty": false,
+      "pins": {
+        "zmk": "9ebbeff0a8b69a42f14aec022cdf16c7a107b9e0",
+        "zephyr": "10ba6d0cb38bc3d258775d27982f707599320085",
+        "nrf": "9b3d2623fdcd9c0fd0284f860beea924568c9826",
+        "nrfxlib": "dfadf17305d8f000eda9aa74a5b9ff1c5647a23e"
+      },
+      "hardware_tested": false,
+      "split_data": "authenticated ESB in every host output mode",
+      "split_control": "encrypted BLE remains connected; session is not persisted",
+      "third_host_esb_endpoint": false,
+      "local_minimal_libc": true,
+      "config_sha256": "d919e10edcebb285b138015d30af308fca35018ac749ddad8d87c8ea0fbc353c",
+      "full_feature_checks_passed": true,
+      "mpsl_radio_timer_rtc_vectors_checked": true,
+      "flash_bytes": 219804,
+      "ram_bytes": 56064
+    }
+  ],
+  "software_tests": {
+    "actual_central_transport": "PASS: AES-CCM reference/tamper, READY/encryption admission, partial batch backpressure, replay/old-session rejection, command ACK, A/B gate, lease fault",
+    "actual_peripheral_transport": "PASS: held snapshot, immutable retransmission, batching, duplicate command, stale ACK, queue overflow, pointer expiry, fragmented GATT commissioning, BLE loss",
+    "lism_split_sets_test": "PASS: existing actual worker, threaded input cleanup/retry/fence, A/B generations and allocator",
+    "lism_split_auto_test": "PASS: existing first/second set enrollment, ambiguity, storage failure and power loss",
+    "lism_input_security_config_test": "PASS: existing pinned compatibility policy and unchanged upstream",
+    "transition_test": "PASS: 42 combinations plus faults; coordinator prototype only, not wired to third output",
+    "ordinary_ble_without_sdk_configuration": "PASS: configuration only; opt-in ESB additions do not require Nordic modules for default targets",
+    "sanitizers": "AddressSanitizer + UndefinedBehaviorSanitizer; LeakSanitizer disabled because execution host restricts /proc"
+  },
+  "toolchain": "GNU Arm 13.2.1; explicit local minimal-libc + ESTALE=116 compatibility. Standard Zephyr SDK rebuild and hardware validation remain required.",
+  "claims_not_verified": [
+    "runtime radio coexistence",
+    "latency",
+    "RF stability",
+    "power consumption",
+    "long-running input reliability"
+  ]
+}
