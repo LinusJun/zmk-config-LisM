@@ -11,6 +11,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import time
 
 ROOT=Path(__file__).resolve().parents[1]
 COMMON=['-DCONFIG_ZMK_SPLIT=y','-DCONFIG_ZMK_SPLIT_ROLE_CENTRAL=n']
@@ -96,7 +97,17 @@ def main():
         manifest=ws/'config'
         shutil.copytree(ROOT/'config',manifest,dirs_exist_ok=True)
         if not (ws/'.west').exists():run(['west','init','-l',manifest],ws)
-        run(['west','update','--fetch-opt=--filter=tree:0'],ws)
+        # Fetch only pinned revisions, with complete trees. Partial tree clones
+        # cause many lazy network requests during checkout and are fragile on
+        # hosted runners when DNS briefly fails. Retry only dependency fetches;
+        # compilation failures must remain visible and are never retried away.
+        for attempt in range(3):
+            try:
+                run(['west','update','--narrow','--fetch-opt=--depth=1'],ws)
+                break
+            except subprocess.CalledProcessError:
+                if attempt==2:raise
+                time.sleep(2*(attempt+1))
         run(['west','zephyr-export'],ws)
         app=ws/'zmk/app';modules=str(ROOT)
     shield,name,options=TARGETS[args.target]
