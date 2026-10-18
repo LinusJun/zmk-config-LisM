@@ -176,7 +176,7 @@ static void sample_charge(struct k_work *work) {
     k_work_reschedule(&charge_sample_work, K_MSEC(250));
 }
 
-#if !IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
+#if !IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL) || IS_ENABLED(CONFIG_LISM_STANDALONE_RIGHT)
 static ssize_t read_charge(struct bt_conn *conn, const struct bt_gatt_attr *attr,
                            void *buf, uint16_t len, uint16_t offset) {
     struct lism_charge_state s = lism_charge_local();

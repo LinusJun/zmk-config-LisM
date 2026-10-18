@@ -82,7 +82,7 @@ config LISM_AUTO_SPLIT_SETS
 
 config LISM_SPLIT_ROLE_TAG
     bool "LisM left/right discovery role tag"
-    depends on ZMK_SPLIT && !ZMK_SPLIT_ROLE_CENTRAL
+    depends on ZMK_SPLIT && (!ZMK_SPLIT_ROLE_CENTRAL || LISM_STANDALONE_RIGHT)
     default y if SHIELD_LISM_L || SHIELD_LISM_R
     help
       Add a versioned role declaration to scan responses of unpaired halves.
@@ -217,4 +217,30 @@ config LISM_JOYSTICK_STATUS
       The charger owns charging termination; this is not battery temperature
       sensing or cell protection. Do not combine with another RGB owner.
 
+endif
+
+config LISM_STANDALONE
+    bool "Experimental LisM right-central standalone switching"
+    depends on LISM_SPLIT_ESB && SETTINGS && (SHIELD_LISM_L || SHIELD_LISM_R)
+    select BT_SMP_APP_PAIRING_ACCEPT
+
+config LISM_STANDALONE_RIGHT
+    bool
+    default y if LISM_STANDALONE && SHIELD_LISM_R
+    depends on ZMK_SPLIT_ROLE_CENTRAL
+
+config LISM_COMPANION_SERVER
+    bool "Enroll paired LisM standalone companions via encrypted dongle link"
+    depends on LISM_SPLIT_ESB && LISM_TWO_KEYBOARD_SETS
+
+if LISM_STANDALONE_RIGHT
+config ZMK_SPLIT_BLE_PERIPHERAL_STACK_SIZE
+    int
+    default 1024
+config ZMK_SPLIT_BLE_PERIPHERAL_PRIORITY
+    int
+    default 5
+config ZMK_SPLIT_BLE_PERIPHERAL_POSITION_QUEUE_SIZE
+    int
+    default 20
 endif

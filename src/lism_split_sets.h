@@ -45,3 +45,4 @@ int lism_split_sets_find_addr(const bt_addr_le_t *addr);
 int lism_split_sets_bind_addr(uint8_t slot, const bt_addr_le_t *addr);
 int lism_split_sets_unbind_addr(uint8_t slot, const bt_addr_le_t *expected);
 bool lism_split_sets_slot_registered(uint8_t slot);
+int lism_split_sets_read_addr(uint8_t slot, bt_addr_le_t *out);

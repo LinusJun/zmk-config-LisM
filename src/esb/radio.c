@@ -21,7 +21,7 @@ static struct esb_payload received[16];
 static atomic_t rx_head, rx_tail, error, idle = ATOMIC_INIT(1), overflow;
 static mpsl_timeslot_signal_return_param_t response;
 static bool initialized;
-#define SLOT_US (IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL) ? 4000 : 3000)
+#define SLOT_US ((IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL) && !IS_ENABLED(CONFIG_LISM_STANDALONE_RIGHT)) ? 4000 : 3000)
 static mpsl_timeslot_request_t request = {
     .request_type = MPSL_TIMESLOT_REQ_TYPE_EARLIEST,
     .params.earliest = {.hfclk = MPSL_TIMESLOT_HFCLK_CFG_XTAL_GUARANTEED,
@@ -67,7 +67,7 @@ static mpsl_timeslot_signal_return_param_t *signal_handler(
         nrf_timer_event_clear(NRF_TIMER0, NRF_TIMER_EVENT_COMPARE0);
         nrf_timer_int_enable(NRF_TIMER0, NRF_TIMER_INT_COMPARE0_MASK);
         struct esb_config config = ESB_DEFAULT_CONFIG;
-        config.mode = IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL) ? ESB_MODE_PRX : ESB_MODE_PTX;
+        config.mode = (IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL) && !IS_ENABLED(CONFIG_LISM_STANDALONE_RIGHT)) ? ESB_MODE_PRX : ESB_MODE_PTX;
         config.event_handler = esb_event; config.retransmit_count = 3;
         config.retransmit_delay = 600; config.use_fast_ramp_up = true;
         int rc = esb_init(&config); initialized = !rc;
@@ -77,7 +77,7 @@ static mpsl_timeslot_signal_return_param_t *signal_handler(
         if (!rc) rc = esb_set_rf_channel(scheduled.channel);
         for (unsigned i = 0; !rc && i < scheduled.count; ++i)
             rc = esb_write_payload(&scheduled.packets[i]);
-        if (!rc && IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)) rc = esb_start_rx();
+        if (!rc && (IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL) && !IS_ENABLED(CONFIG_LISM_STANDALONE_RIGHT))) rc = esb_start_rx();
         if (rc) {
             atomic_set(&error, rc); stop_slot();
             response.callback_action = MPSL_TIMESLOT_SIGNAL_ACTION_END;

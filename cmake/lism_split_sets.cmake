@@ -33,6 +33,13 @@ int lism_split_sets_find_addr(const bt_addr_le_t *addr) {
     k_spin_unlock(&lism_split_address_lock, key);
     return found;
 }
+int lism_split_sets_read_addr(uint8_t slot, bt_addr_le_t *out) {
+    if (slot >= ZMK_SPLIT_BLE_PERIPHERAL_COUNT || !out) return -EINVAL;
+    k_spinlock_key_t key = k_spin_lock(&lism_split_address_lock);
+    *out = peripheral_addrs[slot];
+    k_spin_unlock(&lism_split_address_lock, key);
+    return bt_addr_le_cmp(out, BT_ADDR_LE_ANY) ? 0 : -ENOENT;
+}
 bool lism_split_sets_slot_registered(uint8_t slot) {
     if (slot >= ZMK_SPLIT_BLE_PERIPHERAL_COUNT) return false;
     k_spinlock_key_t key = k_spin_lock(&lism_split_address_lock);

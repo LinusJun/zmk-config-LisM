@@ -1,6 +1,9 @@
 /* SPDX-License-Identifier: MIT */
 #include "radio.h"
 #include "codec.h"
+#if defined(CONFIG_LISM_STANDALONE)
+#include "../standalone/mode.h"
+#endif
 #include <zephyr/kernel.h>
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
@@ -57,7 +60,12 @@ static uint8_t read_result(struct bt_conn *conn, uint8_t err,
             !atomic_get(&config_pending) &&
             !lism_esb_config_decode(&proposed, config_bytes, sizeof(config_bytes))) {
             bool right = IS_ENABLED(CONFIG_SHIELD_LISM_R);
-            if ((proposed.slot & 1) == right) atomic_set(&config_pending, 1);
+            if ((proposed.slot & 1) == right) {
+#if defined(CONFIG_LISM_STANDALONE)
+                lism_standalone_peer_poll(conn);
+#endif
+                atomic_set(&config_pending, 1);
+            }
         }
         finish_read(); result = BT_GATT_ITER_STOP;
     } else { memcpy(config_bytes + config_length, data, length); config_length += length; }
@@ -82,7 +90,11 @@ static void find_control(struct bt_conn *conn, void *data) {
     struct bt_conn_info info;
     struct bt_conn **result = data;
     if (!*result && !bt_conn_get_info(conn, &info) && info.state == BT_CONN_STATE_CONNECTED &&
-        info.role == BT_CONN_ROLE_PERIPHERAL && bt_conn_get_security(conn) >= BT_SECURITY_L2)
+        info.role == BT_CONN_ROLE_PERIPHERAL && bt_conn_get_security(conn) >= BT_SECURITY_L2
+#if defined(CONFIG_LISM_STANDALONE)
+        && !lism_standalone_direct() && lism_standalone_running() && lism_standalone_control_conn(conn)
+#endif
+        )
         *result = bt_conn_ref(conn);
 }
 static void config_work_fn(struct k_work *work) {
@@ -104,6 +116,9 @@ static void config_work_fn(struct k_work *work) {
 }
 static void disconnected(struct bt_conn *conn, uint8_t reason) {
     ARG_UNUSED(reason);
+#if defined(CONFIG_LISM_STANDALONE)
+    if(!lism_standalone_control_conn(conn))return;
+#endif
     /* Cancel before reusing the persistent parameter structs. Callbacks and
      * this callback are serialized by the BLE RX thread. */
     bt_gatt_cancel(conn, &discover); bt_gatt_cancel(conn, &reader);
@@ -116,6 +131,9 @@ static void disconnected(struct bt_conn *conn, uint8_t reason) {
 BT_CONN_CB_DEFINE(lism_esb_control_callbacks) = {.disconnected = disconnected};
 static void disconnect_control(struct bt_conn *conn, void *unused) {
     ARG_UNUSED(unused);
+#if defined(CONFIG_LISM_STANDALONE)
+    if(!lism_standalone_control_conn(conn))return;
+#endif
     bt_conn_disconnect(conn, BT_HCI_ERR_REMOTE_USER_TERM_CONN);
 }
 static void drop_session(void) {
@@ -157,7 +175,7 @@ static void start_session(const struct lism_esb_session *s, int64_t now) {
 }
 void lism_esb_transport_receive(const struct esb_payload *packet, int64_t now) {
     struct lism_esb_message m;
-    if (!online || packet->pipe != session.slot ||
+    if (!enabled || !online || packet->pipe != session.slot ||
         lism_esb_open(&session, packet->data, packet->length, &m) ||
         m.kind != LISM_ESB_ACK || m.length < 9 || m.length != 9 + m.body[8] ||
         m.sequence < last_ack || lism_esb_u32(m.body) > outgoing.sequence) return;
@@ -188,7 +206,11 @@ void lism_esb_transport_poll(int64_t now) {
         bt->api->set_enabled(true);
     if (atomic_set(&control_lost, 0)) drop_session();
     k_mutex_lock(&io_lock, K_FOREVER);
-    if (atomic_get(&config_pending)) {
+    if (atomic_get(&config_pending)
+#if defined(CONFIG_LISM_STANDALONE)
+        && !lism_standalone_direct() && lism_standalone_running()
+#endif
+       ) {
         if (!online || proposed.id != session.id || memcmp(proposed.key, session.key, 16))
             start_session(&proposed, now);
         atomic_clear(&config_pending);
@@ -286,3 +308,11 @@ static const struct zmk_split_transport_peripheral_api api = {
 ZMK_SPLIT_TRANSPORT_PERIPHERAL_REGISTER(lism_esb_peripheral, &api, 0);
 static int start_control(void) { k_work_reschedule(&config_work, K_MSEC(500)); return 0; }
 SYS_INIT(start_control, APPLICATION, 99);
+
+#if defined(CONFIG_LISM_STANDALONE)
+int lism_standalone_esb_report(const struct zmk_split_transport_peripheral_event *event) {return report_event(event);}
+void lism_standalone_esb_enable(bool value) {
+    enabled=value;
+    if(!value)atomic_set(&control_lost,1);
+}
+#endif
