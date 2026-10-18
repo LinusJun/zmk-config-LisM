@@ -1,0 +1,18 @@
+{
+  "scope": "Original full-feature dongle built with SoftDevice Controller; NOT integrated ESB firmware",
+  "base": "140d66bc5db8d2508af70f40aa3ecbe2656f0d25",
+  "validation": "ci_firmware.check_build(dongle) passed",
+  "flash_bytes": 671360,
+  "ram_bytes": 233120,
+  "config_sha256": "b83e4b9ae66a1148eb131fb3998561a7a027dcc2e819d3a9447539d1689557a7",
+  "local_probe_only_overrides": {
+    "KCONFIG_ROOT": "independent promptless LISM_INPUT_LEGACY_BUILD_POLICY=y replaces conditional select to avoid NCS dependency cycle; no production generator change",
+    "CONFIG_NRF_SECURITY": "n; Zephyr MbedTLS PSA remains enabled",
+    "CONFIG_BT_LL_SOFTDEVICE": "y",
+    "CONFIG_BT_CTLR_SDC_PERIPHERAL_COUNT": "1",
+    "CONFIG_MINIMAL_LIBC": "y",
+    "CONFIG_LV_USE_CUSTOM_SPRINTF": "y",
+    "EXTRA_CFLAGS": "-DESTALE=116; local GNU Arm minimal libc compatibility only"
+  },
+  "warning": "No hardware runtime validation. No finished ESB half/main/receiver UF2 release."
+}

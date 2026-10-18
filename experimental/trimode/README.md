@@ -34,6 +34,17 @@ The existing BLE HID input bridge also shares the BLE host and scanner:
 disabling all Bluetooth in USB mode would disconnect those inputs. Their
 behavior must be integrated before enabling a firmware target.
 
+## Full-feature baseline controller port check
+
+The original dongle features also compile and link with SoftDevice Controller.
+The repository's `ci_firmware.check_build('dongle', build)` configuration and
+compiled-symbol checks pass. This is still the ORIGINAL BLE data path, not the
+requested ESB product. Flash usage is 671360 bytes, RAM usage 233120 bytes; the
+remaining RAM budget must be respected by the new transport.
+`full_baseline_verification.json` records the local configuration overrides.
+Those overrides are NOT integrated into the production build generator yet.
+No baseline-probe UF2 is presented as a finished three-mode firmware.
+
 ## Implemented here
 
 Serialized asynchronous transition policy: PREPARE, old endpoint release/TX
