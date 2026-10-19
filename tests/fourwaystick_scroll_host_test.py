@@ -1,4 +1,4 @@
-"""Exercise pinned ZMK's real scroll behavior with this keymap's Base bindings.
+"""Exercise pinned ZMK's real scroll behavior with this keymap's Nav bindings.
 
 Fixture: zmkfirmware/zmk 9ebbeff0a8b69a42f14aec022cdf16c7a107b9e0,
 app/src/behaviors/behavior_input_two_axis.c (MIT, unmodified).
@@ -16,7 +16,7 @@ assert hashlib.sha256(source.encode()).hexdigest() == "bb191add309a68c96e333b3b0
 assert "revision: 9ebbeff0a8b69a42f14aec022cdf16c7a107b9e0" in (root/"config/west.yml").read_text()
 keymap = (root / "config/lism.keymap").read_text()
 speed = int(re.search(r"#define LISM_4WAY_SCROLL_SPEED (\d+)", keymap)[1])
-base = re.search(r"default_layer\s*\{.*?bindings\s*=\s*<(.*?)>;", keymap, re.S)[1]
+base = re.search(r"layer_2\s*\{.*?bindings\s*=\s*<(.*?)>;", keymap, re.S)[1]
 moves = re.findall(r"&stick_scroll MOVE_([XY])\((-?LISM_4WAY_SCROLL_SPEED)\)", base)
 assert moves == [("Y", "-LISM_4WAY_SCROLL_SPEED"), ("X", "-LISM_4WAY_SCROLL_SPEED"),
                  ("Y", "LISM_4WAY_SCROLL_SPEED"), ("X", "LISM_4WAY_SCROLL_SPEED")]
