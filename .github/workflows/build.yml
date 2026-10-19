@@ -21,7 +21,7 @@ jobs:
           path: config
       - name: Fetch pinned firmware dependencies
         run: |
-          west init -l config
+          west init -l --mf config/west.yml config
           west update --narrow --fetch-opt=--depth=1
           west zephyr-export
       - name: Build isolated upstream ESB integration
