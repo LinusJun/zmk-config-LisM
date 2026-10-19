@@ -43,10 +43,10 @@ layers:
   - F1
   - F2
   - {t: ESC, h: Device}
-  - '&stick_scroll MOVE_Y(-25)'
-  - '&stick_scroll MOVE_X(-25)'
-  - '&stick_scroll MOVE_Y(25)'
-  - '&stick_scroll MOVE_X(25)'
+  - ↑
+  - →
+  - ↓
+  - ←
   Game:
   - ESC
   - Q
@@ -137,10 +137,10 @@ layers:
   - KP 0
   - KP DOT
   - KP DOT
-  - ↑
-  - →
-  - ↓
-  - ←
+  - '&stick_scroll MOVE_Y(-25)'
+  - '&stick_scroll MOVE_X(-25)'
+  - '&stick_scroll MOVE_Y(25)'
+  - '&stick_scroll MOVE_X(25)'
   Mark:
   - '!'
   - '@'
