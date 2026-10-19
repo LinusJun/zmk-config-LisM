@@ -6,3 +6,29 @@ config LISM_PROSPECTOR_LOCK_INDICATORS
     help
       Extends the OPERATOR modifier row with CAP and NUM host LED indicators,
       using one compact font, baseline, and spacing scheme for all six labels.
+
+config LISM_SPLIT_ESB
+    bool "Single LisM ESB data transport with encrypted BLE commissioning"
+    depends on ZMK_SPLIT && SOC_NRF52840 && BT_LL_SOFTDEVICE
+    select ESB
+    select ESB_DYNAMIC_INTERRUPTS
+    select TINYCRYPT
+    select TINYCRYPT_AES
+    select TINYCRYPT_AES_CCM
+    select BT_GATT_CLIENT
+
+if LISM_SPLIT_ESB
+config LISM_SPLIT_ESB_CHANNEL
+    int "Fixed ESB RF channel (2400MHz plus channel)"
+    range 2 80
+    default 37
+config ESB_MAX_PAYLOAD_LENGTH
+    int
+    default 68
+config ESB_RADIO_IRQ_PRIORITY
+    int
+    default 0
+config MPSL_TIMESLOT_SESSION_COUNT
+    int
+    default 1
+endif

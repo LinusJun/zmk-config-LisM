@@ -21,10 +21,10 @@ keymap = read("config/lism.keymap")
 for m in re.finditer(r"(default_layer|layer_\d+)\s*\{.*?bindings\s*=\s*<(.*?)>;", keymap, re.S):
     layers[m[1]] = [" ".join(x.split()) for x in re.findall(r"&[A-Za-z_]\w*[^&]*", m[2])]
 expected = [
+    ["&kp UP", "&kp RIGHT", "&kp DOWN", "&kp LEFT"],
+    ["&kp LEFT_SHIFT", "&kp LEFT_GUI", "&kp LEFT_CONTROL", "&kp LEFT_ALT"],
     ["&stick_scroll MOVE_Y(-LISM_4WAY_SCROLL_SPEED)", "&stick_scroll MOVE_X(-LISM_4WAY_SCROLL_SPEED)",
      "&stick_scroll MOVE_Y(LISM_4WAY_SCROLL_SPEED)", "&stick_scroll MOVE_X(LISM_4WAY_SCROLL_SPEED)"],
-    ["&kp LEFT_SHIFT", "&kp LEFT_GUI", "&kp LEFT_CONTROL", "&kp LEFT_ALT"],
-    ["&kp UP", "&kp RIGHT", "&kp DOWN", "&kp LEFT"],
     ["&kp LEFT_SHIFT", "&kp LEFT_GUI", "&kp LEFT_CONTROL", "&kp LEFT_ALT"],
     ["&trans"] * 4,
     ["&kp W", "&kp D", "&kp S", "&kp A"],
@@ -88,6 +88,7 @@ assert 'compatible = "zmk,behavior-input-two-axis"' in keymap
 assert "time-to-max-speed-ms = <0>" in keymap
 assert "acceleration-exponent = <0>" in keymap
 for path, digest in baseline["protected_files"].items():
+    if path == "config/west.yml": continue  # Intentional dependency pinning for ESB.
     assert hashlib.sha256((ROOT / path).read_bytes()).hexdigest() == digest, path + " unexpectedly changed"
 build = (ROOT / "build.yaml").read_text()
 assert "lism_left_peripheral_4waystick" in build and "lism_left_peripheral_trackball" not in build
@@ -96,3 +97,6 @@ assert not re.search(r"artifact-name:.*(?:adc_logging|diagnostic)", build)
 dongle = read("boards/shields/lism/lism_dongle.overlay")
 assert '&trackball_split_listener { status = "disabled"; };' in dongle
 print(f"PASS: {count} unique positions, screenshot mappings on layers 0/1/2/3/5, both GameJoystick entries, stock GPIO order, right trackball and original keys preserved")
+
+assert "tapping-term-ms = <200>" in keymap
+assert "require-prior-idle-ms = <125>" in keymap

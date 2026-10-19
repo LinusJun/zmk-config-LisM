@@ -11,7 +11,8 @@
 #include <dt-bindings/zmk/pointing.h>
 
 &mt {
-    tapping-term-ms = <300>;
+    tapping-term-ms = <200>;
+    require-prior-idle-ms = <125>;
     flavor = "balanced";
 };
 
@@ -221,7 +222,7 @@
 &mt LEFT_GUI A  &mt LALT S  &mt LCTRL D    &mt LEFT_SHIFT F  &kp G                                      &kp H        &mt RSHIFT J    &mt RCTRL K  &mt RALT L  &mt RGUI SEMICOLON
 &kp Z           &kp X       &kp C          &kp V             &kp B                                      &kp N        &kp M           &kp COMMA    &kp DOT     &kp SLASH
 &lt 4 DELETE    &kp F1      &kp BACKSPACE  &kp LS(LG(N4))    &lt 2 SPACE  &lt 3 ESC    &lt 3 BACKSPACE  &lt 2 ENTER  &kp LS(LG(N4))  &kp F1       &kp F2      &lt 4 ESC
-&stick_scroll MOVE_Y(-LISM_4WAY_SCROLL_SPEED)  &stick_scroll MOVE_X(-LISM_4WAY_SCROLL_SPEED)  &stick_scroll MOVE_Y(LISM_4WAY_SCROLL_SPEED)  &stick_scroll MOVE_X(LISM_4WAY_SCROLL_SPEED)  /* U/R/D/L: scroll Down/Left/Up/Right; held = continuous. */
+&kp UP  &kp RIGHT  &kp DOWN  &kp LEFT  /* Base: Up Right Down Left. */
             >;
 
             sensor-bindings = <&encoder_msc SCRL_DOWN SCRL_UP>;
@@ -245,7 +246,7 @@
 &kp LS(LC(TAB))   &kp LEFT      &kp DOWN       &kp RIGHT      &kp LC(TAB)                                           &kp KP_PLUS      &kp KP_N4  &kp KP_N5  &kp KP_N6   &kp KP_MINUS
 &kp LEFT_SHIFT    &kp PAGE_UP   &kp C_AC_HOME  &kp PAGE_DOWN  &kp LC(LS(C_AC_BACK))                                 &kp KP_MULTIPLY  &kp KP_N1  &kp KP_N2  &kp KP_N3   &kp KP_DIVIDE
 &kp LCTRL         &kp LEFT_WIN  &kp LEFT_ALT   &trans         &kp K_BACK             &kp C_AC_BACK    &kp KP_ENTER  &kp KP_N0        &trans     &kp KP_N0  &kp KP_DOT  &kp KP_DOT
-&kp UP  &kp RIGHT  &kp DOWN  &kp LEFT  /* Nav: Up Right Down Left. */
+&stick_scroll MOVE_Y(-LISM_4WAY_SCROLL_SPEED)  &stick_scroll MOVE_X(-LISM_4WAY_SCROLL_SPEED)  &stick_scroll MOVE_Y(LISM_4WAY_SCROLL_SPEED)  &stick_scroll MOVE_X(LISM_4WAY_SCROLL_SPEED)  /* Nav U/R/D/L: scroll Down/Left/Up/Right; held = continuous. */
             >;
 
             #sensor-bindings = <&encoder_kp C_VOL_UP C_VOL_DN>;

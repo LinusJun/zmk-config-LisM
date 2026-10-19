@@ -1,23 +1,45 @@
-name: Build ZMK firmware
+name: Build original Prospector ESB test
 on:
   workflow_dispatch:
   push:
-    branches: [ main, codex/original-dongle-left-4waystick ]
-    paths:
-      - '.github/workflows/build.yml'
-      - 'boards/**'
-      - 'config/**'
-      - 'snippets/**'
-      - 'build.yaml'
+    branches: [codex/original-dongle-esb]
   pull_request:
-    paths:
-      - '.github/workflows/build.yml'
-      - 'boards/**'
-      - 'config/**'
-      - 'snippets/**'
-      - 'build.yaml'
-
+    branches: [codex/original-dongle-esb]
+permissions:
+  contents: read
 jobs:
   build:
-    # Keep this revision aligned with config/west.yml.
-    uses: zmkfirmware/zmk/.github/workflows/build-user-config.yml@9ebbeff0a8b69a42f14aec022cdf16c7a107b9e0
+    runs-on: ubuntu-latest
+    container: zmkfirmware/zmk-build-arm:4.1-branch
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [left, right, dongle, reset]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up exact dependency revisions
+        shell: bash
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          ws="$RUNNER_TEMP/original-esb"
+          mkdir -p "$ws"
+          cp -R config "$ws/config"
+          west init -l "$ws/config"
+          cd "$ws"
+          west update --narrow --fetch-opt=--depth=1
+          west zephyr-export
+      - name: Check original keys and four-way behavior
+        run: |
+          python3 tests/fourwaystick_regression_test.py
+          python3 tests/fourwaystick_scroll_host_test.py
+      - name: Build and verify ESB image
+        run: python3 tools/build_esb.py --target ${{ matrix.target }} --workspace "$RUNNER_TEMP/original-esb"
+      - name: Exercise actual first-pair scanner and two-slot allocator
+        if: matrix.target == 'dongle'
+        run: |
+          python3 tests/esb_scan_test.py --build "$RUNNER_TEMP/original-esb/esb-dongle"
+          python3 tests/esb_single_set_test.py --build "$RUNNER_TEMP/original-esb/esb-dongle"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: original-esb-${{ matrix.target }}
+          path: artifacts/*
