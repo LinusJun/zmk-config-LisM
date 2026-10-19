@@ -911,6 +911,6 @@
     "boards/shields/lism/paw3222-right.dtsi": "0c6cc9ee95922a445292671ded10571cfd19de5cf6c1eb86214006a78106f82d",
     "boards/shields/lism/split_input_right.dtsi": "80f62f8501acfdff81398fb944e109fafd30000f22370af940830005973dfe3d",
     "config/lism_right.conf": "069f063c24d37c2ec17358826f9727c75f4d024c193a7da6ad7355ef3405c3af",
-    "config/west.yml": "0b5d0aabfc9c720b55598dabc70553d8c5f630de681a86f51b56e8be9f12ff6f"
+    "config/west.yml": "b1b95d652f68612972b9087bb041544042ca0005da5f20a843c087389422151a"
   }
 }

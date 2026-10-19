@@ -1,23 +1,39 @@
-name: Build ZMK firmware
+name: Build single-pair ESB with five-profile BLE host
 on:
   workflow_dispatch:
   push:
-    branches: [ main, codex/original-dongle-left-4waystick ]
-    paths:
-      - '.github/workflows/build.yml'
-      - 'boards/**'
-      - 'config/**'
-      - 'snippets/**'
-      - 'build.yaml'
+    branches: [ codex/working-baseline-esb-upstream ]
+    paths: [ 'boards/**', 'config/**', 'src/**', 'cmake/**', 'tools/**', 'tests/**', 'CMakeLists.txt', 'Kconfig', '.github/workflows/build.yml' ]
   pull_request:
-    paths:
-      - '.github/workflows/build.yml'
-      - 'boards/**'
-      - 'config/**'
-      - 'snippets/**'
-      - 'build.yaml'
-
+permissions:
+  contents: read
 jobs:
   build:
-    # Keep this revision aligned with config/west.yml.
-    uses: zmkfirmware/zmk/.github/workflows/build-user-config.yml@9ebbeff0a8b69a42f14aec022cdf16c7a107b9e0
+    runs-on: ubuntu-latest
+    container: zmkfirmware/zmk-build-arm:4.1-branch
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [ left, right, dongle, reset ]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: config
+      - name: Fetch pinned firmware dependencies
+        run: |
+          west init -l config
+          west update --narrow --fetch-opt=--depth=1
+          west zephyr-export
+      - name: Build isolated upstream ESB integration
+        run: python3 config/tools/build_upstream_esb.py --workspace "$PWD" --target "${{ matrix.target }}"
+      - name: Verify keymap and real transport C
+        if: matrix.target == 'dongle'
+        run: |
+          python3 config/tests/fourwaystick_regression_test.py
+          python3 config/tests/fourwaystick_scroll_host_test.py
+          python3 config/tests/upstream_esb_host_test.py --workspace "$PWD"
+          python3 config/tests/upstream_esb_radio_test.py --workspace "$PWD"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LisM-ESBv2-${{ matrix.target }}
+          path: config/artifacts/*
