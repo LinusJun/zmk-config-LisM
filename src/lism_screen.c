@@ -279,7 +279,9 @@ static void poll(lv_timer_t *timer) {
             set_home_visibility(false);lv_obj_delete(root);root=NULL;modal=NULL;
             lism_input_host_cancel();
         }
+#if defined(CONFIG_SYS_HEAP_RUNTIME_STATS) || !defined(__ZEPHYR__)
         lv_mem_monitor_t m;lv_mem_monitor(&m);LOG_INF("UI page=%u LVGL used_pct=%u peak_bytes=%u",visible,m.used_pct,(unsigned)m.max_used);
+#endif
     }
     struct navigation n;
     for(unsigned budget=0;budget<16 && !k_msgq_get(&screen_nav,&n,K_NO_WAIT);budget++) {

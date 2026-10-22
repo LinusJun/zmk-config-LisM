@@ -44,7 +44,7 @@ static void refresh(lv_timer_t *timer) {
     struct lism_input_status input;lism_input_host_snapshot(&input);
     for(unsigned i=0;i<LISM_INPUT_PEERS;i++) {
         const struct lism_input_peer_status *p=&input.peers[i];
-        connected|=input.enabled && p->saved && p->connected && p->ready &&
+        connected|=input.enabled && p->connected && p->ready &&
             (p->type==LISM_INPUT_DEVICE_MOUSE || p->type==LISM_INPUT_DEVICE_TOUCHPAD);
     }
 #endif

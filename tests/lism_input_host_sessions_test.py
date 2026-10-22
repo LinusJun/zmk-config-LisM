@@ -505,6 +505,15 @@ int main(void){
  save_result=-EIO;ready(0);
  assert(sessions[0].input_ready&&status.peers[0].ready&&strstr(last_message,"identity save failed"));
  save_result=0;
+ /* Composite mouse+keyboard collections retain the connected pointer icon;
+  * this UI classification must not change either input capability. */
+ sessions[0].report_count=0;
+ sessions[0].services[0].descriptor.capabilities=LISM_INPUT_CAP_KEYBOARD|LISM_INPUT_CAP_MOUSE;
+ ready(0);assert(status.peers[0].type==LISM_INPUT_DEVICE_MOUSE);
+ sessions[0].services[0].descriptor.capabilities|=LISM_INPUT_CAP_TOUCHPAD;
+ ready(0);assert(status.peers[0].type==LISM_INPUT_DEVICE_TOUCHPAD);
+ sessions[0].services[0].descriptor.capabilities=LISM_INPUT_CAP_KEYBOARD;
+ ready(0);assert(status.peers[0].type==LISM_INPUT_DEVICE_KEYBOARD);
  /* Temporary USB backpressure retains the original press before consuming its release. */
  memset(sessions,0,sizeof(sessions));
  for(unsigned i=0;i<2;i++){sessions[i].epoch=11;sessions[i].input_ready=1;sessions[i].service_count=1;}

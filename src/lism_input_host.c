@@ -965,13 +965,14 @@ static void ready(unsigned slot) {
     k_mutex_lock(&status_lock,K_FOREVER);
     struct lism_input_peer_status *out=&status.peers[slot];
     out->ready=true;
-    out->type=(caps & LISM_INPUT_CAP_KEYBOARD) || boot_keyboard ? LISM_INPUT_DEVICE_KEYBOARD :
-        (caps & LISM_INPUT_CAP_MOUSE) || boot_mouse ? LISM_INPUT_DEVICE_MOUSE : LISM_INPUT_DEVICE_UNKNOWN;
-    /* Classification comes from the HID descriptor, never brand/name. This
-     * chooses an icon only; raw digitizer gestures are not forwarded. */
-    if (out->type == LISM_INPUT_DEVICE_MOUSE && (caps & LISM_INPUT_CAP_TOUCHPAD)) {
-        out->type=LISM_INPUT_DEVICE_TOUCHPAD;
-    }
+    /* This is display classification only. Composite HID pointing devices
+     * can also expose keyboard/consumer collections; they still need the
+     * connected pointing icon. Report parsing/forwarding remains unchanged. */
+    out->type=(caps & LISM_INPUT_CAP_MOUSE) || boot_mouse
+        ? ((caps & LISM_INPUT_CAP_TOUCHPAD) ? LISM_INPUT_DEVICE_TOUCHPAD : LISM_INPUT_DEVICE_MOUSE)
+        : (caps & LISM_INPUT_CAP_KEYBOARD) || boot_keyboard ? LISM_INPUT_DEVICE_KEYBOARD : LISM_INPUT_DEVICE_UNKNOWN;
+    LOG_INF("Input %u ready caps=0x%x boot_mouse=%u boot_keyboard=%u icon_type=%u",
+            slot,(unsigned)caps,boot_mouse,boot_keyboard,out->type);
     status.generation++;
     k_mutex_unlock(&status_lock);
     bool stored=save_identity(slot);

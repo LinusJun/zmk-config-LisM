@@ -25,6 +25,7 @@ struct left_edge {struct kb_left_packet packet;uint32_t generation;};
 K_MSGQ_DEFINE(edges,sizeof(struct left_edge),64,4);
 static uint32_t route_generation,boot_id,data_seq[KB_NET_COUNT]={1,1,1},control_seq=1,command_boot[KB_NET_COUNT],previous_boot[KB_NET_COUNT],command_seq[KB_NET_COUNT];
 static int64_t coordinator_seen;
+static uint32_t route_received,route_rejected,route_duplicate,lease_expired,data_acks,control_acks,max_route_gap;
 static atomic_t edge_fault;
 struct left_rx {struct esb_payload p;unsigned net;};
 static struct left_rx received[8];static atomic_t rx_head,rx_tail;
@@ -66,7 +67,7 @@ static void receive(void){
         memcpy(&env,p.data+LISM_WIRE_HEADER,n-sizeof(crc));if(memcmp(env.prefix.magic_prefix,"ZmKe",4))continue;
         uint32_t b=get32(p.data+4),s=get32(p.data+8);if(!b || !s)continue;
         unsigned net=item.net;if(b!=command_boot[net]){if(b==previous_boot[net])continue;previous_boot[net]=command_boot[net];command_boot[net]=b;command_seq[net]=0;}
-        if(s<=command_seq[net])continue;
+        if(s<=command_seq[net]){if(net==KB_NET_PRIVATE)route_duplicate++;continue;}
         const struct zmk_split_transport_central_command*c=&env.payload.cmd;bool accepted=false;
         if(net==KB_NET_PRIVATE && c->type==ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_INVOKE_BEHAVIOR && !strcmp(c->data.invoke_behavior.behavior_dev,"KB_LEFT_ROUTE3")){
             if(c->data.invoke_behavior.state!=1)continue;
@@ -74,7 +75,7 @@ static void receive(void){
             k_spinlock_key_t k=k_spin_lock(&left_lock);struct kb_left_policy old=policy;
             unsigned station=(v&3)==2?KB_STATION_NONE:(v&3);
             accepted=kb_left_policy_command(&policy,b,ep,v>>4,(v>>2)&3,station,c->data.invoke_behavior.position,all_up());
-            if(accepted)coordinator_seen=k_uptime_get();
+            if(accepted){int64_t at=k_uptime_get();uint32_t gap=coordinator_seen?(uint32_t)(at-coordinator_seen):0;if(gap>max_route_gap)max_route_gap=gap;coordinator_seen=at;route_received++;}else route_rejected++;
             if(accepted && memcmp(&old,&policy,sizeof(old))){atomic_set(&control_urgent,1);route_generation++;k_msgq_purge(&edges);if(policy.phase==KB_LEFT_APPLIED)queue_snapshot();}
             k_spin_unlock(&left_lock,k);
         }else{
@@ -93,7 +94,7 @@ static int clocks_start(void){struct onoff_manager*m=z_nrf_clock_control_get_ono
 static void radio_thread(void*a,void*b,void*c){
     ARG_UNUSED(a);ARG_UNUSED(b);ARG_UNUSED(c);while(!callback)k_sleep(K_MSEC(1));int rc=clocks_start();if(rc)goto fail;
     do{boot_id=sys_rand32_get();}while(!boot_id);if((rc=configure(1)))goto fail;atomic_set(&ready,1);lism_notify_status();
-    struct esb_payload tx,data_tx;struct left_edge edge;bool data_pending=false;int64_t data_since=0,control_seen=0;unsigned probe_rounds=0;bool have=false,in_flight=false,is_control=false,control_yield_data=false;int64_t next_control=0,since=0;uint32_t selected_generation=0;unsigned net=1,attempts=0;
+    struct esb_payload tx,data_tx;struct left_edge edge;bool data_pending=false;int64_t data_since=0,control_seen=0;unsigned probe_rounds=0;bool have=false,in_flight=false,is_control=false,control_yield_data=false;int64_t next_control=0,since=0;uint32_t selected_generation=0;unsigned net=1,attempts=0;int64_t next_diag=0;
     for(;;){
         receive();int result=atomic_set(&tx_result,0);int64_t now=k_uptime_get();
         if(atomic_set(&control_urgent,0)){next_control=0;control_yield_data=false;}
@@ -101,7 +102,7 @@ static void radio_thread(void*a,void*b,void*c){
          * loss the left must stop renewing an abandoned station by itself. */
         k_spinlock_key_t lease=k_spin_lock(&left_lock);
         if(policy.phase==KB_LEFT_APPLIED && (!coordinator_seen || now-coordinator_seen>=KB_LEFT_CONTROL_LEASE_MS)){
-            policy.phase=KB_LEFT_FREEZE;policy.prepared=false;policy.needs_freeze=true;route_generation++;k_msgq_purge(&edges);
+            lease_expired++;policy.phase=KB_LEFT_FREEZE;policy.prepared=false;policy.needs_freeze=true;route_generation++;k_msgq_purge(&edges);
         }
         k_spin_unlock(&left_lock,lease);
         k_spinlock_key_t k=k_spin_lock(&left_lock);bool invalid=!is_control && (selected_generation!=route_generation || policy.phase!=KB_LEFT_APPLIED);k_spin_unlock(&left_lock,k);
@@ -109,7 +110,7 @@ static void radio_thread(void*a,void*b,void*c){
             if(in_flight){esb_disable();if((rc=configure(current_net)))goto fail;}have=in_flight=false;
             if(is_control)control_yield_data=true;
             if(!is_control && (result==1 || invalid))data_pending=false;
-            if(result==1){if(is_control)control_seen=now;lism_ack_seen();app_esb_event_t e={.evt_type=APP_ESB_EVT_TX_SUCCESS};callback(&e);}
+            if(result==1){if(is_control){control_seen=now;control_acks++;}else data_acks++;lism_ack_seen();app_esb_event_t e={.evt_type=APP_ESB_EVT_TX_SUCCESS};callback(&e);}
         }else if(have && result<0){esb_flush_tx();in_flight=false;if(++attempts>=2 || (is_control && k_msgq_num_used_get(&edges))){have=false;if(is_control)control_yield_data=true;}}
         if(data_pending && now-data_since>=500){
             atomic_set(&edge_fault,edge.generation+1);data_pending=false;
@@ -128,7 +129,9 @@ static void radio_thread(void*a,void*b,void*c){
                 net=1;is_control=true;frame(&tx,net,KB_LEFT_CONTROL,&ctrl,sizeof(ctrl));have=true;
                 /* Noncommensurate bounded jitter avoids a permanent phase
                  * miss against the right's periodic private receive grant. */
-                next_control=now+((control_seen && now-control_seen<200)?17+(sys_rand32_get()%15):7+(probe_rounds++&1));
+                /* Empty hardware ACKs do not renew the route. Keep fast bounded
+                 * probing until a fresh, accepted route command arrives. */
+                next_control=now+((coordinator_seen && now-coordinator_seen<200)?17+(sys_rand32_get()%15):7+(probe_rounds++&1));
             }else{
                 k=k_spin_lock(&left_lock);bool live=data_pending && edge.generation==route_generation && policy.phase==KB_LEFT_APPLIED;k_spin_unlock(&left_lock,k);
                 if(data_pending && !live)data_pending=false;
@@ -141,6 +144,11 @@ static void radio_thread(void*a,void*b,void*c){
             if(have){since=now;attempts=0;if(net!=current_net){esb_disable();if((rc=configure(net)))goto fail;}atomic_clear(&tx_result);}
         }
         if(have && !in_flight && atomic_get(&enabled)){rc=esb_write_payload(&tx);if(!rc)rc=esb_start_tx();if(!rc)in_flight=true;else if(rc!=-EBUSY){esb_flush_tx();have=false;}}
+        if(now>=next_diag){
+            next_diag=now+5000;k=k_spin_lock(&left_lock);struct kb_left_policy d=policy;int64_t last=coordinator_seen;k_spin_unlock(&left_lock,k);
+            LOG_INF("Left route auth=%u epoch=%u station=%u phase=%u prepared=%u age_ms=%u max_gap=%u rx=%u reject=%u duplicate=%u expiry=%u data_ack=%u ctrl_ack=%u hw_age=%u queue=%u",
+                d.authority,d.epoch,d.station,d.phase,d.prepared,last?(unsigned)(now-last):UINT32_MAX,max_route_gap,route_received,route_rejected,route_duplicate,lease_expired,data_acks,control_acks,control_seen?(unsigned)(now-control_seen):UINT32_MAX,k_msgq_num_used_get(&edges));
+        }
         k_sleep(K_MSEC(1));
     }
 fail:atomic_clear(&ready);lism_notify_status();LOG_ERR("Left radio stopped %d",rc);

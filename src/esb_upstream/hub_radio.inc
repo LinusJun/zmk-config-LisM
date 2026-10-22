@@ -283,7 +283,7 @@ static void radio_thread(void *a,void *b,void *c) {
             else grant_link=1;
             if(atomic_get(&enabled)){atomic_set(&idle,0);rc=mpsl_timeslot_request(session,&request);if(rc)atomic_set(&idle,1);}
         }
-        if(k_uptime_get()>=next_log){next_log=k_uptime_get()+5000;LOG_INF("ESB hub TX=%u/%u fail=%u/%u q=%u/%u motion_merge=%u stale=%u inflight_ms=%u ack=%u,%u",links[0].success,links[1].success,links[0].fail,links[1].fail,k_msgq_num_used_get(&left_tx),k_msgq_num_used_get(&dongle_tx),motion_merged,motion_expired,links[1].have?(unsigned)(k_uptime_get()-links[1].tx.since):0,links[1].ack_seq[0],links[1].ack_seq[1]);}
+        if(k_uptime_get()>=next_log){next_log=k_uptime_get()+5000;LOG_INF("ESB hub TX=%u/%u fail=%u/%u q=%u/%u motion_merge=%u stale=%u inflight_ms=%u ack=%u,%u",links[0].success,links[1].success,links[0].fail,links[1].fail,k_msgq_num_used_get(&left_tx),k_msgq_num_used_get(&dongle_tx),motion_merged,motion_expired,links[1].have?(unsigned)(k_uptime_get()-links[1].tx.since):0,links[1].ack_seq[0],links[1].ack_seq[1]);LOG_INF("ESB private left_boot=%u control_seq=%u route_epoch=%u phase=%u station=%u pending=%u cmd_seq=%u",links[0].last_boot[0],control_last_seq,left_route_epoch,left_route_phase,left_route_station,links[0].have,links[0].have?get32(links[0].tx.p.data+8):0);}
         k_sleep(K_MSEC(1));
     }
     mpsl_timeslot_session_close(session);
