@@ -17,6 +17,8 @@
 #include <kb_route/route.h>
 #include <kb_route/signal.h>
 #include <esb.h>
+#include <kb_route/owner_policy.h>
+#include <zephyr/sys/reboot.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/crc.h>
 #include <zephyr/random/random.h>
@@ -41,13 +43,13 @@ void mpsl_assert_handle(const char *file,int line) { ARG_UNUSED(file);ARG_UNUSED
 #if defined(CONFIG_SHIELD_LISM_L)
 static const uint8_t base0[]={0xB7,0x63,0xA9,0xE7},base1[]={0xC9,0x57,0x8D,0xF1};
 #else
-static const uint8_t base0[]= {0xb7,0x63,0xa9,CONFIG_LISM_DONGLE_STATION==0?0xd5:0xb3};
-static const uint8_t base1[]= {0xc9,0x57,0x8d,CONFIG_LISM_DONGLE_STATION==0?0xab:0xc5};
+static const uint8_t base0[]= {0xb7,0x63,0xa9,CONFIG_LISM_DONGLE_STATION==0?0x51:0x52};
+static const uint8_t base1[]= {0xb7,0x63,0xa9,CONFIG_LISM_DONGLE_STATION==0?0x51:0x52};
 #endif
-static const uint8_t prefixes[]=DT_PROP(NODE,addr_prefix);
+static const uint8_t prefixes[]={0xa7,0xd3,0x69,0xb5};
 #define SLOT_US 4000
 #define WIRE_HEADER LISM_WIRE_HEADER
-struct tx_item { struct esb_payload payload;uint8_t retries;uint32_t target_boot,generation; };
+struct tx_item { struct esb_payload payload;uint8_t retries;uint32_t target_boot,generation;int64_t expires;bool discovery; };
 static atomic_t command_generation;
 static struct k_spinlock signal_lock;
 static struct {int8_t dbm;int64_t seen;} signals[2];
@@ -77,9 +79,16 @@ static uint32_t boot_id,next_seq=1;
 uint32_t kb_receiver_boot(void){return boot_id;}
 static struct esb_payload receive_ring[64];
 static atomic_t head,tail,idle=ATOMIC_INIT(1);
-static atomic_t last_boot[2];
-uint32_t kb_receiver_peer_boot(unsigned source){return source<2?(uint32_t)atomic_get(&last_boot[source]):0;}
-static uint32_t previous_boot[2],last_seq[2];
+static atomic_t last_boot[4];
+static struct kb_owner_policy owner;
+static K_MUTEX_DEFINE(owner_mutex);
+static atomic_t retiring,published_owner;
+static int64_t retired_at;
+K_MSGQ_DEFINE(probe_queue,sizeof(struct tx_item),4,4);
+bool kb_receiver_admitting(void){return !atomic_get(&retiring);}
+uint8_t kb_receiver_owner_set(void){unsigned n=atomic_get(&published_owner);return n?n-1:KB_OWNER_NONE;}
+uint32_t kb_receiver_peer_boot(unsigned source){return source<2 && owner.bound?(uint32_t)atomic_get(&last_boot[owner.set*2+source]):0;}
+static uint32_t previous_boot[4],last_seq[4];
 static atomic_t command_ack_boot,command_ack_seq;
 static K_MUTEX_DEFINE(send_mutex);
 static void put32(uint8_t *p,uint32_t v) { for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(v>>(8*i)); }
@@ -113,7 +122,7 @@ static int configure_radio(void) {
     if(!rc)rc=esb_set_base_address_0(base0);
     if(!rc)rc=esb_set_base_address_1(base1);
     if(!rc)rc=esb_set_prefixes(prefixes,ARRAY_SIZE(prefixes));
-    if(!rc)rc=esb_enable_pipes(BIT(0)|BIT(1));
+    if(!rc)rc=esb_enable_pipes(BIT(0)|BIT(1)|BIT(2)|BIT(3));
     if(!rc)rc=esb_set_rf_channel(37);
     if(!rc && have_tx && current.generation==(uint32_t)atomic_get(&command_generation))rc=esb_write_payload(&current.payload);
     if(!rc && mode==APP_ESB_MODE_PRX)rc=esb_start_rx();
@@ -208,20 +217,65 @@ static int clocks_start(void) {
 static void notify(app_esb_event_type_t type) {
     app_esb_event_t e={.evt_type=type};callback(&e);
 }
+static void retire_owner(void) {
+    if(!atomic_cas(&retiring,0,1))return;
+    owner.retired=true;retired_at=k_uptime_get();kb_receiver_fence_commands();
+    /* No new tuple is admitted under this receiver boot, even if old workers
+     * are still executing. link_tick actively releases held state, then the
+     * hardware reset discards ALL old radio/behavior/USB/SDC work. */
+}
+static bool tx_owner_live(const struct tx_item *t){
+    if(atomic_get(&retiring) || t->generation!=(uint32_t)atomic_get(&command_generation) || k_uptime_get()>t->expires)return false;
+    if(t->discovery)return !owner.bound || kb_owner_same(&owner,t->payload.pipe/2,t->target_boot);
+    return owner.bound && t->payload.pipe/2==owner.set;
+}
+/* Owner commands always precede bounded best-effort presence replies. Stale
+ * replies are never handed to a new tuple; a live probe has <=250ms lifetime. */
+static bool take_next_tx(struct tx_item *out){
+    for(unsigned q=0;q<2;q++){
+        for(unsigned n=0;n<(q?4:32);n++){
+            if(k_msgq_get(q?&probe_queue:&tx_queue,out,K_NO_WAIT))break;
+            if(!tx_owner_live(out))continue;
+            if(!out->discovery && out->target_boot!=(uint32_t)atomic_get(&last_boot[out->payload.pipe]))continue;
+            return true;
+        }
+    }
+    return false;
+}
+static bool probe_preemptible(void){return have_tx && current.discovery && k_msgq_num_used_get(&tx_queue)>0;}
+static void offer_probe(unsigned physical,uint32_t peer,const struct kb_discovery *probe){
+    struct esb_command_envelope env={.prefix={.magic_prefix=ZMK_SPLIT_ESB_ENVELOPE_MAGIC_PREFIX},.payload={.source=1,.cmd={.type=ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_INVOKE_BEHAVIOR}}};
+
+    env.payload.cmd.data.invoke_behavior.param1=probe->cookie;
+    env.payload.cmd.data.invoke_behavior.param2=boot_id;
+    env.payload.cmd.data.invoke_behavior.event_source=1;
+    env.payload.cmd.data.invoke_behavior.position=CONFIG_LISM_DONGLE_STATION;
+    env.payload.cmd.data.invoke_behavior.state=1;
+    memcpy(env.payload.cmd.data.invoke_behavior.behavior_dev,"KB_PROBE3",10);
+    env.prefix.payload_size=1+sizeof(env.payload.cmd.type)+sizeof(env.payload.cmd.data.invoke_behavior);
+    size_t n=sizeof(env.prefix)+env.prefix.payload_size;
+    k_mutex_lock(&send_mutex,K_FOREVER);
+    struct tx_item item={.target_boot=peer,.generation=atomic_get(&command_generation),.expires=k_uptime_get()+250,.discovery=true};
+    item.payload=(struct esb_payload){.pipe=physical,.length=WIRE_HEADER+n+sizeof(struct esb_msg_postfix)};
+    memcpy(item.payload.data,kb_set_magic(physical/2),4);put32(item.payload.data+4,boot_id);put32(item.payload.data+8,next_seq++);put32(item.payload.data+12,peer);
+    memcpy(item.payload.data+WIRE_HEADER,&env,n);
+    struct esb_msg_postfix crc={.crc=crc32_ieee(item.payload.data+WIRE_HEADER,n)};memcpy(item.payload.data+WIRE_HEADER+n,&crc,sizeof(crc));
+    (void)k_msgq_put(&probe_queue,&item,K_NO_WAIT);k_mutex_unlock(&send_mutex);
+}
 static void receive_frames(void) {
     unsigned t;
     while((t=(unsigned)atomic_get(&tail))!=(unsigned)atomic_get(&head)) {
         struct esb_payload p=receive_ring[t];atomic_set(&tail,(t+1)%ARRAY_SIZE(receive_ring));
         atomic_inc(&diag_rx);
-        if(p.pipe>=2 || p.length<WIRE_HEADER+sizeof(struct esb_msg_prefix)+2+sizeof(struct esb_msg_postfix) ||
-            p.length>CONFIG_ESB_MAX_PAYLOAD_LENGTH || memcmp(p.data,"LsE3",4))continue;
+        if(p.pipe>=4 || p.length<WIRE_HEADER+sizeof(struct esb_msg_prefix)+2+sizeof(struct esb_msg_postfix) ||
+            p.length>CONFIG_ESB_MAX_PAYLOAD_LENGTH || memcmp(p.data,kb_set_magic(p.pipe/2),4))continue;
         struct esb_msg_prefix prefix;memcpy(&prefix,p.data+WIRE_HEADER,sizeof(prefix));
         size_t body_len=p.length-WIRE_HEADER,frame_len=sizeof(prefix)+prefix.payload_size;
         if(memcmp(prefix.magic_prefix,"ZmKe",4) || prefix.payload_size<2 ||
-            frame_len+sizeof(struct esb_msg_postfix)!=body_len || p.data[WIRE_HEADER+sizeof(prefix)]!=p.pipe)continue;
+            frame_len+sizeof(struct esb_msg_postfix)!=body_len || p.data[WIRE_HEADER+sizeof(prefix)]!=(p.pipe%2))continue;
         struct esb_msg_postfix crc;memcpy(&crc,p.data+WIRE_HEADER+frame_len,sizeof(crc));
         if(crc32_ieee(p.data+WIRE_HEADER,frame_len)!=crc.crc)continue;
-        if(!lism_wire_valid(p.pipe,p.data+WIRE_HEADER,body_len))continue;
+        if(!lism_wire_valid(p.pipe%2,p.data+WIRE_HEADER,body_len))continue;
         struct esb_event_envelope body={0};
         if(mode==APP_ESB_MODE_PRX)memcpy(&body,p.data+WIRE_HEADER,body_len-sizeof(struct esb_msg_postfix));
         bool probe=mode==APP_ESB_MODE_PRX && (int)body.payload.event.type==KB_PROBE_EVENT;
@@ -233,18 +287,38 @@ static void receive_frames(void) {
          * never execute again after that half restarts. */
         if(mode==APP_ESB_MODE_PTX && get32(p.data+12)!=boot_id)continue;
         uint32_t b=get32(p.data+4),s=get32(p.data+8);if(!b || !s)continue;
+        unsigned logical=p.pipe%2,set=p.pipe/2;
+        k_mutex_lock(&owner_mutex,K_FOREVER);
+        if(kb_owner_expire(&owner,k_uptime_get()))retire_owner();
+        if(atomic_get(&retiring)){k_mutex_unlock(&owner_mutex);continue;}
+        if(probe){
+            struct kb_discovery d;memcpy(&d,&body.payload.event.data,sizeof(d));
+            if(logical==1 && d.version==KB_PROTOCOL_VERSION && d.station==CONFIG_LISM_DONGLE_STATION && d.authority && d.cookie && kb_owner_probe_allowed(&owner,set,b,k_uptime_get()))offer_probe(p.pipe,b,&d);
+            if(owner.retired)retire_owner();
+            k_mutex_unlock(&owner_mutex);continue; /* never changes owner peer caches */
+        }
+        struct kb_owner_policy candidate=owner;
+        bool status=(int)body.payload.event.type==KB_ROUTE_EVENT;
+        if(status){
+            struct kb_route_status rs;memcpy(&rs,&body.payload.event.data,sizeof(rs));
+            if(rs.version!=KB_ROUTE_VERSION || rs.profile>=5 || rs.station!=CONFIG_LISM_DONGLE_STATION || rs.receiver_boot!=boot_id || (rs.target==0?rs.owner_station!=rs.station:rs.owner_station!=KB_STATION_NONE) || !kb_owner_status(&candidate,set,b,rs.authority,rs.epoch,rs.phase,rs.target,rs.mode,k_uptime_get())){if(candidate.retired)retire_owner();k_mutex_unlock(&owner_mutex);continue;}
+        }else if(!owner.bound || owner.set!=set || (logical==1 && owner.wire_boot!=b)){k_mutex_unlock(&owner_mutex);continue;}
         if(b!=(uint32_t)atomic_get(&last_boot[p.pipe])) {
-            if(b==previous_boot[p.pipe])continue;
+            if(b==previous_boot[p.pipe]){k_mutex_unlock(&owner_mutex);continue;}
             previous_boot[p.pipe]=atomic_get(&last_boot[p.pipe]);atomic_set(&last_boot[p.pipe],b);last_seq[p.pipe]=0;
         }
-        if(s<=last_seq[p.pipe])continue;
+        if(s<=last_seq[p.pipe]){k_mutex_unlock(&owner_mutex);continue;}
         if(mode==APP_ESB_MODE_PRX && have_tx && current.payload.pipe==p.pipe &&
             get32(p.data+12)==boot_id && get32(p.data+16)==get32(current.payload.data+8))
             atomic_set(&tx_result,1); /* peer confirmed valid command queue insertion */
-        app_esb_event_t e={.evt_type=APP_ESB_EVT_RX,.pipe=p.pipe,
+        /* Publish the immutable owner before native workers can consume the claim.
+         * If queue insertion fails, its reservation simply expires; never
+         * reuse this receiver boot for an alternate tuple. */
+        if(status){owner=candidate;atomic_set(&published_owner,set+1);}
+        app_esb_event_t e={.evt_type=APP_ESB_EVT_RX,.pipe=logical,
             .buf=p.data+WIRE_HEADER,.data_length=p.length-WIRE_HEADER};callback(&e);
         if(e.accepted) {
-            if(!probe && p.rssi && p.rssi<127){k_spinlock_key_t k=k_spin_lock(&signal_lock);signals[p.pipe].dbm=-(int)p.rssi;signals[p.pipe].seen=k_uptime_get();k_spin_unlock(&signal_lock,k);}
+            if(!probe && p.rssi && p.rssi<127){k_spinlock_key_t k=k_spin_lock(&signal_lock);signals[logical].dbm=-(int)p.rssi;signals[logical].seen=k_uptime_get();k_spin_unlock(&signal_lock,k);}
             atomic_inc(&diag_accepted);
             last_seq[p.pipe]=s;
             if(mode==APP_ESB_MODE_PTX) {
@@ -253,6 +327,7 @@ static void receive_frames(void) {
                 k_mutex_unlock(&send_mutex);
             }
         }
+        k_mutex_unlock(&owner_mutex);
     }
 }
 /* PRX puts a command in the ACK FIFO while RX remains running. esb_start_tx()
@@ -320,12 +395,17 @@ static void radio_thread(void *a,void *b,void *c) {
         if((rc=atomic_set(&irq_error,0)))break;
         if(atomic_set(&ring_overflow,0))LOG_WRN("ESB RX ring overflow; snapshot will repair held state");
         receive_frames();
+        k_mutex_lock(&owner_mutex,K_FOREVER);
+        if(kb_owner_expire(&owner,k_uptime_get()))retire_owner();
+        k_mutex_unlock(&owner_mutex);
+        if(atomic_get(&retiring) && k_uptime_get()-retired_at>=600)sys_reboot(SYS_REBOOT_COLD);
         if(atomic_get(&idle)) {
             int result=atomic_set(&tx_result,0);
-            if(have_tx && mode==APP_ESB_MODE_PRX && current.target_boot!=(uint32_t)atomic_get(&last_boot[current.payload.pipe])) {
+            if(probe_preemptible()){have_tx=false;in_flight=false;result=0;}
+            if(have_tx && mode==APP_ESB_MODE_PRX && !current.discovery && current.target_boot!=(uint32_t)atomic_get(&last_boot[current.payload.pipe])) {
                 have_tx=false;in_flight=false;notify(APP_ESB_EVT_TX_FAIL);
             }
-            if(have_tx && current.generation!=(uint32_t)atomic_get(&command_generation)){have_tx=false;in_flight=false;}
+            if(have_tx && !tx_owner_live(&current)){have_tx=false;in_flight=false;}
             if(have_tx && result==1) {
                 have_tx=false;in_flight=false;lism_ack_seen();notify(APP_ESB_EVT_TX_SUCCESS);
             } else if(have_tx && (result<0 || k_uptime_get()-pending_since>3000)) {
@@ -337,12 +417,12 @@ static void radio_thread(void *a,void *b,void *c) {
                 esb_flush_tx();
 #endif
             }
-            if(!have_tx && !k_msgq_get(&tx_queue,&current,K_NO_WAIT)) {
+            if(!have_tx && take_next_tx(&current)) {
                 have_tx=true;pending_since=k_uptime_get();in_flight=false;
-                if(mode==APP_ESB_MODE_PRX && current.target_boot!=(uint32_t)atomic_get(&last_boot[current.payload.pipe])) {
+                if(mode==APP_ESB_MODE_PRX && !current.discovery && current.target_boot!=(uint32_t)atomic_get(&last_boot[current.payload.pipe])) {
                     have_tx=false;notify(APP_ESB_EVT_TX_FAIL);
                 }
-                if(current.generation!=(uint32_t)atomic_get(&command_generation))have_tx=false;
+                if(!tx_owner_live(&current))have_tx=false;
             }
         }
 #if IS_ENABLED(CONFIG_ZMK_BLE)
@@ -382,10 +462,12 @@ int zmk_split_esb_send(app_esb_data_t *p) {
     if(!p || p->pipe>=2 || !p->len || p->len>CONFIG_ESB_MAX_PAYLOAD_LENGTH-WIRE_HEADER)return -EINVAL;
     k_mutex_lock(&send_mutex,K_FOREVER);
     if(!boot_id || !next_seq) {k_mutex_unlock(&send_mutex);return -EAGAIN;}
-    struct tx_item item={.retries=p->max_retry,.generation=atomic_get(&command_generation)};
-    item.target_boot=atomic_get(&last_boot[p->pipe]);
-    item.payload.pipe=p->pipe;item.payload.noack=false;item.payload.length=p->len+WIRE_HEADER;
-    memcpy(item.payload.data,"LsE3",4);put32(item.payload.data+4,boot_id);put32(item.payload.data+8,next_seq);
+    if(!owner.bound || !kb_receiver_admitting()){k_mutex_unlock(&send_mutex);return -EAGAIN;}
+    unsigned physical=owner.set*2+p->pipe;
+    struct tx_item item={.retries=p->max_retry,.generation=atomic_get(&command_generation),.expires=k_uptime_get()+3000};
+    item.target_boot=atomic_get(&last_boot[physical]);
+    item.payload.pipe=physical;item.payload.noack=false;item.payload.length=p->len+WIRE_HEADER;
+    memcpy(item.payload.data,kb_set_magic(owner.set),4);put32(item.payload.data+4,boot_id);put32(item.payload.data+8,next_seq);
     if(mode==APP_ESB_MODE_PRX) {
         put32(item.payload.data+12,item.target_boot);put32(item.payload.data+16,kb_receiver_route_epoch());
     } else {

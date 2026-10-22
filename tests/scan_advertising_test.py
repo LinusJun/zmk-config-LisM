@@ -2,7 +2,7 @@
 from pathlib import Path
 import sys,tempfile,subprocess
 P=Path(__file__).resolve().parents[1];sys.path.insert(0,str(P/'tools'));from prepare_hog_routing import function
-s=(P/'src/lism_input_scanner.c').read_text();ble=Path('/work/workspace/build-dongle/modules/zmk-config-LisM/lism_ble_zephyr41.c').read_text()
+s=(P/'src/lism_input_scanner.c').read_text();ble=Path('/work/v51-two-sets/workspace/build-dongle/modules/zmk-config-LisM/lism_ble_zephyr41.c').read_text()
 pre=r'''
 #include <stdbool.h>
 #include <stdint.h>

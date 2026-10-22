@@ -153,7 +153,7 @@ int main(void){
  route_work(NULL);assert(stage==ST_HUNT);offer(201);candidate(false);
  /* No dongle -> direct BLE. Late receiver is display-only, never steals. */
  requested=KB_ROUTE_BLE;route_work(NULL);drain_station=KB_STATION_NONE;tick(2300);assert(current_mode==KB_ROUTE_BLE && stage==ST_STABLE && left_disabled);
- confirmed_at=0;route_work(NULL);assert(monitor_probe);offer_station=hunt_station;offer_boot=300;radio_boot=300;route_work(NULL);assert(current_mode==KB_ROUTE_BLE && stage==ST_STABLE);
+ confirmed_at=0;route_work(NULL);assert(!monitor_probe);offer_station=hunt_station;offer_boot=300;radio_boot=300;route_work(NULL);assert(current_mode==KB_ROUTE_BLE && stage==ST_STABLE);
  /* Real neutral queue backpressure blocks a host profile change. */
  requested=14;fail_neutral=1;route_work(NULL);tick(5000);assert(stage==ST_DRAIN && profile==0);fail_neutral=0;drain_station=KB_STATION_NONE;route_work(NULL);assert(profile==4 && current_mode==KB_ROUTE_BLE);
  puts("PASS actual v50 worker: A/B keeping/manual/failover, slot/boot ACK, physical holds/new intent, grants, silent-left lease/right-only/rejoin, left loss after COMMIT, BLE mirror no steal, macro fences and neutral backpressure");
@@ -164,3 +164,47 @@ names=['finish_commit_locked','dongle_confirmed','all_released','kb_route_probe_
 code=pre+prefix+'\n'.join(function(hub,n) for n in names)+main
 with tempfile.TemporaryDirectory() as t:
  f=Path(t)/'mode.c';out=Path(t)/'mode';f.write_text(code);subprocess.run(['cc','-std=gnu11','-Wall','-fsanitize=address,undefined',str(f),'-o',str(out)],check=True);subprocess.run([str(out)],check=True)
+# Drive the production coordinator from cold boot in separate device processes.
+# This includes its initial release barrier, real 900ms probe window, 4.5s
+# search/fallback and two-phase left/receiver commit, rather than a lookup model.
+startup=r'''
+int main(int argc,char**argv){
+ assert(argc==4);unsigned set,live,contended;assert(sscanf(argv[1],"%u",&set)==1&&sscanf(argv[2],"%u",&live)==1&&sscanf(argv[3],"%u",&contended)==1);
+ preferred_station=set;desired_station=set;current_mode=KB_ROUTE_UNKNOWN;desired_mode=KB_ROUTE_DONGLE;
+ route_work(NULL);assert(stage==ST_DRAIN);drain_to_hunt();assert(hunt_station==set);
+ if(contended==2){
+  /* Foreign owner in BLE retires before replying to discovery. The new
+   * keyboard stays in HUNT while the station restarts, never enters an old
+   * boot PREPARE or its 10s blocked-station timeout. */
+  int64_t station_ready=now+1600;
+  for(unsigned n=0;n<4;n++){
+   kb_route_probe_transmitted(hunt_station,probe_cookie);tick(901);
+   if(now>=station_ready && hunt_station==live)break;
+  }
+  assert(stage==ST_HUNT && hunt_station==live);offer(500+live);candidate(true);
+  assert(station==live && receiver_boot==500+live);
+  printf("PASS actual reset-during-discovery HUNT: set=%u sole-station=%u new-boot=%u\n",set,live,receiver_boot);return 0;
+ }
+ if(contended){
+  offer(100+set);now=target_started+4501;route_work(NULL);assert(stage==ST_DRAIN);
+  drain_to_hunt();assert(hunt_station==(set^1));live=set^1;
+ }else if(live!=set){
+  kb_route_probe_transmitted(hunt_station,probe_cookie);tick(901);assert(hunt_station==(set^1));
+ }
+ if(live<2){assert(hunt_station==live);offer(100+live);candidate(true);assert(current_mode==KB_ROUTE_DONGLE&&station==live&&gate_station==live&&receiver_boot==100+live);}
+ else {
+  for(unsigned n=0;n<12&&stage==ST_HUNT;n++){kb_route_probe_transmitted(hunt_station,probe_cookie);tick(901);}
+  assert(current_mode==KB_ROUTE_BLE&&stage==ST_STABLE&&!monitor_probe);
+ }
+ printf("PASS actual cold-boot worker: set=%u powered-station=%u collision=%u committed-mode=%u station=%u\n",set,live,contended,current_mode,station);
+}
+'''
+helpers=main[:main.index('int main(void)')]
+base=pre+prefix+'\n'.join(function(hub,n) for n in names)+helpers
+with tempfile.TemporaryDirectory() as t:
+ f=Path(t)/'startup.c';out=Path(t)/'startup';f.write_text(base+startup)
+ subprocess.run(['cc','-std=gnu11','-fsanitize=address,undefined',str(f),'-o',str(out)],check=True)
+ for device_set in [0,1]:
+  for live in [0,1,2]:subprocess.run([str(out),str(device_set),str(live),'0'],check=True)
+  subprocess.run([str(out),str(device_set),str(device_set^1),'1'],check=True)
+  for live in [0,1]:subprocess.run([str(out),str(device_set),str(live),'2'],check=True)

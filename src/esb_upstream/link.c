@@ -13,6 +13,10 @@
 #include <zmk/split/transport/peripheral.h>
 #include <zmk/split/peripheral.h>
 #include <zmk/battery.h>
+#if IS_ENABLED(CONFIG_LISM_BLE_INPUT_BRIDGE)
+#include <zmk/endpoints.h>
+#include <lism_input_host.h>
+#endif
 #include <zmk/events/split_peripheral_status_changed.h>
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL)
 #include <zmk/events/split_central_status_changed.h>
@@ -312,6 +316,14 @@ static void tick(struct k_work *work) {
 #if !IS_ENABLED(CONFIG_LISM_KB_HUB)
     if(!kb_route_dongle_key_allowed())for(unsigned i=0;i<2;i++) {
         const struct lism_snapshot empty={.battery=held[i].battery};reconcile(i,&empty);
+    }
+#endif
+#if IS_ENABLED(CONFIG_LISM_BLE_INPUT_BRIDGE)
+    static bool retired_release;
+    if(!kb_receiver_admitting() && !retired_release){
+        retired_release=true;lism_input_host_set_enabled(false);
+        page_pending=false;page_target=false;
+        zmk_endpoint_clear_reports(); /* best effort, reset has an independent deadline */
     }
 #endif
     for(unsigned i=0;i<2;i++)if(online[i] && k_uptime_get()-seen[i]>=LISM_LEASE_MS) {

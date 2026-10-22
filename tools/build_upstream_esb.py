@@ -17,8 +17,10 @@ def production_fingerprint():
     hashes={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}
     return hashlib.sha256(json.dumps(hashes,sort_keys=True).encode()).hexdigest(),hashes
 def build(target,ws,modules=None,driver=None):
+    role=target.split('_set')[0]
+    keyboard_set=1 if target.endswith('_set2') else 0
     fingerprint,source_hashes=production_fingerprint()
-    ws=Path(ws).absolute();ws.mkdir(exist_ok=True,parents=True);display_central=target in ['dongle_a','dongle_b'];xiao=target=='dongle_b';central=display_central or target=='right';dest=ws/('build-'+target)
+    ws=Path(ws).absolute();ws.mkdir(exist_ok=True,parents=True);display_central=target in ['dongle_a','dongle_b'];xiao=target=='dongle_b';central=display_central or role=='right';dest=ws/('build-'+target)
     assert hashlib.sha256((ROOT/'config/lism.keymap').read_bytes()).hexdigest()==KEYMAP
     for name,pin in PINS.items():
         assert subprocess.check_output(['git','-C',str(ws/name),'rev-parse','HEAD'],text=True).strip()==pin,name
@@ -71,10 +73,11 @@ def build(target,ws,modules=None,driver=None):
     mods=modules.split(';') if modules else subprocess.check_output(['west','list','-f','{abspath}'],cwd=ws,text=True).splitlines()
     mods=[m for m in mods if Path(m).is_dir() and Path(m).name not in ['prospector-zmk-module','zmk-feature-split-esb',ROOT.name]]
     mods=list(dict.fromkeys([str(ROOT),str(prepared),str(display),str(ws/'nrf'),str(ws/'nrfxlib')]+mods))
-    shield={'left':'lism_left rgbled_adapter','right':'lism_right rgbled_adapter','dongle_a':'lism_dongle prospector_adapter','dongle_b':'lism_dongle prospector_adapter xiao_plus_147_touch','reset':'settings_reset'}[target]
+    shield={'left':'lism_left rgbled_adapter','right':'lism_right rgbled_adapter','dongle_a':'lism_dongle prospector_adapter','dongle_b':'lism_dongle prospector_adapter xiao_plus_147_touch','reset':'settings_reset'}[role]
     options=[];overlay=str(ROOT/'config/esb-upstream.overlay')
     if target!='reset':
         options=['-DEXTRA_CONF_FILE='+str(ROOT/'config/esb-upstream.conf'),'-DCONFIG_ZMK_SPLIT=y','-DCONFIG_ZMK_SPLIT_ROLE_CENTRAL='+('y' if central else 'n'),'-DLISM_COMPAT_INCLUDE='+str(compat.parent),'-DLISM_ESB_FOLDER='+str(prepared/'src/split/esb')]
+        options+=['-DCONFIG_LISM_KEYBOARD_SET='+str(keyboard_set)]
         if display_central:options+=['-DCONFIG_LISM_DONGLE_STATION='+('1' if xiao else '0')]
         if xiao:options+=['-DCONFIG_LISM_XIAO147_TOUCH=y','-DCONFIG_I2C=y','-DCONFIG_I2C_NRFX_TRANSFER_TIMEOUT=100','-DCONFIG_INPUT_GPIO_KEYS=y','-DCONFIG_LV_COLOR_16_SWAP=n']
         options+=['-DSNIPPET=zmk-usb-logging','-DCONFIG_LOG_PROCESS_THREAD_STARTUP_DELAY_MS=0',
@@ -91,7 +94,7 @@ def build(target,ws,modules=None,driver=None):
                       '-DCONFIG_LV_Z_VDB_SIZE=20','-DCONFIG_LV_Z_DOUBLE_VDB=n','-DCONFIG_LV_Z_MEM_POOL_SIZE='+('32768' if xiao else '24000'),'-DCONFIG_LV_FONT_MONTSERRAT_10=y','-DCONFIG_LV_FONT_MONTSERRAT_18=y','-DCONFIG_LV_FONT_MONTSERRAT_12=y','-DCONFIG_LV_FONT_MONTSERRAT_14=y','-DCONFIG_LV_USE_CUSTOM_SPRINTF=y']
             if not display_central:
                 options=[o for o in options if not o.startswith('-DCONFIG_LV_')]
-                options+=['-DCONFIG_LISM_BLE_INPUT_BRIDGE=n','-DCONFIG_ZMK_USB=n','-DCONFIG_ZMK_WPM=y','-DCONFIG_ZMK_HID_INDICATORS=y','-DCONFIG_ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS=2','-DCONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_QUEUE_SIZE=16','-DCONFIG_ZMK_SPLIT_ESB_PERIPHERAL_ID=1','-DCONFIG_ZMK_KEYBOARD_NAME="LisM Keyboard"']
+                options+=['-DCONFIG_LISM_BLE_INPUT_BRIDGE=n','-DCONFIG_ZMK_USB=n','-DCONFIG_ZMK_WPM=y','-DCONFIG_ZMK_HID_INDICATORS=y','-DCONFIG_ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS=2','-DCONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_QUEUE_SIZE=16','-DCONFIG_ZMK_SPLIT_ESB_PERIPHERAL_ID=1','-DCONFIG_ZMK_KEYBOARD_NAME="LisM Set'+str(keyboard_set+1)+'"']
                 hub_overlay=ws/'kb-right.overlay'
                 hub_overlay.write_text('#include "'+str(ROOT/'boards/shields/lism/lism_dongle.overlay')+'"\n/ { chosen { zmk,kscan = &kscan0; }; };\n')
                 overlay+=';'+str(hub_overlay)
@@ -99,7 +102,7 @@ def build(target,ws,modules=None,driver=None):
         else:
             options+=['-DCONFIG_ZMK_BLE=n','-DCONFIG_ZMK_SPLIT_ESB_USE_TIMESLOT=n',
                       '-DCONFIG_MPSL_FEM_ONLY=y',
-                      '-DCONFIG_ZMK_SPLIT_ESB_PERIPHERAL_ID='+('1' if target=='right' else '0')]
+                      '-DCONFIG_ZMK_SPLIT_ESB_PERIPHERAL_ID='+('1' if role=='right' else '0')]
         options+=['-DDTC_OVERLAY_FILE='+overlay]
     cmd=['cmake','-S',str((ws/'zmk/app').resolve()),'-B',str(dest),'-G','Ninja','-DBOARD=xiao_ble//zmk','-DLISM_UPSTREAM_ESB_BUILD=ON','-DLISM_DISPLAY_MODULE='+str(display),'-DZephyr_DIR='+str(ws/'zephyr/share/zephyr-package/cmake'),'-DZMK_CONFIG='+str(ROOT/'config'),'-DZMK_EXTRA_MODULES='+str(ROOT),'-DZEPHYR_MODULES='+';'.join(mods),'-DSHIELD='+shield,*options]
     for stage,command in [('configure',cmd),('build',['cmake','--build',str(dest),'-j4'])]:
@@ -136,10 +139,10 @@ def build(target,ws,modules=None,driver=None):
     assert production_fingerprint()[0]==fingerprint,'Production sources changed during this build; rebuild required'
     data=(dest/'zephyr/zmk.uf2').read_bytes();validate_uf2(data)
     out=ROOT/'artifacts';out.mkdir(exist_ok=True)
-    name={'left':'LisM_ESBv501_TEST_Left_4waystick.uf2','right':'LisM_ESBv501_TEST_Right_Trackball_BLE5_Hub.uf2','dongle_a':'LisM_ESBv501_TEST_Dongle_A_Prospector169.uf2','dongle_b':'LisM_ESBv501_TEST_Dongle_B_XIAO147_Touch.uf2','reset':'settings_reset_XIAO_nRF52840.uf2'}[target]
+    name={'left':'LisM_ESBv51_TEST_Set'+str(keyboard_set+1)+'_Left_4waystick.uf2','right':'LisM_ESBv51_TEST_Set'+str(keyboard_set+1)+'_Right_Trackball_BLE5_Hub.uf2','dongle_a':'LisM_ESBv51_TEST_Dongle_A_Prospector169.uf2','dongle_b':'LisM_ESBv51_TEST_Dongle_B_XIAO147_Touch.uf2','reset':'settings_reset_XIAO_nRF52840.uf2'}[role]
     (out/name).write_bytes(data);(out/(target+'.config')).write_text(conf);(out/(target+'.dts')).write_bytes((dest/'zephyr/zephyr.dts').read_bytes())
-    rec={'target':target,'file':name,'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(data),'verified_base':BASE,'keymap_sha256':KEYMAP,'upstream_esb':'314c7cbaf4a74e1add1d6ffc8249de3e29965b8c','host_profiles':5 if central else 0,'simultaneous_host_connections':5 if central else 0,'host_ble':central,'split_transport':'ESB only' if target!='reset' else None,'hardware_tested':False,'pins':PINS,'production_fingerprint':fingerprint,'source_hashes':source_hashes,**mem}
+    rec={'target':target,'keyboard_set':keyboard_set+1 if role in ['left','right'] else None,'role':role,'file':name,'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(data),'verified_base':BASE,'keymap_sha256':KEYMAP,'upstream_esb':'314c7cbaf4a74e1add1d6ffc8249de3e29965b8c','host_profiles':5 if central else 0,'simultaneous_host_connections':5 if central else 0,'host_ble':central,'split_transport':'ESB only' if target!='reset' else None,'hardware_tested':False,'pins':PINS,'production_fingerprint':fingerprint,'source_hashes':source_hashes,**mem}
     (out/(target+'-build.json')).write_text(json.dumps(rec,indent=2)+'\n');print('SUCCESS',json.dumps({k:rec[k] for k in ['target','file','sha256','bytes','production_fingerprint'] }|mem),flush=True)
 if __name__=='__main__':
-    a=argparse.ArgumentParser();a.add_argument('--workspace',type=Path,required=True);a.add_argument('--target',choices=['left','right','dongle_a','dongle_b','reset'],required=True);a.add_argument('--modules');a.add_argument('--driver',type=Path);args=a.parse_args()
+    a=argparse.ArgumentParser();a.add_argument('--workspace',type=Path,required=True);a.add_argument('--target',choices=['left_set1','right_set1','left_set2','right_set2','dongle_a','dongle_b','reset'],required=True);a.add_argument('--modules');a.add_argument('--driver',type=Path);args=a.parse_args()
     build(args.target,args.workspace,args.modules,args.driver)

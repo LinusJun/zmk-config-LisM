@@ -1,75 +1,76 @@
-# LisM ESB v5.0.1 TEST：一套键盘，两台 Dongle
+# LisM ESB v5.1 两套键盘 / 双 Dongle 测试版
 
-同一套左手四向杆＋右手轨迹球，可以带去家里或单位使用：**A 站为原 Prospector 1.69 英寸，B 站为 XIAO147**。两台都在附近时保持当前连接，需要时用按键手动选站。
+基于 v5.0.1 双 Dongle 分支，新分支为 `codex/esb-v51-two-sets-dual-dongle`。
+两套 LisM 都能选择 A/B，每台 Dongle 同时只接受一套键盘。原双 Dongle 分支保留。
 
-本次 v5.0.1 修正 WPM 动画跨线程访问 LVGL，以及初始化前就调度任务的问题；WPM 显示归零时清除峰值线。保留原界面、无线协议、按键和 USB/BLE 功能。
+**这是软件编译和原生模型验证过的测试版，尚未用两套实体键盘和两台实体接收器完成射频实测。**
 
-**已经刷好 v5.0：本次只需更新接收器，左右手 UF2 与 v5.0 逐字节相同。** 从 v4.x 更新时，仍须按下文更新左右手和两台接收器。原屏和 XIAO147 均有对应接收器修正版。绿色残留是否彻底消失仍需实机复核，软件测试不代替物理屏幕验证。
+## 下载及刷写
 
-这是 v5.0 系列协议测试版，已完成软件构建与自动验证，**尚未实机验证双站切换、无线延迟或真实射频表现**。日常使用的 [v4.7.2 实测正常基准](https://github.com/LinusJun/zmk-config-LisM/tree/codex/esb-v472-tested-baseline) 单独保留，可随时回退。
+下载本分支 `firmware/LisM_ESB_v51_Two_Sets_Dual_Dongle_TEST.zip`，解压后使用“固件”目录。
 
-## 下载与刷写
-
-[下载四台完整 v5.0.1 测试包](firmware/LisM_ESB_v501_Dual_Dongle_TEST.zip?raw=true)。内含四台 UF2、可选 settings_reset、中文说明、编译与验证记录、SHA256 清单。
-
-| 硬件 | 文件 |
+| 设备 | 固件文件 |
 | --- | --- |
-| 左手，四向杆 | `LisM_ESBv501_TEST_Left_4waystick.uf2` |
-| 右手，轨迹球，直连 BLE 主机 | `LisM_ESBv501_TEST_Right_Trackball_BLE5_Hub.uf2` |
-| A 站，原 Prospector169 | `LisM_ESBv501_TEST_Dongle_A_Prospector169.uf2` |
-| B 站，XIAO147 带触摸 | `LisM_ESBv501_TEST_Dongle_B_XIAO147_Touch.uf2` |
+| 第 1 套左手 | `LisM_ESBv51_TEST_Set1_Left_4waystick.uf2` |
+| 第 1 套右手 | `LisM_ESBv51_TEST_Set1_Right_Trackball_BLE5_Hub.uf2` |
+| 第 2 套左手 | `LisM_ESBv51_TEST_Set2_Left_4waystick.uf2` |
+| 第 2 套右手 | `LisM_ESBv51_TEST_Set2_Right_Trackball_BLE5_Hub.uf2` |
+| Dongle A / Prospector 1.69 | `LisM_ESBv51_TEST_Dongle_A_Prospector169.uf2` |
+| Dongle B / XIAO 1.47 触摸屏 | `LisM_ESBv51_TEST_Dongle_B_XIAO147_Touch.uf2` |
 
-先关闭左右手，依次更新 A、B 接收器，再更新左右手，然后正常断电重启。双击 XIAO Reset 进入启动盘，将对应 UF2 复制进去。首次测试建议只开一台接收器，验证输入，再试另一台，最后试两台同时开。
+两套各自的左右手必须刷相同 Set 编号。两台 Dongle 使用对应屏幕的 A/B 固件，接收器同时支持两套，无需刷成 Set1 或 Set2。
+**不能把两套都刷成 Set1；不能混用 v5.0.x 的左右手或接收器。**
+包内 `settings_reset_XIAO_nRF52840.uf2` 是可选清设置固件；只有需要清空旧 BLE 绑定/配置时使用。它会清除该设备保存的配对和设置，使用后再刷回对应角色。正常升级不必先清设置。
 
-**从 v4.x 升级时，四台都要换成 v5.0 系列，不能混用 v4.7.2／v4.7.2.1／v4.9。** 这是无线协议升级，并非只更新屏幕。通常无需清设置；各接收器和右手原有电脑 BLE 配对独立保留。仅需排查旧设置时，才先刷包内 `settings_reset_XIAO_nRF52840.uf2` 再刷对应固件；清设置会删除这台设备的配对，不会代替固件更新。
+## 首次使用与自动连接
 
+1. 刷好六台设备，把键盘分别标记为 SET 1、SET 2。
+2. 打开任一台或两台 Dongle，再打开需要用的键盘左右手，松开按键和鼠标按钮，等待启动搜索与提交完成。
+3. 没有保存过站点时，SET 1 先找 A，SET 2 先找 B；都能继续寻找另一台。以前保存过的站点优先。
+4. **只有 A 开机：任一套开机都能自动寻找 A 并连接。只有 B 开机也一样。**
+5. 两台都开时，各套可连接空闲的 A/B。同一空闲接收器被同时争用时，只允许一个有效 PREPARE 获得独占权，另一套会继续寻找另一台，或回退自己的直连 BLE。
+6. 已有一套连接时，另一套不能抢占这台接收器；探测不会改变原套的按键状态或续租。两台都不可用时，右手回退直连 BLE。
 
-UF2 刷写后自动启动偶发黑屏的问题尚未证明修复。若刷完黑屏或不能输入，先单按一次接收器 Reset；不要先清配对。
+占用的接收器采用静默拒绝，右手按搜索窗口换站；没有显式 BUSY 回复。搜索和事务包含释放屏障，不是瞬时连接，按住按键会推迟切换。原套离线后，接收器约 2.5 秒租约到期，封锁输入、尝试释放，并在约 0.6 秒后自动重启；之后可接受另一套。上述数值是软件时限，不是实测端到端保证。
 
-A／B 由固件决定，不是电脑 BLE 的 1／2 号配置。可以把 A 放单位、B 放家里，也可以反过来；不要把 A 固件刷到 B 的屏幕硬件上。
+正常 Dongle 数据路径仍是：
 
-## 使用与按键
+- 左手按键 / 摇杆 → ESB → 当前 Dongle。
+- 右手按键 / 轨迹球 → ESB → 当前 Dongle。
+- 右手只协调选择与左右手提交，不代传 Dongle 模式的左手输入。
+- 直连 BLE 时：左手 → 私有 ESB → 本套右手 → 主机 BLE。
 
-Device 层仍用原来的进入方式（右手 Esc 位置按住，沿用 200ms）。下表的 F1／F2、H、分号和 N 等，指基础层对应的物理位置。
+两套的私有链路地址、站点物理 pipe、帧标识均独立。右手 BLE 广播名称分别为 `LisM Set1` / `LisM Set2`，各自保留 5 个主机槽位。接收器界面显示当前 `SET 1` / `SET 2` 或 `FREE`。
 
-| 按键 | 作用 | 键图定义 |
-| --- | --- | --- |
-| Device＋右手 F1 | 优先选择 A：Prospector169 | `&kb_route KB_DONGLE_SEL(0)` |
-| Device＋右手 F2 | 优先选择 B：XIAO147 | `&kb_route KB_DONGLE_SEL(1)` |
-| Device＋H | 键盘通过右手直连电脑／手机／平板 | `&kb_route KB_BLE` |
-| Device＋分号 | 返回 Dongle，优先上次成功使用的站点 | `&kb_route KB_DONGLE` |
-| Device＋N／M／逗号／句号／斜线 | 键盘直连的 BLE 1～5 号位 | `&kb_route KB_BLE_SEL(0)` ～ `(4)` |
-| 原 Screen Next 键 | 接收器下一页 | `&screen_next` |
+## 手动选择
 
-右手 F1／F2 是 Device 层原本未定义的两个位置；保留其余已有键位、四向杆和轨迹球映射。Dongle 对电脑的 5 个 BLE 配置仍用原有 BT_SEL 快捷键，和上表键盘本机的 5 个位互不替代。
+沿用原键表 Device 组合键：按住右手 Device 键约 200ms，再按：
 
-- **开机**：优先探测上次成功的站点，也会尝试另一站。都不可用时回退到键盘直连 BLE。
-- **两个站点同时在附近**：不自动抢切。当前连接正常就保持；手动 F1／F2 可改选。指定站不可达时会尝试另一站，仍不可达则回退直连。
-- **当前站断电或失联**：先安全停止旧输入，再重新寻找可用站；切换不是无缝漫游，需要松开按键和鼠标按钮。
-- **按住按键／轨迹球按钮**：手动切换先等待真实释放。旧站已经排队的宏、组合键、保持点击必须完成释放确认，不能为了快速切站跳过它们。
-- **已经回退或主动进入键盘直连 BLE**：后开机的 Dongle 不抢走输入，按 Device＋分号或 F1／F2 才回到 Dongle。
-- **仅一只手暂时失联**：停止给它旧路径的许可，租约失效后允许右手单独完成切换；左手恢复后需重新准备与确认，不重放断线前的按下。
+- `F1`：选择 Dongle A。
+- `F2`：选择 Dongle B。
+- `H`：本套直连 BLE。
+- `;`：返回 Dongle 自动搜索。
 
-## 保留的功能
+两套都支持相同操作。选择已占用的接收器不会挤掉另一套，会经过搜索/超时处理寻找可用目标。健康连接保持当前站点；接收器晚开机不会自动抢走正在使用的直连 BLE，需手动选择返回 Dongle。
 
-Dongle 模式仍是 **左手→当前 Dongle、右手→当前 Dongle 两条 ESB 直达路径**，轨迹球不会先绕另一只手。键盘直连模式是左手→右手 ESB，由右手 BLE 连接主机。每台接收器各自支持 USB、5 个主机 BLE 配置位、第三方蓝牙鼠标／触摸板及其开关。默认不扫描第三方设备；在设备页主动开启后才工作。
+## 这个测试版的接管边界
 
-键盘直连时，可用的一台 Dongle 可以作为状态输出器，显示层、WPM、修饰键和电量，不接管键盘输入。两台同时出现时不会同时镜像：只选择当前已确认的显示接收器。
+每次接收器启动只允许一个 `(Set, right wire boot, authority)` 所有者。只有发现响应本次 receiver boot 后的 FREEZE/PREPARE 能建立它；COMMIT 必须匹配 authority、epoch、目标站点及启动标识。
 
-原屏保留 v4.7.2.1 的完整信号图标和较小 JOYSTICK 字体。XIAO147 保留横屏、多页和原有触摸；没有 6 轴、飞鼠和自动旋转。设备页的摇杆导航、基础层 Enter 确认沿用原功能。
+失效后会先不可逆退休，递增命令/指针代次，阻止新输入，主动尝试释放旧按键和按钮，再执行普通应用重启。**换套接管会让 USB、接收器 BLE 和屏幕短暂重连。不会清除保存的配对和设置，也不会主动进入刷机盘。** 中立报告是有限时的尽力发送，不能保证失联主机收到最后一帧；重启是旧 USB/SDC/行为队列与新所有者的隔离边界。
 
-各台接收器的电脑 BLE 配对、第三方鼠标配对各自保存，不能把 A 的 5 个主机配置当作 B 的配置，也不会自动复制配对记录。
+为避免 BLE 显示先恢复导致真正键盘连接反复超时，此版关闭“空闲或重启后接收器自动恢复 BLE 镜像”。原套从 Dongle 切到直连 BLE 时，可继续在原接收器显示；另一套寻找该台时，该显示会让出接收器并先重启。已经处于直连 BLE 的键盘，遇到新开机或重启的空闲接收器，不会自动恢复显示；可手动重新选择 Dongle。两套直连 BLE 的输入功能保留。
 
-## 验证范围
+## 验证与复现
 
-四台固件使用同一份源码指纹。验证覆盖实际 C 协调器、左右手无线帧与队列、站点／启动会话／epoch 核对、旧回包拒绝、松键与宏队列屏障、接收器单独重启、左手 COMMIT 后失联、直连 BLE 不被后来的 Dongle 抢走，以及显示／触摸回归。
+交付包“验证记录”包含构建配置、DTS、UF2 SHA256、生产源码 fingerprint、原生测试日志和构建审计。关键验证包含：实际四 pipe 收包和定向发现、套号/启动标识/CRC/来源隔离、原子独占、探测不续租、250ms 探测回复失效、owner 命令优先、退休后永不在同 boot 接管，以及实际协调器冷启动仅 A/仅 B/无 Dongle/首次争用流程。
 
-WPM 修正使用实际组件与 LVGL，在原屏 RGB565 字节交换开启、XIAO147 关闭交换的两种配置下，检查动态局部刷新与整屏重绘的像素一致性，覆盖峰值移动、归零后重新输入、状态镜像和信号图标覆盖区。
+保留原四向摇杆键表、右手轨迹球、5 个 BLE 槽位、XIAO 触摸/输入归属保护，以及 v5.0.1 WPM 显示队列修复。原生测试使用实际 C 函数和 LVGL，队列/时钟/MMIO/主机 I/O 使用模型；它们不能证明实体 RF 时序、丢包表现、功耗、切换延迟或屏幕实测效果。
 
-软件通过不代表已经达到实机 1ms，也不代表已经完成两台接收器共处时的射频和触摸共存测试。请首先使用备用的一套键盘验证。
+GitHub Actions 的 7 个独立 target 为 `left_set1`、`right_set1`、`left_set2`、`right_set2`、`dongle_a`、`dongle_b`、`reset`。本地构建入口为：
 
-## 构建
+```sh
+python3 tools/build_upstream_esb.py --workspace /path/to/pinned-workspace --target right_set2
+```
 
-使用 `.github/workflows/build.yml` 的五项矩阵：`left`、`right`、`dongle_a`、`dongle_b`、`reset`。工作流固定依赖版本，构建工具位于 `tools/build_upstream_esb.py`；不能使用旧的普通 BLE 构建方式替代。
-
-原作者说明见 [README.upstream.md](README.upstream.md)。原屏 UI 快照见 [v4.7.2.1](https://github.com/LinusJun/zmk-config-LisM/tree/codex/esb-v4721-prospector-ui)，XIAO147 单站成果见 [v4.9](https://github.com/LinusJun/zmk-config-LisM/tree/codex/xiao147-esb-v49-test)。
+依赖版本由构建器固定并核对；KEYMAP SHA256 必须与 v5.0.1 一致。

@@ -1,0 +1,88 @@
+{
+  "passed": true,
+  "hardware_tested": false,
+  "production_fingerprint": "87966478699ed707a1d2b07a072eec9b8f8ac51a82b9260f47368447213a43fa",
+  "baseline_preserved": "872a01b0e74a71d5d3d3c9bd0cd8f6c1db0e88bc",
+  "targets": {
+    "left_set1": {
+      "file": "LisM_ESBv51_TEST_Set1_Left_4waystick.uf2",
+      "sha256": "1dafe6134466d825b5e7ead0d4a01c345d1f032ac19da80d30f3160ee57c37b4",
+      "bytes": 197632,
+      "role": "left",
+      "keyboard_set": 1,
+      "flash_bytes": 98640,
+      "ram_bytes": 61036
+    },
+    "right_set1": {
+      "file": "LisM_ESBv51_TEST_Set1_Right_Trackball_BLE5_Hub.uf2",
+      "sha256": "94399663a9161ed4424cf05212d465b4b9dd0ea8597339f3746709036adb86ba",
+      "bytes": 590848,
+      "role": "right",
+      "keyboard_set": 1,
+      "flash_bytes": 295424,
+      "ram_bytes": 108248,
+      "vectors": {
+        "flash_bytes": 295424,
+        "ram_bytes": 108248
+      }
+    },
+    "left_set2": {
+      "file": "LisM_ESBv51_TEST_Set2_Left_4waystick.uf2",
+      "sha256": "01de241c0c8d603b45ade30081edb742f75874088f4fed24f65c49b068014b66",
+      "bytes": 197632,
+      "role": "left",
+      "keyboard_set": 2,
+      "flash_bytes": 98640,
+      "ram_bytes": 61036
+    },
+    "right_set2": {
+      "file": "LisM_ESBv51_TEST_Set2_Right_Trackball_BLE5_Hub.uf2",
+      "sha256": "6d7a42ff64dfe4c979ae4e2c3c30bf75410b7ff5de30f4ce6773542a9c6f1b67",
+      "bytes": 590848,
+      "role": "right",
+      "keyboard_set": 2,
+      "flash_bytes": 295424,
+      "ram_bytes": 108248,
+      "vectors": {
+        "flash_bytes": 295424,
+        "ram_bytes": 108248
+      }
+    },
+    "dongle_a": {
+      "file": "LisM_ESBv51_TEST_Dongle_A_Prospector169.uf2",
+      "sha256": "125a06cee2307cdabd4864418e7ca0484c5e7fbe2dfed6ff55a3dde82cd285fe",
+      "bytes": 1274880,
+      "role": "dongle_a",
+      "keyboard_set": null,
+      "flash_bytes": 637336,
+      "ram_bytes": 202948,
+      "vectors": {
+        "flash_bytes": 637336,
+        "ram_bytes": 202948
+      }
+    },
+    "dongle_b": {
+      "file": "LisM_ESBv51_TEST_Dongle_B_XIAO147_Touch.uf2",
+      "sha256": "bf09d90b8503cbd30d73f89653eb2fb9641a58d3f627a5ca4cb714dd08046ff9",
+      "bytes": 1312768,
+      "role": "dongle_b",
+      "keyboard_set": null,
+      "flash_bytes": 656216,
+      "ram_bytes": 209732,
+      "vectors": {
+        "flash_bytes": 656216,
+        "ram_bytes": 209732
+      }
+    },
+    "reset": {
+      "file": "settings_reset_XIAO_nRF52840.uf2",
+      "sha256": "6262b5b7a1219cadec0d6a30e01e837b12210f3de29f03b3f57ff63853dd1070",
+      "bytes": 118784,
+      "role": "reset",
+      "keyboard_set": null,
+      "flash_bytes": null,
+      "ram_bytes": null
+    }
+  },
+  "scope": "Final actual UF2/ELF/config/DTS: two independent sets, four physical pipes, station bases, private bases, default station, BLE names/slots, held state capacity, RAM/display buffers, real MPSL vectors. Does not establish physical RF timing or actual reset/re-enumeration behavior."
+}

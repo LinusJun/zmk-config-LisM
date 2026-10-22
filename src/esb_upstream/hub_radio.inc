@@ -27,8 +27,8 @@ void mpsl_assert_handle(const char *file,int line) {ARG_UNUSED(file);ARG_UNUSED(
 #define HUB_SLOT_US 4000
 #define NODE DT_COMPAT_GET_ANY_STATUS_OKAY(zmk_esb_split)
 static const uint8_t dongle_base0[]=DT_PROP(NODE,base_addr_0),dongle_base1[]=DT_PROP(NODE,base_addr_1);
-static const uint8_t prefixes[]=DT_PROP(NODE,addr_prefix);
-static const uint8_t keyboard_base0[]={0xB7,0x63,0xA9,0xE7},keyboard_base1[]={0xC9,0x57,0x8D,0xF1};
+static const uint8_t prefixes[]={CONFIG_LISM_KEYBOARD_SET==0?0xa7:0x69,CONFIG_LISM_KEYBOARD_SET==0?0xd3:0xb5};
+static const uint8_t keyboard_base0[]={0xB7,0x63,0xA9,(CONFIG_LISM_KEYBOARD_SET==0?0xe7:0xe9)},keyboard_base1[]={0xC9,0x57,0x8D,(CONFIG_LISM_KEYBOARD_SET==0?0xf1:0xf3)};
 struct hub_tx {struct esb_payload p;uint32_t peer,generation,local_boot;uint8_t station;int64_t since;};
 K_MSGQ_DEFINE(left_tx,sizeof(struct hub_tx),16,4);
 K_MSGQ_DEFINE(dongle_tx,sizeof(struct hub_tx),64,4);
@@ -146,7 +146,7 @@ static mpsl_timeslot_signal_return_param_t *slot(mpsl_timeslot_session_id_t id,u
     }
 }
 static bool valid_body(unsigned net,struct esb_payload *p) {
-    if(p->pipe>=2 || p->length<LISM_WIRE_HEADER+sizeof(struct esb_msg_prefix)+2+sizeof(struct esb_msg_postfix) || p->length>64 || memcmp(p->data,"LsE3",4))return false;
+    if(p->pipe>=2 || p->length<LISM_WIRE_HEADER+sizeof(struct esb_msg_prefix)+2+sizeof(struct esb_msg_postfix) || p->length>64 || memcmp(p->data,KB_SET_MAGIC,4))return false;
     struct esb_msg_prefix h;memcpy(&h,p->data+LISM_WIRE_HEADER,sizeof(h));size_t body=p->length-LISM_WIRE_HEADER,n=sizeof(h)+h.payload_size;
     if(memcmp(h.magic_prefix,"ZmKe",4) || h.payload_size<2 || n+sizeof(struct esb_msg_postfix)!=body || p->data[LISM_WIRE_HEADER+sizeof(h)]!=p->pipe)return false;
     struct esb_msg_postfix crc;memcpy(&crc,p->data+LISM_WIRE_HEADER+n,sizeof(crc));if(crc.crc!=crc32_ieee(p->data+LISM_WIRE_HEADER,n))return false;
@@ -176,7 +176,7 @@ static int enqueue(unsigned net,app_esb_data_t *p,bool replaceable) {
     if(!p || p->pipe>=2 || !p->len || p->len>64-LISM_WIRE_HEADER)return -EINVAL;
     k_mutex_lock(&tx_lock,K_FOREVER);struct hub_link *l=&links[net];if(!l->boot || !l->next_seq){k_mutex_unlock(&tx_lock);return -EAGAIN;}
     struct hub_tx tx={.peer=l->last_boot[p->pipe],.generation=net?(uint32_t)atomic_get(&uplink_generation):left_route_epoch,.station=kb_uplink_station_current(),.local_boot=l->boot,.since=k_uptime_get()};tx.p.pipe=p->pipe;tx.p.length=LISM_WIRE_HEADER+p->len;
-    memcpy(tx.p.data,"LsE3",4);put32(tx.p.data+4,l->boot);
+    memcpy(tx.p.data,KB_SET_MAGIC,4);put32(tx.p.data+4,l->boot);
     put32(tx.p.data+12,net?l->ack_boot[p->pipe]:tx.peer);put32(tx.p.data+16,net?l->ack_seq[p->pipe]:0);
     memcpy(tx.p.data+LISM_WIRE_HEADER,p->data,p->len);int rc;
     struct esb_event_envelope motion;
@@ -221,7 +221,7 @@ static bool next_tx(unsigned net,struct hub_tx *out) {
         env.prefix.payload_size=1+sizeof(env.payload.cmd.type)+sizeof(b);
         size_t n=sizeof(env.prefix)+env.prefix.payload_size;
         *out=(struct hub_tx){.peer=l->last_boot[0],.generation=left_route_epoch,.since=k_uptime_get()};out->p.pipe=0;out->p.length=LISM_WIRE_HEADER+n+sizeof(struct esb_msg_postfix);
-        memcpy(out->p.data,"LsE3",4);put32(out->p.data+4,l->boot);memcpy(out->p.data+LISM_WIRE_HEADER,&env,n);
+        memcpy(out->p.data,KB_SET_MAGIC,4);put32(out->p.data+4,l->boot);memcpy(out->p.data+LISM_WIRE_HEADER,&env,n);
         struct esb_msg_postfix crc={.crc=crc32_ieee(out->p.data+LISM_WIRE_HEADER,n)};memcpy(out->p.data+LISM_WIRE_HEADER+n,&crc,sizeof(crc));
         next_left_control=k_uptime_get()+60;have=true;
     }

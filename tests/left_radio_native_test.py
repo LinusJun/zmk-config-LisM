@@ -2,7 +2,7 @@
 from pathlib import Path
 import runpy,tempfile,subprocess
 P=Path(__file__).resolve().parents[1];b=runpy.run_path(str(P/'tests/kb_route_native_test.py'));function=b['function'];s=(P/'src/esb_upstream/left_radio.inc').read_text()
-common=Path('/work/workspace/module-left/src/split/esb/common.h').read_text();common=common[common.index('#define ZMK_SPLIT_ESB_ENVELOPE_MAGIC_PREFIX'):common.index('typedef void (*zmk_split_esb_process')]
+common=Path('/work/v51-two-sets/workspace/module-left_set1/src/split/esb/common.h').read_text();common=common[common.index('#define ZMK_SPLIT_ESB_ENVELOPE_MAGIC_PREFIX'):common.index('typedef void (*zmk_split_esb_process')]
 pre=b['pre']+r'''
 #include <setjmp.h>
 #include <stdlib.h>
@@ -71,7 +71,7 @@ static struct esb_payload command(uint32_t authority,uint32_t seq,uint32_t epoch
  struct esb_payload p={.pipe=0};struct esb_command_envelope env={.prefix={.magic_prefix="ZmKe"},.payload={.source=0,.cmd={.type=ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_INVOKE_BEHAVIOR}}};
  __typeof__(env.payload.cmd.data.invoke_behavior) b={0};strcpy(b.behavior_dev,"KB_LEFT_ROUTE3");b.param1=(phase<<4)|(target<<2)|(target?2:0);b.param2=epoch;b.position=target?0:777;b.state=1;memcpy(&env.payload.cmd.data.invoke_behavior,&b,sizeof(b));
  env.prefix.payload_size=1+sizeof(env.payload.cmd.type)+sizeof(b);size_t n=sizeof(env.prefix)+env.prefix.payload_size;
- p.length=20+n+4;memcpy(p.data,"LsE3",4);put32(p.data+4,authority);put32(p.data+8,seq);put32(p.data+12,boot_id);put32(p.data+16,epoch);memcpy(p.data+20,&env,n);struct esb_msg_postfix crc={.crc=crc32_ieee(p.data+20,n)};memcpy(p.data+20+n,&crc,sizeof(crc));return p;
+ p.length=20+n+4;memcpy(p.data,KB_SET_MAGIC,4);put32(p.data+4,authority);put32(p.data+8,seq);put32(p.data+12,boot_id);put32(p.data+16,epoch);memcpy(p.data+20,&env,n);struct esb_msg_postfix crc={.crc=crc32_ieee(p.data+20,n)};memcpy(p.data+20+n,&crc,sizeof(crc));return p;
 }
 int main(int argc,char**argv){
  if(argc==4){phase_mode=true;phase_period=atoi(argv[1]);phase_offset=atoi(argv[2]);rng=atoi(argv[3]);callback=received_callback;enabled=1;budget=1500;now=1;if(!setjmp(stop))radio_thread(NULL,NULL,NULL);assert(control_success);return 0;}

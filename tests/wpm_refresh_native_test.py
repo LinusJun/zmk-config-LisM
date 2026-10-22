@@ -23,6 +23,7 @@ pre=r'''
 #include <stdint.h>
 #include <stdbool.h>
 #include <kb_route/view.h>
+static uint8_t kb_receiver_owner_set(void){return 255;}
 #include <kb_route/icons.c>
 #include <kb_route/layer_label.h>
 #include "display_colors.h"
@@ -114,7 +115,7 @@ int main(void){
 }
 '''
 (D/'display_colors.h').write_bytes((U/'display_colors.h').read_bytes())
-(D/'lv_conf.h').write_text('#define LV_CONF_H\n#define LV_COLOR_DEPTH 16\n#define LV_MEM_SIZE (96*1024U)\n#define LV_USE_OS LV_OS_NONE\n#define LV_DRAW_BUF_STRIDE_ALIGN 1\n#define LV_USE_ASSERT_MALLOC 1\n#define LV_USE_LOG 1\n#define LV_LOG_LEVEL LV_LOG_LEVEL_WARN\n#define LV_FONT_MONTSERRAT_12 1\n')
+(D/'lv_conf.h').write_text('#define LV_CONF_H\n#define LV_COLOR_DEPTH 16\n#define LV_MEM_SIZE (96*1024U)\n#define LV_USE_OS LV_OS_NONE\n#define LV_DRAW_BUF_STRIDE_ALIGN 1\n#define LV_USE_ASSERT_MALLOC 1\n#define LV_USE_LOG 1\n#define LV_LOG_LEVEL LV_LOG_LEVEL_WARN\n#define LV_FONT_MONTSERRAT_10 1\n#define LV_FONT_MONTSERRAT_12 1\n')
 fixed=pre+state+'\n'.join(function(src,n) for n in functions)+main
 (D/'main.c').write_text(fixed)
 (D/'CMakeLists.txt').write_text('''cmake_minimum_required(VERSION 3.20)
@@ -126,7 +127,7 @@ target_include_directories(lvgl PUBLIC /deps/modules/lib/gui/lvgl ${CMAKE_CURREN
 target_compile_definitions(lvgl PUBLIC LV_CONF_INCLUDE_SIMPLE LV_COLOR_16_SWAP=${WPM_SWAP})
 add_executable(wpm main.c ${FONTS})
 target_compile_definitions(wpm PRIVATE CONFIG_PROSPECTOR_STATUS_SCREEN_OPERATOR=1)
-target_include_directories(wpm PRIVATE /work/source/src /deps/prospector-zmk-module/boards/shields/prospector_adapter/include)
+target_include_directories(wpm PRIVATE /work/v51-two-sets/source/src /deps/prospector-zmk-module/boards/shields/prospector_adapter/include)
 if(WPM_SWAP EQUAL 0)
  target_compile_definitions(wpm PRIVATE CONFIG_LISM_XIAO147_TOUCH=1)
 endif()

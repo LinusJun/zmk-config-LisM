@@ -1,0 +1,7 @@
+{
+  "passed": true,
+  "hardware_tested": false,
+  "source_sha256": "727761abcf089da4527e5e3ef6d7f3b3b8de2fd73939b473d0ff7f62ddebc112",
+  "stdout": "MEM home free=57360 largest=56688 max_used=34216\nMEM test start free=57360 largest=56688 max_used=34216\nMEM settings free=55120 largest=55120 max_used=36272\nMEM devices free=54024 largest=53568 max_used=37232\nMEM search free=54032 largest=53568 max_used=37928\nMEM connect dialog free=50072 largest=50024 max_used=41440\nMEM pairing dialog free=50064 largest=49976 max_used=41440\nMEM pairing dialog free=50056 largest=49968 max_used=41448\nMEM pairing dialog free=50048 largest=50000 max_used=41464\nPASS actual XIAO controller/LVGL: 3 pages, async input commit, cancel and overflow generations, brightness/sleep/wake, 40 three-page cycles free=57344 -> 57344\n",
+  "scope": "Actual XIAO UI controller and device-page LVGL; modeled input ownership completion, buttons, clock/PWM/battery. Real ownership barrier tested separately."
+}

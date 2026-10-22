@@ -1,7 +1,7 @@
 """Actual telemetry cache + actual generated widget callbacks, no HID mutations."""
 from pathlib import Path
 import runpy,tempfile,subprocess
-P=Path(__file__).resolve().parents[1];b=runpy.run_path(str(P/'tests/kb_route_native_test.py'));pre=b['pre'];function=b['function'];mirror=(P/'src/kb_route/mirror_display.c').read_text();D=Path('/work/workspace/display-dongle/boards/shields/prospector_adapter/src/layouts/operator')
+P=Path(__file__).resolve().parents[1];b=runpy.run_path(str(P/'tests/kb_route_native_test.py'));pre=b['pre'];function=b['function'];mirror=(P/'src/kb_route/mirror_display.c').read_text();D=Path('/work/v51-two-sets/workspace/display-dongle/boards/shields/prospector_adapter/src/layouts/operator')
 pre+=(P/'src/kb_route/mirror.h').read_text()+r'''
 #define ZMK_KEYMAP_LAYERS_LEN 6
 #define LV_UNUSED(x) (void)(x)

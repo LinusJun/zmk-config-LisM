@@ -13,7 +13,7 @@ for node in ast.parse((P/'tests/upstream_esb_host_test.py').read_text()).body:
  if isinstance(node,ast.Assign) and isinstance(node.value,ast.Constant) and isinstance(node.value.value,str):
   for target in node.targets:
    if isinstance(target,ast.Name):values[target.id]=node.value.value
-cfg=dict(line.split('=',1) for line in (P/'artifacts/dongle.config').read_text().splitlines() if line.startswith('CONFIG_') and '=' in line)
+cfg=dict(line.split('=',1) for line in (P/'artifacts/dongle_a.config').read_text().splitlines() if line.startswith('CONFIG_') and '=' in line)
 pre=values['pre']+r'''
 #define CONFIG_ESB_PIPE_COUNT 8
 #define CONFIG_ZMK_SPLIT_ESB_RF_CH_HOP 0

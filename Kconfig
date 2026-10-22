@@ -42,3 +42,8 @@ config LISM_XIAO147_AUTO_TOUCH
     bool "Existing guarded automatic AXS touch classifier"
     depends on LISM_XIAO147_TOUCH
     default y
+
+config LISM_KEYBOARD_SET
+    int "LisM keyboard set (Set1=0, Set2=1)"
+    range 0 1
+    default 0

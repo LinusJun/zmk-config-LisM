@@ -1,13 +1,13 @@
 """Execute complete production link/common code, including applied-state gate."""
 from pathlib import Path
 import ast,subprocess,tempfile,re
-P=Path(__file__).resolve().parents[1];W=Path('/work/workspace')
+P=Path(__file__).resolve().parents[1];W=Path('/work/v51-two-sets/workspace')
 tree=ast.parse((P/'tests/upstream_esb_host_test.py').read_text());values={}
 for n in tree.body:
  if isinstance(n,ast.Assign) and isinstance(n.value,ast.Constant) and isinstance(n.value.value,str):
   for t in n.targets:
    if isinstance(t,ast.Name):values[t.id]=n.value.value
-pre=values['pre']+'\n#include "/work/source/src/kb_route/stations.h"\n'+r'''
+pre=values['pre']+'\n#include "/work/v51-two-sets/source/src/kb_route/stations.h"\n'+r'''
 
 #define CONFIG_LISM_BLE_INPUT_BRIDGE 1
 #define MAX(a,b) ((a)>(b)?(a):(b))
@@ -20,6 +20,9 @@ pre=values['pre']+'\n#include "/work/source/src/kb_route/stations.h"\n'+r'''
 #define KB_ROUTE_SWITCHING 2
 struct kb_route_status{uint8_t version,mode,profile;uint32_t epoch,authority;uint8_t phase,target,station,owner_station;uint32_t receiver_boot;} __packed;
 struct kb_mirror{uint32_t epoch;uint8_t version,wpm,layer,mods,indicators,profile,host_connected,left_battery,left_online;} __packed;
+static bool kb_receiver_admitting(void){return true;}
+static void lism_input_host_set_enabled(bool x){(void)x;}
+static void zmk_endpoint_clear_reports(void){}
 static bool gate,page_active,page_toggle;static unsigned mirror_count;
 static bool kb_route_dongle_key_allowed(void){return gate;}
 static bool lism_screen_take_toggle(void){bool v=page_toggle;page_toggle=false;return v;}

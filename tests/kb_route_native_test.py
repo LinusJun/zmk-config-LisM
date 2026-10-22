@@ -6,7 +6,7 @@ from prepare_hog_routing import function
 hub=(P/'src/kb_route/hub.c').read_text();radio=(P/'src/esb_upstream/hub_radio.inc').read_text();link=(P/'src/esb_upstream/link.c').read_text()
 def strip(t):return re.sub(r'^\s*#(?:include|pragma).*$', '',t,flags=re.M)
 # Compile the pinned actual transport ABI, not a rewritten approximation.
-abi=Path('/work/workspace/include-right/zmk/split/transport/types.h').read_text()
+abi=Path('/work/v51-two-sets/workspace/include-right_set1/zmk/split/transport/types.h').read_text()
 pre=r'''
 #include <stdint.h>
 #include <stdbool.h>
@@ -22,6 +22,7 @@ pre=r'''
 #define BUILD_ASSERT(x,...) _Static_assert(x,#x)
 #define IS_ENABLED(x) (x)
 #define CONFIG_LISM_KB_HUB 1
+#define CONFIG_LISM_KEYBOARD_SET 0
 #define CONFIG_ZMK_SPLIT_ROLE_CENTRAL 1
 #define CONFIG_ZMK_SPLIT_ESB_PERIPHERAL_ID 1
 #define CONFIG_ESB_MAX_PAYLOAD_LENGTH 64
@@ -51,7 +52,7 @@ static void k_mutex_lock(void*l,int t){(void)l;(void)t;}static void k_mutex_unlo
 '''+strip(abi)+strip((P/'src/kb_route/view.h').read_text())+r'''
 #define KB_ROUTE_EVENT 126
 #define KB_ROUTE_VERSION 3
-#include "/work/source/src/kb_route/left_protocol.h"
+#include "/work/v51-two-sets/source/src/kb_route/left_protocol.h"
 #define LISM_SNAPSHOT_TYPE 127
 #define LISM_KEYS 46
 #define LISM_LEASE_MS 1500

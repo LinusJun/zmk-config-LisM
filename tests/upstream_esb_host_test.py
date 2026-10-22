@@ -27,7 +27,7 @@ pre=r'''
 #define IS_ENABLED(x) (x)
 #define CONFIG_ZMK_SPLIT_ROLE_CENTRAL 1
 #define CONFIG_LISM_KB_HUB 0
-#include "/work/source/src/kb_route/left_protocol.h"
+#include "/work/v51-two-sets/source/src/kb_route/left_protocol.h"
 static bool kb_route_left_allowed(const struct kb_left_packet*p){(void)p;return true;}
 #define CONFIG_ESB_MAX_PAYLOAD_LENGTH 64
 #define CONFIG_ZMK_SPLIT_ESB_PERIPHERAL_ID 0

@@ -4,7 +4,7 @@ Hardware timing, interrupt concurrency and RF are explicitly outside this test.
 from pathlib import Path
 import sys,tempfile,subprocess
 P=Path(__file__).resolve().parents[1];sys.path.insert(0,str(P/'tools'));from prepare_hog_routing import function
-sdk=Path('/work/workspace/build-right/modules/zmk-config-LisM/sdk_esb_mpsl.c').read_text()
+sdk=Path('/work/v51-two-sets/workspace/build-right_set1/modules/zmk-config-LisM/sdk_esb_mpsl.c').read_text()
 ack=function(sdk,'on_radio_disabled_tx_wait_for_ack');anchor='\n\t\t} else {\n\t\t\tbool radio_started = true;';assert anchor in ack
 # Right hub deliberately sets zero hardware retries. Execute both real paths;
 # the unused positive retry-count branch must never be entered in this target.

@@ -1,0 +1,28 @@
+{
+  "passed": true,
+  "original_defect_negative_controls": [
+    {
+      "case": "original-init",
+      "expected_assertion": "work scheduled before init",
+      "reproduced": true
+    },
+    {
+      "case": "original-queue",
+      "expected_assertion": "LVGL work scheduled on system queue",
+      "reproduced": true
+    }
+  ],
+  "hardware_tested": false,
+  "generated_wpm_sha256": "84feaa189dfb55d7ee1cb838b41833d31e343dddf713152b5984e789e43cb793",
+  "results": [
+    {
+      "swap": 1,
+      "stdout": "PASS WPM: swap=1 screen=280x240, 1175 partial/full pixel comparisons, 7214 writes; display-queue/init order, peak move/clear, low nonzero, restart, source switching, actual signal/mode overlay\n"
+    },
+    {
+      "swap": 0,
+      "stdout": "PASS WPM: swap=0 screen=320x172, 1175 partial/full pixel comparisons, 7224 writes; display-queue/init order, peak move/clear, low nonzero, restart, source switching, actual signal/mode overlay\n"
+    }
+  ],
+  "scope": "Actual generated WPM functions, real LVGL partial rendering and byte swap; modeled workqueue scheduling and LCD RAM. Does not establish the physical cause or resolution of reported green lines."
+}

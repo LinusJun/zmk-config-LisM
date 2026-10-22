@@ -10,9 +10,11 @@ pre=r'''
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
-#include "/work/source/src/kb_route/left_protocol.h"
-#include "/work/source/src/kb_route/view.h"
+#include "/work/v51-two-sets/source/src/kb_route/left_protocol.h"
+#include "/work/v51-two-sets/source/src/kb_route/view.h"
 #define KB_ROUTE_VERSION 3
+#define ARG_UNUSED(x) (void)(x)
+static bool admitting=true;static bool kb_receiver_admitting(void){return admitting;}
 #define K_NO_WAIT 0
 struct k_spinlock{int x;};typedef int k_spinlock_key_t;
 static int k_spin_lock(void*p){(void)p;return 0;}static void k_spin_unlock(void*p,int k){(void)p;(void)k;}
@@ -40,12 +42,12 @@ int main(void){
  struct kb_discovery p={.version=3,.authority=t.authority,.station=CONFIG_LISM_DONGLE_STATION,.cookie=77};expected_cookie=p.cookie;
  int64_t seen=view.seen;uint32_t epoch=view.epoch;assert(!kb_route_discovery_release(&p));now+=10;assert(!kb_route_discovery_received(&p));assert(view.seen==seen && view.epoch==epoch && view.mode==KB_ROUTE_DONGLE);
  /* A rebooted right probing closes stale ownership, but never acquires it. */
- peer++;assert(kb_route_discovery_release(&p));assert(!kb_route_discovery_received(&p));assert(view.mode==KB_ROUTE_SWITCHING && view.seen==seen && !kb_route_left_allowed(&l));
- unsigned old=local_route_generation;kb_route_status_received(&t);assert(local_route_generation!=old && wire_boot==peer);
+ peer++;assert(!kb_route_discovery_release(&p));assert(!kb_route_discovery_received(&p));assert(view.mode==KB_ROUTE_DONGLE && view.seen==seen);
+ assert(!kb_route_status_valid(&t));peer--;
  t.epoch--;assert(!kb_route_status_valid(&t));t.epoch++;
  t.mode=KB_ROUTE_BLE;t.target=KB_ROUTE_BLE;t.owner_station=KB_STATION_NONE;kb_route_status_received(&t);assert(view.mode==KB_ROUTE_BLE && !kb_route_left_allowed(&l));
  seen=view.seen;now+=1000;assert(!kb_route_discovery_release(&p));kb_route_discovery_received(&p);assert(view.seen==seen && view.mode==KB_ROUTE_BLE);
- assert(commands==3);puts("PASS actual receiver: A/B isolation, boot+authority+epoch gate, nonowner rejection, discovery cannot renew input/view lease, right reboot closes old gate, BLE mirror remains input-free");
+ admitting=false;assert(!kb_route_status_valid(&t) && !kb_route_left_allowed(&l));assert(commands==3);puts("PASS actual receiver: A/B isolation, boot+authority+epoch gate, nonowner rejection, discovery cannot renew input/view lease, right reboot cannot replace immutable owner, BLE mirror remains input-free");
 }
 '''
 code=pre+'\n'.join(function(s,n) for n in ['kb_route_status_valid','kb_route_discovery_release','kb_route_discovery_received','kb_route_status_received','kb_route_left_allowed'])+main

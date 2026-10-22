@@ -65,3 +65,6 @@ bool kb_route_holdtap_idle(void);
 bool kb_route_combo_idle(void);
 
 bool kb_route_mirror_enabled(void);
+
+bool kb_receiver_admitting(void);
+uint8_t kb_receiver_owner_set(void);

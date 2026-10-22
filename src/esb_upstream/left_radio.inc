@@ -14,8 +14,8 @@
 LOG_MODULE_REGISTER(lism_left_radio,LOG_LEVEL_INF);
 #define NODE DT_COMPAT_GET_ANY_STATUS_OKAY(zmk_esb_split)
 static const uint8_t dongle_base0[]=DT_PROP(NODE,base_addr_0),dongle_base1[]=DT_PROP(NODE,base_addr_1);
-static const uint8_t private_base0[]={0xb7,0x63,0xa9,0xe7},private_base1[]={0xc9,0x57,0x8d,0xf1};
-static const uint8_t prefixes[]=DT_PROP(NODE,addr_prefix);
+static const uint8_t private_base0[]={0xb7,0x63,0xa9,(CONFIG_LISM_KEYBOARD_SET==0?0xe7:0xe9)},private_base1[]={0xc9,0x57,0x8d,(CONFIG_LISM_KEYBOARD_SET==0?0xf1:0xf3)};
+static const uint8_t prefixes[]={CONFIG_LISM_KEYBOARD_SET==0?0xa7:0x69,CONFIG_LISM_KEYBOARD_SET==0?0xd3:0xb5};
 static app_esb_callback_t callback;
 static atomic_t ready,enabled,tx_result;
 static struct k_spinlock left_lock;
@@ -59,7 +59,7 @@ static int configure(unsigned net){
 static void receive(void){
     unsigned t;while((t=atomic_get(&rx_tail))!=(unsigned)atomic_get(&rx_head)){
         struct left_rx item=received[t];struct esb_payload p=item.p;atomic_set(&rx_tail,(t+1)%ARRAY_SIZE(received));
-        if(p.pipe || p.length<LISM_WIRE_HEADER+sizeof(struct esb_msg_prefix)+2+sizeof(struct esb_msg_postfix) || p.length>64 || memcmp(p.data,"LsE3",4) || get32(p.data+12)!=boot_id)continue;
+        if(p.pipe || p.length<LISM_WIRE_HEADER+sizeof(struct esb_msg_prefix)+2+sizeof(struct esb_msg_postfix) || p.length>64 || memcmp(p.data,KB_SET_MAGIC,4) || get32(p.data+12)!=boot_id)continue;
         size_t n=p.length-LISM_WIRE_HEADER;struct esb_command_envelope env={0};if(n-sizeof(struct esb_msg_postfix)>sizeof(env))continue;
         struct esb_msg_postfix crc;memcpy(&crc,p.data+p.length-sizeof(crc),sizeof(crc));
         if(crc32_ieee(p.data+LISM_WIRE_HEADER,n-sizeof(crc))!=crc.crc || !lism_wire_valid(0,p.data+LISM_WIRE_HEADER,n))continue;
@@ -86,7 +86,7 @@ static void receive(void){
 }
 static void frame(struct esb_payload*p,unsigned net,unsigned type,const void*data,size_t bytes){
     *p=(struct esb_payload){.pipe=0,.length=LISM_WIRE_HEADER+sizeof(struct esb_msg_prefix)+1+sizeof(enum zmk_split_transport_peripheral_event_type)+bytes+sizeof(struct esb_msg_postfix)};
-    memcpy(p->data,"LsE3",4);put32(p->data+4,boot_id);put32(p->data+8,type==KB_LEFT_CONTROL?control_seq++:data_seq[net]++);put32(p->data+12,net==KB_NET_PRIVATE?command_boot[net]:((const struct kb_left_packet*)data)->receiver_boot);put32(p->data+16,command_seq[net]);
+    memcpy(p->data,KB_SET_MAGIC,4);put32(p->data+4,boot_id);put32(p->data+8,type==KB_LEFT_CONTROL?control_seq++:data_seq[net]++);put32(p->data+12,net==KB_NET_PRIVATE?command_boot[net]:((const struct kb_left_packet*)data)->receiver_boot);put32(p->data+16,command_seq[net]);
     struct esb_event_envelope env={.prefix={.magic_prefix=ZMK_SPLIT_ESB_ENVELOPE_MAGIC_PREFIX,.payload_size=1+sizeof(env.payload.event.type)+bytes},.payload={.source=0,.event={.type=type}}};memcpy(&env.payload.event.data,data,bytes);size_t n=sizeof(env.prefix)+env.prefix.payload_size;memcpy(p->data+LISM_WIRE_HEADER,&env,n);struct esb_msg_postfix crc={.crc=crc32_ieee(p->data+LISM_WIRE_HEADER,n)};memcpy(p->data+LISM_WIRE_HEADER+n,&crc,sizeof(crc));
 }
 static int clocks_start(void){struct onoff_manager*m=z_nrf_clock_control_get_onoff(CLOCK_CONTROL_NRF_SUBSYS_HF);struct onoff_client c;int result,rc;if(!m)return -ENXIO;sys_notify_init_spinwait(&c.notify);rc=onoff_request(m,&c);if(rc<0)return rc;while(sys_notify_fetch_result(&c.notify,&result))k_sleep(K_MSEC(1));return result;}

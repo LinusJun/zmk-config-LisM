@@ -39,7 +39,7 @@ static bool awaiting_left_applied;
 static uint32_t ready_epoch,ready_boot;static uint8_t ready_phase,ready_station=KB_STATION_NONE;
 enum station_stage {ST_STABLE,ST_DRAIN,ST_HUNT,ST_PREPARE,ST_READY,ST_LEFT};
 static enum station_stage stage=ST_STABLE;
-static uint8_t station=KB_STATION_NONE,preferred_station,desired_station=KB_STATION_NONE;
+static uint8_t station=KB_STATION_NONE,preferred_station=CONFIG_LISM_KEYBOARD_SET,desired_station=KB_STATION_NONE;
 static uint8_t gate_station=KB_STATION_NONE,drain_station=KB_STATION_NONE;
 static uint32_t receiver_boot,gate_boot,drain_boot;
 static bool selection_pending,settings_pending;
@@ -390,9 +390,10 @@ static void route_work(struct k_work *w){
     if(stage==ST_STABLE && current_mode==KB_ROUTE_BLE){
         /* Display-only discovery cannot change the keyboard output route. */
         if(!dongle_confirmed()){
-            if(!monitor_probe){monitor_probe=true;probe_window(preferred_station,now);}
-            if(offer_station==hunt_station && offer_boot){receiver_boot=offer_boot;station=offer_station;monitor_probe=false;probe_cookie=0;ready_epoch=0;publish();}
-            else{if(station_started && now-station_started>=1200)probe_window(hunt_station^1,now);send_probe(now);}
+            /* Two-set policy: an unbound BLE display must not consume or
+             * repeatedly preempt the sole available receiver. Existing bound
+             * BLE display continues, but no late mirror acquisition. */
+            monitor_probe=false;
         }else monitor_probe=false;
     }
 again:

@@ -1,0 +1,369 @@
+{
+  "passed": true,
+  "count": 44,
+  "hardware_tested": false,
+  "production_fingerprint": "87966478699ed707a1d2b07a072eec9b8f8ac51a82b9260f47368447213a43fa",
+  "checks": [
+    {
+      "test": "two_sets_owner_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "3e13b5cd6466ed4c0e434a8ee91a174acdfe1621464d963b9d9378668ece89cd",
+      "log": "two_sets_owner_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "two_sets_radio_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "1cb12c9a7d1f025bfc65fa08a5abf01b87c2fc96c8d77e09189159c15eae9d7b",
+      "log": "two_sets_radio_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "wpm_refresh_native_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "328d04fc590df5ad614feaff8bfba374ce254466a5e4d75e93ff6335141b7217",
+      "log": "wpm_refresh_native_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "station_receiver_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "93ccd390a2b80c522b2f22ab285f178dd9b896294bffba006ad73ebfdbad01fa",
+      "log": "station_receiver_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "xiao147_route_generation_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "874b18760d1f79d894e0e6ca3f778b5c078831e9f9b62769edb6678027abbf0f",
+      "log": "xiao147_route_generation_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "xiao147_pointer_owned_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "3cdfbc04ff4780d6f704cf029d8653e5c21ded42eed7b67703ad6b26208b1c94",
+      "log": "xiao147_pointer_owned_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "xiao147_auto_replay_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "5896858b603c1472bb38055b279a09b53731d1b0cabcdf78d614ad31010a38c6",
+      "log": "xiao147_auto_replay_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "xiao147_auto_touch_host_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "8ea09348b3c6dba435ce6d91b24dc3d568eeff957a72a77bc88f36d428322133",
+      "log": "xiao147_auto_touch_host_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "xiao147_panel_host_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "1cd4178b7c7d13f48a57ff5a0f40484b5bb26d19dc6d1f5c17eae0ed62aa9f9d",
+      "log": "xiao147_panel_host_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "xiao147_raw_capture_host_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "804e4d001eff41b1262ddcbe0645c50ce50fe24e248c17ebfdf120102b46e0ba",
+      "log": "xiao147_raw_capture_host_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "xiao147_raw_gestures_host_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "101923122d110f9cdad86339a76f72fc39beacdf4e7680f625602189f2971ba9",
+      "log": "xiao147_raw_gestures_host_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "xiao147_raw_integration_host_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "0794f2f9bacf48c72156dc8f0fbb9e66941f0f0fcef2861110edd429f8eac944",
+      "log": "xiao147_raw_integration_host_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "receiver_output_gate_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "de92671c4b01e238a840e7672eebe7281c2429cfc7ac427faafe0f63c0f13abb",
+      "log": "receiver_output_gate_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "left_radio_native_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "addaaa0137712fdec8acb220afc663c8c9f1fdeab34dfdfe2a0f130cfde0d156",
+      "log": "left_radio_native_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "route_command_epoch_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "2865c331a20751b46d0e5e112a92f18720cc7800ebc530c39c6ed8281035f910",
+      "log": "route_command_epoch_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "scan_advertising_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "af4c12a9752d8d5ac6a724bae310d05c470917aac0199d0ceaa93a6ee5c1dab1",
+      "log": "scan_advertising_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "left_route_policy_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "364fbf3aae55610e28de471dce477e9ad4ee81c6021972cc5dbb6542b556eacf",
+      "log": "left_route_policy_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "signal_worker_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "993d056ff4f412fa7bbd7e9c1388490b4cbe8f2c67ebc9f5da35f7755c132817",
+      "log": "signal_worker_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "fourwaystick_regression_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "b5c512433ac918609658b73eb4b1e9d97efb56dcca686b61edd454f49a0b9277",
+      "log": "fourwaystick_regression_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "esb_inputs_ownership_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "e72cb644576fdb2818c4139dcf407b7c6de46a37ee266bc68bd63054c1812239",
+      "log": "esb_inputs_ownership_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "esb_coex_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "89828fb54d0137fb82eee8357fe445c0a92778b1e323500ea48fa10f5cefe486",
+      "log": "esb_coex_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "esb_usb_backpressure_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "a08b61b57013ebf641515d74a958695435fc18d86703b61ccf79e876e4b8691a",
+      "log": "esb_usb_backpressure_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "lism_input_parser_host_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "e87dc61471dd9e912dd070ed1c6f574367a523de9bf5c5715c840839be4d2c1f",
+      "log": "lism_input_parser_host_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "lism_input_merge_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "4bf75ce63abde336484f849e8d81fb967cec6e703787c9cda58fa3637bf2e376",
+      "log": "lism_input_merge_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "lism_input_key_storage_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "354a42483508e65d4312927a704728b17fcc9264817d34b61fc128af7aae4911",
+      "log": "lism_input_key_storage_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "lism_input_security_patch_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "3945e926e75c82de6d132d408c8345f1e93084f374193346a078660dd3bbc855",
+      "log": "lism_input_security_patch_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "lism_input_host_sessions_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "dbae98435937a7813aea405fc19adcd16f36f3ddb2a0d50f3d4602cad6b1b562",
+      "log": "lism_input_host_sessions_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "kb_route_native_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "ff51e694f3c92970367e585352b469253afa655c2917ed9013196b46862ddd22",
+      "log": "kb_route_native_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "kb_radio_native_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "8d0181cdfefdd4fe79ffa230a227a275666bb8621784c61834b00fe8d2e16bf9",
+      "log": "kb_radio_native_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "kb_mode_transaction_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "e40e28a62eff89808172e1f8d02be50082cbc628983e80d42dcbf3c040ecbee3",
+      "log": "kb_mode_transaction_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "kb_pointer_fence_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "71e7c46bad9a5eec82aa5c5b0a59d0cd2dfc6d31854bae13b12c99a283ca975d",
+      "log": "kb_pointer_fence_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "kb_mirror_display_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "b704dc5b3941b03946969d7bfa505816fbd1fca5139820e4917d6b26b9bd63c3",
+      "log": "kb_mirror_display_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "kb_ptx_sdk_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "348f72108eddda2755715bdac85a2f5e5c366ded325b375abfa7a4425bbb90f8",
+      "log": "kb_ptx_sdk_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "kb_dongle_gate_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "b1ba20d96b2154d52ee727904cb071b48c0e6d14bb33a78aeb8f30e4cb13e7a5",
+      "log": "kb_dongle_gate_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "esb_rx_buffers_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "1ddacc7a9db681340e90b187303f3ec5aec9152e3fe341fed30fb900bd919ea9",
+      "log": "esb_rx_buffers_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "ppi_reservation_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "4eff27015727aa197c405fcb4ee615af8721a1a0a4c96b26a35c2b6d55938dce",
+      "log": "ppi_reservation_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "hci_zephyr41_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "4eba5dddd1f72a36d06f32dc4cf1eed94c3abeb73db6ad77721950cdee9c430a",
+      "log": "hci_zephyr41_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "hog_routing_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "3db3adfe011e5668e2f2a640c8144c4a8056c5f6b3dc36eff815a05fb603515c",
+      "log": "hog_routing_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "startup_trace_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "bc5b799604136d877d9c98463e2a3242912336e7df78c587ca51ab2856bb0836",
+      "log": "startup_trace_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "timeslot_sdk_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "830e5e7385fa01b788252c1170d4ac8623608e60881838bb2c2a04730274dfea",
+      "log": "timeslot_sdk_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "prospector169_ui_native_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "7b0f82ce407c83a1a5ec0468086a6bc58ef5c2ebc001965a9712e9182ffccc82",
+      "log": "prospector169_ui_native_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "ui_native_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "c3c79889bccda4e9943921991a4510a694af5b404fcb090ca6fc36a0eaee25c6",
+      "log": "ui_native_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "single_buffer_lvgl_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "7a40e3170867fb39c40cfb1f6b7b7710115a51bcb530e8cf50336944b76602dd",
+      "log": "single_buffer_lvgl_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "xiao147_controller_native_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "42651ab05c7ce5f9b3e455aebf3893d43990067166fafbdf2f15d4d5d37efaf1",
+      "log": "xiao147_controller_native_test.log",
+      "exit_code": 0
+    }
+  ],
+  "scope": "Actual C function, ABI, generated SDK and native LVGL tests; modeled queues/MMIO/host I/O. No physical RF, latency, power, or real device flashing validation.",
+  "incremental_rechecks_after_added_cases": {
+    "tests": [
+      "two_sets_radio_test",
+      "kb_mode_transaction_test"
+    ],
+    "passed": true,
+    "scope": "Added production-coordinator reset-during-HUNT and no-old-boot-offer cases executed successfully after the full suite; same production fingerprint."
+  }
+}

@@ -4,11 +4,12 @@
 #include "icons.h"
 #include <string.h>
 #include "view.h"
+extern uint8_t kb_receiver_owner_set(void);
 #include "signal.h"
 #if defined(CONFIG_LISM_BLE_INPUT_BRIDGE)
 #include "lism_input_host.h"
 #endif
-static lv_obj_t *icons;
+static lv_obj_t *icons,*set_label;
 static uint8_t shown=255;
 static bool pad_ready;
 static lv_obj_t *signal_icons;
@@ -38,7 +39,7 @@ static void draw(lv_event_t *e) {
 
 }
 static void refresh(lv_timer_t *timer) {
-    LV_UNUSED(timer);struct kb_route_view view;kb_route_snapshot(&view);
+    LV_UNUSED(timer);if(set_label){unsigned set=kb_receiver_owner_set();lv_label_set_text(set_label,set<2?(set?"SET 2":"SET 1"):"FREE");}struct kb_route_view view;kb_route_snapshot(&view);
     bool connected=false;
 #if defined(CONFIG_LISM_BLE_INPUT_BRIDGE)
     struct lism_input_status input;lism_input_host_snapshot(&input);
@@ -73,6 +74,12 @@ static void draw_signals(lv_event_t*e){
     }
 }
 void kb_route_icons_create(lv_obj_t *parent) {
+    set_label=lv_label_create(parent);lv_obj_set_style_text_font(set_label,&lv_font_montserrat_10,0);lv_obj_set_style_text_color(set_label,lv_color_hex(0x7b7d93),0);
+#ifdef CONFIG_LISM_XIAO147_TOUCH
+    lv_obj_set_pos(set_label,150,154);
+#else
+    lv_obj_set_pos(set_label,225,158);
+#endif
     icons=lv_obj_create(parent);lv_obj_remove_style_all(icons);lv_obj_set_size(icons,100,27);
 #ifdef CONFIG_LISM_XIAO147_TOUCH
     lv_obj_set_pos(icons,210,29);

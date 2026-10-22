@@ -1,6 +1,7 @@
 from pathlib import Path
 import hashlib,json,subprocess
 P=Path(__file__).resolve().parents[2]
+r=subprocess.run(['cmake','-S',str(P/'preview-host'),'-B',str(P/'preview-host/build')],capture_output=True,text=True);assert not r.returncode,r.stdout+r.stderr
 r=subprocess.run(['cmake','--build',str(P/'preview-host/build'),'--target','preview','-j4'],capture_output=True,text=True)
 assert not r.returncode,r.stdout+r.stderr
 r=subprocess.run([str(P/'preview-host/build/preview'),'9','unused'],capture_output=True,text=True,timeout=30)

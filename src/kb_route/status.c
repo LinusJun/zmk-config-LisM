@@ -9,7 +9,7 @@ static atomic_t request=ATOMIC_INIT(-1),echo_epoch,echo_phase;
 static void command_work(struct k_work *w);
 K_WORK_DELAYABLE_DEFINE(send_command,command_work);
 static void command_work(struct k_work *w) {
-    ARG_UNUSED(w);int n=atomic_get(&request);uint32_t echo=atomic_get(&echo_epoch);if(n<0 && !echo)return;
+    ARG_UNUSED(w);if(!kb_receiver_admitting())return;int n=atomic_get(&request);uint32_t echo=atomic_get(&echo_epoch);if(n<0 && !echo)return;
     if(!kb_route_queue_idle() || !kb_route_holdtap_idle() || !kb_route_combo_idle()){k_work_reschedule(&send_command,K_MSEC(20));return;}
     struct zmk_behavior_binding b={.behavior_dev="KB_ROUTE",.param1=n<0?20+(uint32_t)atomic_get(&echo_phase):n,.param2=n<0?echo:0};
     struct zmk_behavior_binding_event e={.source=1,.position=CONFIG_LISM_DONGLE_STATION,.timestamp=k_uptime_get()};
@@ -21,17 +21,18 @@ void kb_route_request(uint8_t mode) {if(mode>1)return;atomic_set(&request,mode);
 int kb_route_select(uint8_t profile) {if(profile>=5)return -EINVAL;atomic_set(&request,10+profile);k_work_reschedule(&send_command,K_NO_WAIT);return 0;}
 int kb_route_select_dongle(uint8_t station){if(station>=KB_STATION_COUNT)return -EINVAL;atomic_set(&request,30+station);k_work_reschedule(&send_command,K_NO_WAIT);return 0;}
 static uint32_t local_route_generation=1;
-uint32_t kb_receiver_route_generation(void){k_spinlock_key_t k=k_spin_lock(&lock);uint32_t g=local_route_generation;k_spin_unlock(&lock,k);return g;}
+uint32_t kb_receiver_route_generation(void){k_spinlock_key_t k=k_spin_lock(&lock);uint32_t g=local_route_generation+(kb_receiver_admitting()?0:1);k_spin_unlock(&lock,k);return g;}
 bool kb_route_status_valid(const struct kb_route_status*s){
+    if(!kb_receiver_admitting())return false;
     if(s->version!=KB_ROUTE_VERSION || s->mode>KB_ROUTE_SWITCHING || s->profile>=5 || !s->epoch || !s->authority || s->phase>KB_LEFT_COMMIT || s->target>1)return false;
     if(s->station!=CONFIG_LISM_DONGLE_STATION || !s->receiver_boot || s->receiver_boot!=kb_receiver_boot())return false;
     if(s->target==KB_ROUTE_DONGLE && s->owner_station>=KB_STATION_COUNT)return false;
     if(s->target==KB_ROUTE_BLE && s->owner_station!=KB_STATION_NONE)return false;
     if(s->mode==KB_ROUTE_DONGLE && (s->phase!=KB_LEFT_COMMIT || s->owner_station!=s->station))return false;
-    k_spinlock_key_t key=k_spin_lock(&lock);bool valid=s->authority!=authority || s->epoch>=view.epoch;k_spin_unlock(&lock,key);return valid;
+    k_spinlock_key_t key=k_spin_lock(&lock);bool valid=(!authority || (s->authority==authority && wire_boot==kb_receiver_peer_boot(1))) && s->epoch>=view.epoch;k_spin_unlock(&lock,key);return valid;
 }
 bool kb_route_discovery_release(const struct kb_discovery*p){
-    k_spinlock_key_t key=k_spin_lock(&lock);bool close=view.mode==KB_ROUTE_DONGLE && (p->authority!=authority || wire_boot!=kb_receiver_peer_boot(1));k_spin_unlock(&lock,key);return close;
+    k_spinlock_key_t key=k_spin_lock(&lock);bool close=false;ARG_UNUSED(p);k_spin_unlock(&lock,key);return close;
 }
 int kb_route_discovery_received(const struct kb_discovery*p){
     /* An offer is presence only. It must not renew ownership or an input lease. */
@@ -51,10 +52,10 @@ void kb_route_snapshot(struct kb_route_view *out) {
     k_spinlock_key_t key=k_spin_lock(&lock);*out=view;k_spin_unlock(&lock,key);
     if(k_uptime_get()-out->seen>2500)out->mode=KB_ROUTE_UNKNOWN;
 }
-bool kb_route_dongle_key_allowed(void) {struct kb_route_view s;kb_route_snapshot(&s);return s.mode==KB_ROUTE_DONGLE;}
+bool kb_route_dongle_key_allowed(void) {struct kb_route_view s;kb_route_snapshot(&s);return kb_receiver_admitting() && s.mode==KB_ROUTE_DONGLE;}
 
 bool kb_route_left_allowed(const struct kb_left_packet*p){
- k_spinlock_key_t k=k_spin_lock(&lock);bool allowed=view.mode==KB_ROUTE_DONGLE && p->authority==authority && p->epoch==view.epoch && p->station==CONFIG_LISM_DONGLE_STATION && p->receiver_boot==kb_receiver_boot() && k_uptime_get()-view.seen<2500;k_spin_unlock(&lock,k);return allowed;
+ k_spinlock_key_t k=k_spin_lock(&lock);bool allowed=kb_receiver_admitting() && view.mode==KB_ROUTE_DONGLE && p->authority==authority && p->epoch==view.epoch && p->station==CONFIG_LISM_DONGLE_STATION && p->receiver_boot==kb_receiver_boot() && k_uptime_get()-view.seen<2500;k_spin_unlock(&lock,k);return allowed;
 }
 uint32_t kb_receiver_route_epoch(void){k_spinlock_key_t k=k_spin_lock(&lock);uint32_t e=view.epoch;k_spin_unlock(&lock,k);return e;}
 

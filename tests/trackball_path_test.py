@@ -8,7 +8,7 @@ a=argparse.ArgumentParser();a.add_argument('--workspace',type=Path,required=True
 ROOT=P/'source';D=W/'module-dongle/src/split/esb'
 sys.path.insert(0,str(W/'zephyr/scripts/dts/python-devicetree/src'))
 from devicetree import dtlib
-right=dtlib.DT(str(W/'build-right/zephyr/zephyr.dts'))
+right=dtlib.DT(str(W/'build-right_set1/zephyr/zephyr.dts'))
 central=dtlib.DT(str(W/'build-dongle/zephyr/zephyr.dts'))
 for tree,path in [(right,'/zip_xyz'),(central,'/zip_zxy')]:
     n=tree.get_node(path)
@@ -141,8 +141,8 @@ parts=[pre,extra,event_struct,stripped(W/'zephyr/include/zephyr/sys/ring_buffer.
        function(W/'zmk/app/src/pointing/input_split.c','replace_active_key'),function(W/'zmk/app/src/pointing/input_split.c','zmk_input_split_report_peripheral_event'),
        function(W/'zmk/app/src/split/central.c','zmk_split_transport_central_peripheral_event_handler'),
        stripped(ROOT/'src/esb_upstream/common.c'),stripped(ROOT/'src/esb_upstream/link.c'),producer,
-       function(W/'module-right/src/split/esb/peripheral.c','get_payload_data_size'),function(W/'module-right/src/split/esb/peripheral.c','get_retry_count'),
-       function(W/'module-right/src/split/esb/peripheral.c','split_peripheral_esb_report_event_impl'),old_filter,main]
+       function(W/'module-right_set1/src/split/esb/peripheral.c','get_payload_data_size'),function(W/'module-right_set1/src/split/esb/peripheral.c','get_retry_count'),
+       function(W/'module-right_set1/src/split/esb/peripheral.c','split_peripheral_esb_report_event_impl'),old_filter,main]
 with tempfile.TemporaryDirectory() as directory:
     d=Path(directory);(d/'test.c').write_text('\n'.join(parts))
     subprocess.run(['cc','-std=c11','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-Werror=implicit-function-declaration',str(d/'test.c'),'-o',str(d/'test')],check=True)

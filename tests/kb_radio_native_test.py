@@ -4,7 +4,7 @@ import runpy,sys,tempfile,subprocess,re
 P=Path(__file__).resolve().parents[1]
 # Shared fixture uses the actual pinned transport ABI.
 b=runpy.run_path(str(P/'tests/kb_route_native_test.py'));pre=b['pre'];function=b['function'];radio=b['radio'];hub=b['hub'];link=b['link']
-common=Path('/work/workspace/module-right/src/split/esb/common.h').read_text();common=common[common.index('#define ZMK_SPLIT_ESB_ENVELOPE_MAGIC_PREFIX'):common.index('typedef void (*zmk_split_esb_process')]
+common=Path('/work/v51-two-sets/workspace/module-right_set1/src/split/esb/common.h').read_text();common=common[common.index('#define ZMK_SPLIT_ESB_ENVELOPE_MAGIC_PREFIX'):common.index('typedef void (*zmk_split_esb_process')]
 pre+=common+r'''
 #define KB_MIRROR_EVENT 125
 struct kb_mirror {uint32_t epoch;uint8_t version,wpm,layer,mods,indicators,profile,host_connected,left_battery,left_online;} __packed;
@@ -40,16 +40,22 @@ receiver=function((P/'src/esb_upstream/radio.c').read_text(),'receive_frames')
 # modeled device context, then drive it with the real hub next_tx output.
 for name in ['receive_frames','receive_ring','head','tail','diag_rx','diag_valid','diag_accepted','last_boot','previous_boot','last_seq','mode','have_tx','current','tx_result','boot_id','command_ack_boot','command_ack_seq','send_mutex','callback']:
     receiver=re.sub(r'\b'+name+r'\b','d_'+name,receiver)
+receiver=receiver.replace('rs.d_mode','rs.mode')
 pre+=r'''
 #define WIRE_HEADER LISM_WIRE_HEADER
 #define CONFIG_LISM_DONGLE_STATION 0
+#include "/work/v51-two-sets/source/src/kb_route/owner_policy.h"
+static struct kb_owner_policy owner={.bound=true,.set=0,.wire_boot=200,.authority=1,.epoch=1,.seen=5000};
+static int owner_mutex,retiring,published_owner;
+static void retire_owner(void){retiring=1;owner.retired=true;}
+static void offer_probe(unsigned pipe,uint32_t boot,const struct kb_discovery*p){(void)pipe;(void)boot;(void)p;}
 #define APP_ESB_MODE_PRX 0
 #define APP_ESB_MODE_PTX 1
 static int atomic_inc(atomic_t*p){return (*p)++;}
-static atomic_t d_head,d_tail,d_diag_rx,d_diag_valid,d_diag_accepted,d_last_boot[2],d_tx_result,d_command_ack_boot,d_command_ack_seq;
-static uint32_t d_previous_boot[2],d_last_seq[2],d_boot_id;
+static atomic_t d_head,d_tail,d_diag_rx,d_diag_valid,d_diag_accepted,d_last_boot[4],d_tx_result,d_command_ack_boot,d_command_ack_seq;
+static uint32_t d_previous_boot[4],d_last_seq[4],d_boot_id;
 static struct esb_payload d_receive_ring[64];static int d_mode=APP_ESB_MODE_PRX,d_send_mutex;static bool d_have_tx;
-static struct {struct esb_payload payload;} d_current;
+static struct {struct esb_payload payload;bool discovery;} d_current;
 static struct k_spinlock signal_lock;static struct {int8_t dbm;int64_t seen;} signals[2];
 static unsigned d_mirrors,d_events;
 static void d_callback(app_esb_event_t*e){struct esb_event_envelope env={0};memcpy(&env,e->buf,e->data_length-sizeof(struct esb_msg_postfix));d_events++;if(env.payload.event.type==KB_MIRROR_EVENT)d_mirrors++;e->accepted=true;}
@@ -61,11 +67,11 @@ static struct esb_payload frame(unsigned net,unsigned source,uint32_t peer_boot,
  if(command){struct esb_command_envelope e={.prefix={.magic_prefix="ZmKe",.payload_size=1+sizeof(e.payload.cmd.type)},.payload={.source=source,.cmd={.type=ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_POLL_EVENTS}}};n=sizeof(e.prefix)+e.prefix.payload_size;memcpy(body,&e,n);}
  else {struct esb_event_envelope e={.prefix={.magic_prefix="ZmKe",.payload_size=1+sizeof(e.payload.event.type)+sizeof(struct lism_snapshot)},.payload={.source=source,.event={.type=127}}};struct lism_snapshot s={.keys=1,.battery=81};memcpy(&e.payload.event.data,&s,sizeof(s));n=sizeof(e.prefix)+e.prefix.payload_size;memcpy(body,&e,n);}
  struct esb_msg_postfix crc={.crc=crc32_ieee(body,n)};memcpy(body+n,&crc,sizeof(crc));n+=sizeof(crc);
- p.length=20+n;memcpy(p.data,"LsE3",4);put32(p.data+4,peer_boot);put32(p.data+8,seq);put32(p.data+12,target);memcpy(p.data+20,body,n);return p;
+ p.length=20+n;memcpy(p.data,KB_SET_MAGIC,4);put32(p.data+4,peer_boot);put32(p.data+8,seq);put32(p.data+12,target);memcpy(p.data+20,body,n);return p;
 }
 static void feed(unsigned net,struct esb_payload p){unsigned h=head;rx[h]=(struct hub_rx){.p=p,.link=net,.boot=links[net].boot};head=(h+1)%64;receive();}
 int main(void){
- links[0].boot=100;links[1].boot=200;d_boot_id=400;links[0].next_seq=links[1].next_seq=1;
+ links[0].boot=100;links[1].boot=200;d_boot_id=400;owner.wire_boot=200;links[0].next_seq=links[1].next_seq=1;
  struct esb_payload p=frame(0,0,300,1,0,false);feed(0,p);assert(deliveries[0]==1&&links[0].last_boot[0]==300&&!links[1].last_boot[0]);feed(0,p);assert(deliveries[0]==1);
  p.data[25]^=1;feed(0,p);assert(deliveries[0]==1);p.data[25]^=1;
  p=frame(0,0,301,1,0,false);feed(0,p);assert(deliveries[0]==2);p=frame(0,0,300,2,0,false);feed(0,p);assert(deliveries[0]==2); /* previous boot replay */
@@ -86,7 +92,7 @@ int main(void){
  dongle_tx.size=64;
  uint32_t previous=0;
  for(int cycle=0;cycle<100;cycle++){
-  e=(struct zmk_split_transport_peripheral_event){.type=KB_ROUTE_EVENT};assert(!kb_uplink_send(1,&e));
+  e=(struct zmk_split_transport_peripheral_event){.type=KB_ROUTE_EVENT};struct kb_route_status rs={.version=3,.mode=2,.phase=KB_LEFT_FREEZE,.target=0,.station=0,.owner_station=0,.receiver_boot=400,.authority=1,.epoch=1};memcpy(&e.data,&rs,sizeof(rs));assert(!kb_uplink_send(1,&e));
   e.type=KB_MIRROR_EVENT;assert(!kb_uplink_send(1,&e));
   e.type=LISM_SNAPSHOT_TYPE;assert(!kb_uplink_send(1,&e));assert(!kb_uplink_send(1,&e));
   unsigned selected=0;

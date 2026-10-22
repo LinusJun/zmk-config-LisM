@@ -12,6 +12,7 @@ code=r'''
 #include <assert.h>
 #include <stdio.h>
 #define KB_ROUTE_VERSION 3
+static bool admitting=true;static bool kb_receiver_admitting(void){return admitting;}
 #define CONFIG_LISM_DONGLE_STATION 0
 #define KB_STATION_COUNT 2
 #define KB_STATION_NONE 255
@@ -39,13 +40,13 @@ int main(void){
  s.mode=KB_ROUTE_BLE;s.target=1;s.owner_station=255;kb_route_status_received(&s);assert(kb_receiver_route_generation()==g+1);
  s.mode=KB_ROUTE_DONGLE;s.target=0;s.owner_station=0;kb_route_status_received(&s);assert(kb_receiver_route_generation()==g+2);g+=2;
  /* Repeated wire epoch after right reboot is still a different input owner. */
- s.authority=456;kb_route_status_received(&s);assert(kb_receiver_route_generation()==++g&&flushes==2);
+ s.authority=456;kb_route_status_received(&s);assert(kb_receiver_route_generation()==g&&flushes==1);s.authority=123;
  now+=2501;struct kb_route_view out;kb_route_snapshot(&out);assert(out.mode==KB_ROUTE_UNKNOWN);
  kb_route_status_received(&s);assert(kb_receiver_route_generation()==++g);
  s.version=1;kb_route_status_received(&s);assert(kb_receiver_route_generation()==g);
  s.version=3;s.epoch++;kb_route_status_received(&s);assert(kb_receiver_route_generation()==++g);
- peer_boot++;kb_route_status_received(&s);assert(kb_receiver_route_generation()==++g);
- local_route_generation=UINT32_MAX;s.epoch++;kb_route_status_received(&s);assert(kb_receiver_route_generation()==1);
+ peer_boot++;kb_route_status_received(&s);assert(kb_receiver_route_generation()==g);peer_boot--;
+ admitting=false;assert(kb_receiver_route_generation()==g+1);kb_route_status_received(&s);assert(kb_receiver_route_generation()==g+1);admitting=true;local_route_generation=UINT32_MAX;s.epoch++;kb_route_status_received(&s);assert(kb_receiver_route_generation()==1);
  puts("PASS actual receiver route generation: duplicate heartbeats stable, complete mode round trip, same-epoch right reboot, expired lease, invalid status and wrap skip");return 0;
 }
 '''
