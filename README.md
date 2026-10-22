@@ -12,4 +12,6 @@
 
 两个接收器在家／单位共用一套键盘的新功能，见独立 [v5.0 双 Dongle 测试分支](https://github.com/LinusJun/zmk-config-LisM/tree/codex/esb-v50-dual-dongle)。它是新协议，需要同时更新左右手和两台接收器。
 
-原项目说明见 [README_UPSTREAM.md](README_UPSTREAM.md)。
+原项目说明见 [README.upstream.md](README.upstream.md)。
+
+UF2 刷写后自动启动偶发黑屏的问题尚未证明修复。若刷完黑屏或不能输入，先单按一次接收器 Reset；不要先清配对。
