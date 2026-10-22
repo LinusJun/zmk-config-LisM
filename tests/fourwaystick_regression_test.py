@@ -37,6 +37,13 @@ for index, (name, bindings) in enumerate(layers.items()):
     if name == "layer_4":
         assert previous[1] == "&none"
         previous[1] = "&to 5"
+        assert previous[2] == "&none"
+        previous[2] = "&screen_next"
+        assert previous[15]=="&none" and previous[19]=="&none"
+        previous[15]="&kb_route KB_BLE";previous[19]="&kb_route KB_DONGLE"
+        for i in range(5):
+            assert previous[25+i]==("&sys_reset" if i==4 else "&none")
+            previous[25+i]=f"&kb_route KB_BLE_SEL({i})"
     elif name == "layer_6":
         assert previous[1] == "&trans"
         previous[1] = "&to 0"

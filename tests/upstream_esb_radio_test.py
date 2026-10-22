@@ -60,10 +60,14 @@ static int esb_set_prefixes(const uint8_t *p,size_t n){return 0;}
 static int esb_enable_pipes(unsigned mask){assert(mask==3);return 0;}
 static int esb_set_rf_channel(int c){assert(c==37);return 0;}
 static int esb_write_payload(const struct esb_payload *p){assert(written_n<10);written[written_n++]=*p;return 0;}
+static unsigned start_tx_calls;
+static int esb_start_tx(void){start_tx_calls++;return 0;}
 static int esb_start_rx(void){return 0;}
 static void esb_disable(void){}
 static int esb_read_rx_payload(struct esb_payload *p){if(incoming_cursor==incoming_n)return -ENODATA;*p=incoming[incoming_cursor++];return 0;}
-#define NRF_RADIO 0
+static struct {unsigned POWER,STATE,SHORTS,INTENSET;} fake_radio;
+#define NRF_RADIO (&fake_radio)
+#define __DSB() ((void)0)
 #define NRF_TIMER0 0
 #define NRF_TIMER_INT_COMPARE0_MASK 1
 #define NRF_TIMER_BIT_WIDTH_32 32
@@ -72,7 +76,9 @@ static int esb_read_rx_payload(struct esb_payload *p){if(incoming_cursor==incomi
 #define RADIO_IRQn 1
 static void NVIC_ClearPendingIRQ(int i){}
 static void irq_enable(int i){}
-static void nrf_radio_power_set(int r,bool p){}
+static void nrf_radio_power_set(void *r,bool p){fake_radio.POWER=p;fake_radio.STATE=0;fake_radio.SHORTS=0;fake_radio.INTENSET=0;}
+static void nrf_radio_shorts_disable(void*r,unsigned m){fake_radio.SHORTS&=~m;}
+static void nrf_radio_int_disable(void*r,unsigned m){fake_radio.INTENSET&=~m;}
 static void nrf_timer_int_disable(int t,int m){}
 static void nrf_timer_int_enable(int t,int m){}
 static void nrf_timer_bit_width_set(int t,int b){}
@@ -82,12 +88,13 @@ static bool nrf_timer_event_check(int t,int e){return true;}
 typedef int mpsl_timeslot_session_id_t;
 typedef struct {int callback_action;} mpsl_timeslot_signal_return_param_t;
 enum {MPSL_TIMESLOT_SIGNAL_ACTION_NONE,MPSL_TIMESLOT_SIGNAL_ACTION_END};
-enum {MPSL_TIMESLOT_SIGNAL_START,MPSL_TIMESLOT_SIGNAL_RADIO,MPSL_TIMESLOT_SIGNAL_TIMER0,MPSL_TIMESLOT_SIGNAL_SESSION_IDLE,MPSL_TIMESLOT_SIGNAL_BLOCKED,MPSL_TIMESLOT_SIGNAL_CANCELLED,MPSL_TIMESLOT_SIGNAL_INVALID_RETURN,MPSL_TIMESLOT_SIGNAL_OVERSTAYED};
+enum {MPSL_TIMESLOT_SIGNAL_START,MPSL_TIMESLOT_SIGNAL_RADIO,MPSL_TIMESLOT_SIGNAL_TIMER0,MPSL_TIMESLOT_SIGNAL_SESSION_IDLE,MPSL_TIMESLOT_SIGNAL_BLOCKED,MPSL_TIMESLOT_SIGNAL_CANCELLED,MPSL_TIMESLOT_SIGNAL_INVALID_RETURN,MPSL_TIMESLOT_SIGNAL_OVERSTAYED,MPSL_TIMESLOT_SIGNAL_SESSION_CLOSED};
 static unsigned dispatched;
 static void fake_radio_irq(const void *p){dispatched++;}
-static void *__ptr__radio_dynamic_irq_handler=(void*)fake_radio_irq;
+static void lism_esb_radio_irq(void){fake_radio_irq(NULL);}
 static const uint8_t base0[4]={1},base1[4]={2},prefixes[8]={3};
 static atomic_t enabled,ready,irq_error,tx_result,ring_overflow,head,tail,idle=1;
+static atomic_t diag_tx_ok,diag_tx_fail,diag_rx,diag_valid,diag_accepted,diag_slots,diag_blocked,diag_timer,diag_idle,diag_cancel,diag_radio,diag_signal,diag_power,diag_state,diag_shorts,diag_interrupts,diag_handoffs;
 static bool initialized,have_tx;
 static struct tx_item current;
 static uint32_t boot_id,next_seq=1,previous_boot[2],last_seq[2];
@@ -114,7 +121,7 @@ static struct esb_payload frame(unsigned pipe,uint32_t boot,uint32_t seq) {
  struct esb_msg_postfix crc={.crc=crc32_ieee(p.data+WIRE_HEADER,8)};memcpy(p.data+WIRE_HEADER+8,&crc,4);return p;
 }
 int main(void) {
- callback=receive_callback;boot_id=123;
+ callback=receive_callback;boot_id=123;enabled=1;
  uint8_t a[]={1,2,3},b[]={4,5,6};app_esb_data_t p={.pipe=0,.data=a,.len=3,.max_retry=3};
  assert(!zmk_split_esb_send(&p));assert(tx_queue.count==1);
  current=tx_queue.items[0];have_tx=true;p.pipe=1;p.data=b;p.max_retry=0;assert(!zmk_split_esb_send(&p));
@@ -147,12 +154,21 @@ int main(void) {
  put32(command.data+12,boot_id);receive_ring[head]=command;head=(head+1)%64;receive_frames();
  assert(delivered==before+1 && (uint32_t)command_ack_boot==600 && command_ack_seq==1);
  assert(!zmk_split_esb_send(&p));assert(get32(tx_queue.items[2].payload.data+12)==600 && get32(tx_queue.items[2].payload.data+16)==1);
+ /* The continuously receiving PRX queues ACK data without calling start_tx. */
+ unsigned tx_before=start_tx_calls;
+ mode=APP_ESB_MODE_PRX;assert(!submit_direct_payload());assert(start_tx_calls==tx_before);
+ mode=APP_ESB_MODE_PTX;assert(!submit_direct_payload());assert(start_tx_calls==tx_before+1);
  fake_irq=true;init_error=-EIO;assert(slot(0,MPSL_TIMESLOT_SIGNAL_START)->callback_action==MPSL_TIMESLOT_SIGNAL_ACTION_END);fake_irq=false;assert(irq_error==-EIO);
+ fake_irq=true;idle=0;slot(0,MPSL_TIMESLOT_SIGNAL_BLOCKED);assert(idle && diag_blocked==1);
+ idle=0;slot(0,MPSL_TIMESLOT_SIGNAL_CANCELLED);assert(idle && diag_blocked==1 && diag_cancel==1);
+ slot(0,MPSL_TIMESLOT_SIGNAL_SESSION_CLOSED);assert(irq_error==-ESHUTDOWN);
+ enabled=0;init_error=0;assert(slot(0,MPSL_TIMESLOT_SIGNAL_START)->callback_action==MPSL_TIMESLOT_SIGNAL_ACTION_END);
+ assert(!initialized);fake_irq=false;
  next_seq=0;assert(zmk_split_esb_send(&p)==-EAGAIN);
- puts("PASS: production radio API immutable TX ownership, 2 pipes, MPSL IRQ0 no kernel queues, slot stop/retry, dedup, RX-backpressure retry, application command ACK, old-boot command rejection, CRC before sequence and wrap guard");
+ puts("PASS: production radio API, direct PRX ACK queue without PTX start, PTX start, 2 pipes, immutable retries, dedup/backpressure, application command ACK, old-boot rejection, CRC and retained MPSL callback tests (fake hardware)");
 }
 '''
-names=['put32','get32','collect_rx','radio_event','configure_radio','end_slot','slot','receive_frames','zmk_split_esb_send']
+names=['put32','get32','collect_rx','radio_event','configure_radio','end_slot','slot','receive_frames','submit_direct_payload','zmk_split_esb_send']
 code='\n'.join([pre,app,globals,stripped(W/'zephyr/lib/crc/crc32_sw.c')]+[function(n) for n in names]+[main])
 with tempfile.TemporaryDirectory() as d:
  d=Path(d);(d/'test.c').write_text(code)

@@ -1,0 +1,125 @@
+# Read-only SMP metadata hooks. Upstream policy and source files stay untouched.
+function(lism_smp_replace_once variable old new)
+  set(code "${${variable}}")
+  string(LENGTH "${code}" before)
+  string(LENGTH "${old}" expected)
+  string(REPLACE "${old}" "" removed "${code}")
+  string(LENGTH "${removed}" after)
+  math(EXPR actual "${before} - ${after}")
+  if(NOT actual EQUAL expected)
+    message(FATAL_ERROR "Pinned SMP diagnostic anchor moved or duplicated: ${old}")
+  endif()
+  string(REPLACE "${old}" "${new}" code "${code}")
+  set(${variable} "${code}" PARENT_SCOPE)
+endfunction()
+
+function(lism_input_patch_smp source destination header)
+  if(CONFIG_LISM_INPUT_LEGACY_COMPAT)
+    file(SHA256 "${source}" smp_sha)
+    if(NOT smp_sha STREQUAL "4ea8cb82822359e45e4f44f2ce8e99d62c2b74a0cce31761c3130315ea21aa6c")
+      message(FATAL_ERROR "Unverified SMP source: refusing legacy compatibility patch")
+    endif()
+  endif()
+  file(READ "${source}" code)
+  # Scope policy observers to real LE request/response handlers, not BR/EDR
+  # counterparts or CONFIG-disabled stubs. Each anchor must occur exactly once.
+  foreach(kind req rsp)
+    set(start "static uint8_t smp_pairing_${kind}(struct bt_smp *smp, struct net_buf *buf)\n{\n\tstruct bt_conn *conn = smp->chan.chan.conn;")
+    set(stop "#else\nstatic uint8_t smp_pairing_${kind}(struct bt_smp *smp, struct net_buf *buf)")
+    string(FIND "${code}" "${start}" first)
+    string(FIND "${code}" "${stop}" last)
+    if(first LESS 0 OR last LESS first)
+      message(FATAL_ERROR "Pinned SMP ${kind} handler scope moved")
+    endif()
+    math(EXPR length "${last} - ${first}")
+    string(SUBSTRING "${code}" ${first} ${length} section)
+    set(original_section "${section}")
+    set(old "\tif ((${kind}->max_key_size > BT_SMP_MAX_ENC_KEY_SIZE) ||\n\t    (${kind}->max_key_size < BT_SMP_MIN_ENC_KEY_SIZE)) {\n\t\treturn BT_SMP_ERR_ENC_KEY_SIZE;")
+    lism_smp_replace_once(section "${old}" "\tif ((${kind}->max_key_size > BT_SMP_MAX_ENC_KEY_SIZE) ||\n\t    (${kind}->max_key_size < BT_SMP_MIN_ENC_KEY_SIZE)) {\n\t\tlism_input_smp_blocked(conn, LISM_INPUT_SMP_KEY_SIZE);\n\t\treturn BT_SMP_ERR_ENC_KEY_SIZE;")
+    set(old "\tif (!update_keys_check(smp, conn->le.keys)) {\n\t\treturn BT_SMP_ERR_AUTH_REQUIREMENTS;")
+    lism_smp_replace_once(section "${old}" "\tif (!update_keys_check(smp, conn->le.keys)) {\n\t\tlism_input_smp_blocked(conn, LISM_INPUT_SMP_STORED_BOND);\n\t\treturn BT_SMP_ERR_AUTH_REQUIREMENTS;")
+    set(old "\terr = remote_sec_level_reachable(smp);\n\tif (err) {\n\t\treturn err;")
+    lism_smp_replace_once(section "${old}" "\terr = remote_sec_level_reachable(smp);\n\tif (err) {\n\t\tlism_input_smp_blocked(conn, LISM_INPUT_SMP_AUTH_LEVEL);\n\t\treturn err;")
+    set(old "#if defined(CONFIG_BT_SMP_SC_PAIR_ONLY)\n\t\treturn BT_SMP_ERR_AUTH_REQUIREMENTS;")
+    lism_smp_replace_once(section "${old}" "#if defined(CONFIG_BT_SMP_SC_PAIR_ONLY)\n\t\tlism_input_smp_blocked(conn, LISM_INPUT_SMP_SC_REQUIRED);\n\t\treturn BT_SMP_ERR_AUTH_REQUIREMENTS;")
+    lism_smp_replace_once(code "${original_section}" "${section}")
+  endforeach()
+  set(old "\tif (IS_ENABLED(CONFIG_BT_SMP_SC_PAIR_ONLY) &&\n\t    !(auth & BT_SMP_AUTH_SC)) {\n\t\treturn BT_SMP_ERR_AUTH_REQUIREMENTS;")
+  lism_smp_replace_once(code "${old}" "\tif (IS_ENABLED(CONFIG_BT_SMP_SC_PAIR_ONLY) &&\n\t    !(auth & BT_SMP_AUTH_SC)) {\n\t\tlism_input_smp_blocked(conn, LISM_INPUT_SMP_SC_REQUIRED);\n\t\treturn BT_SMP_ERR_AUTH_REQUIREMENTS;")
+  set(old "\terr = handlers[hdr->code].func(smp, buf);\n\tif (err) {\n\t\tsmp_error(smp, err);")
+  lism_smp_replace_once(code "${old}" "\tlism_input_smp_received(smp->chan.chan.conn, hdr->code, buf->data, buf->len);\n${old}")
+  set(old "\terr = handlers[hdr->code].func(smp, buf);\n\tif (err) {\n\t\tsmp_error(smp, err);")
+  lism_smp_replace_once(code "${old}" "\terr = handlers[hdr->code].func(smp, buf);\n\tif (err) {\n\t\tlism_input_smp_failed(smp->chan.chan.conn, hdr->code, err);\n\t\tsmp_error(smp, err);")
+  if(CONFIG_LISM_INPUT_LEGACY_COMPAT)
+    lism_input_legacy_guards(code)
+  endif()
+  file(WRITE "${destination}" "#include \"${header}\"\n${code}")
+endfunction()
+
+function(lism_input_legacy_guards variable)
+  set(code "${${variable}}")
+  # A first-pair RPA can resolve to a protected split/host/other input identity.
+  # Reject before upstream can find/clear that identity's existing bond or
+  # mutate connection identity. The host validates exact conn/epoch ownership.
+  set(old "\tif (!bt_addr_le_eq(&conn->le.dst, &req->addr)) {\n\t\tstruct bt_keys *keys = bt_keys_find_addr(conn->id, &req->addr);")
+  lism_smp_replace_once(code "${old}" "\tif (!lism_input_identity_allowed(conn, &req->addr)) {\n\t\tlism_input_smp_blocked(conn, LISM_INPUT_SMP_STORED_BOND);\n\t\treturn BT_SMP_ERR_AUTH_REQUIREMENTS;\n\t}\n\n${old}")
+  # Gate at every legacy algorithm entry too: delayed crypto/TX callbacks must
+  # not continue a handshake after its exact connection authorization expires.
+  foreach(name legacy_request_tk legacy_send_pairing_confirm legacy_pairing_req
+               legacy_pairing_random legacy_pairing_confirm legacy_pairing_rsp)
+    set(old "static uint8_t ${name}(struct bt_smp *smp)\n{")
+    lism_smp_replace_once(code "${old}" "${old}\n\tif (!lism_input_legacy_permitted(smp->chan.chan.conn)) {\n\t\treturn BT_SMP_ERR_AUTH_REQUIREMENTS;\n\t}\n")
+  endforeach()
+  foreach(signature "legacy_distribute_keys(struct bt_smp *smp)"
+                    "legacy_user_tk_entry(struct bt_smp *smp)"
+                    "legacy_passkey_entry(struct bt_smp *smp, unsigned int passkey)")
+    set(old "static void ${signature}\n{")
+    lism_smp_replace_once(code "${old}" "${old}\n\tif (!lism_input_legacy_permitted(smp->chan.chan.conn)) {\n\t\tsmp_error(smp, BT_SMP_ERR_AUTH_REQUIREMENTS);\n\t\treturn;\n\t}\n")
+  endforeach()
+  # Preserve SC capability advertisement and all MITM/key-size/bond checks.
+  # Authorize only after req/rsp have established the negotiated SC flag.
+  foreach(kind req rsp)
+    set(old "#else\n\t\tif (IS_ENABLED(CONFIG_BT_SMP_APP_PAIRING_ACCEPT)) {\n\t\t\terr = smp_pairing_accept_query(smp, ${kind});")
+    set(new "#else\n\t\tif (!lism_input_legacy_permitted(conn)) {\n\t\t\tlism_input_smp_blocked(conn, LISM_INPUT_SMP_SC_REQUIRED);\n\t\t\treturn BT_SMP_ERR_AUTH_REQUIREMENTS;\n\t\t}\n\t\tif (IS_ENABLED(CONFIG_BT_SMP_APP_PAIRING_ACCEPT)) {\n\t\t\terr = smp_pairing_accept_query(smp, ${kind});")
+    lism_smp_replace_once(code "${old}" "${new}")
+  endforeach()
+  # These SC-only builds previously compiled out two optional confirmation
+  # paths. Keep SC handshakes identical even though legacy code is now linked.
+  set(old "\tif (!IS_ENABLED(CONFIG_BT_SMP_SC_PAIR_ONLY) &&\n\t    (DISPLAY_FIXED(smp) || smp->method == JUST_WORKS) &&")
+  string(REPLACE "${old}" "\tif (!IS_ENABLED(CONFIG_LISM_INPUT_LEGACY_COMPAT) &&\n\t    !IS_ENABLED(CONFIG_BT_SMP_SC_PAIR_ONLY) &&\n\t    (DISPLAY_FIXED(smp) || smp->method == JUST_WORKS) &&" code "${code}")
+  set(old "\tif (IS_ENABLED(CONFIG_BT_SMP_SC_PAIR_ONLY) &&\n\t    !(auth & BT_SMP_AUTH_SC)) {")
+  lism_smp_replace_once(code "${old}" "\tif ((IS_ENABLED(CONFIG_BT_SMP_SC_PAIR_ONLY) ||\n\t     !lism_input_legacy_permitted(conn)) &&\n\t    !(auth & BT_SMP_AUTH_SC)) {")
+  # Stored central keys: refuse legacy reuse on any unapproved connection.
+  set(old "\tif (conn->required_sec_level >= BT_SECURITY_L3 &&")
+  lism_smp_replace_once(code "${old}" "\tif (!(conn->le.keys->keys & BT_KEYS_LTK_P256) &&\n\t    !lism_input_legacy_permitted(conn)) {\n\t\treturn false;\n\t}\n\n${old}")
+  # Security Request has its own encryption fast path, bypassing keys_check.
+  set(old "\t/* if MITM required key must be authenticated */")
+  lism_smp_replace_once(code "${old}" "\tif (!(conn->le.keys->keys & BT_KEYS_LTK_P256) &&\n\t    !lism_input_legacy_permitted(conn)) {\n\t\tlism_input_smp_blocked(conn, LISM_INPUT_SMP_SC_REQUIRED);\n\t\treturn BT_SMP_ERR_AUTH_REQUIREMENTS;\n\t}\n\n${old}")
+  # No legacy TK/STK may be delivered to the controller before authorization.
+  set(old "\t\t/*\n\t\t * We keep both legacy STK and LE SC LTK in TK.")
+  lism_smp_replace_once(code "${old}" "\t\tif (!atomic_test_bit(smp->flags, SMP_FLAG_SC) &&\n\t\t    !lism_input_legacy_permitted(conn)) {\n\t\t\treturn false;\n\t\t}\n\n${old}")
+  set(old "\tif (conn->le.keys && (conn->le.keys->keys & BT_KEYS_PERIPH_LTK) &&")
+  lism_smp_replace_once(code "${old}" "\tif (lism_input_legacy_permitted(conn) &&\n\t    conn->le.keys && (conn->le.keys->keys & BT_KEYS_PERIPH_LTK) &&")
+  # All received post-negotiation legacy confirm/random/key-distribution opcodes
+  # are gated. Req/rsp/security-request/failure are excluded: SC flag is not yet
+  # established for requests and failures must always be accepted for cleanup.
+  set(old "\tlism_input_smp_received(smp->chan.chan.conn, hdr->code, buf->data, buf->len);")
+  set(new "\tif (hdr->code != BT_SMP_CMD_PAIRING_REQ &&\n\t    hdr->code != BT_SMP_CMD_PAIRING_RSP &&\n\t    hdr->code != BT_SMP_CMD_SECURITY_REQUEST &&\n\t    hdr->code != BT_SMP_CMD_PAIRING_FAIL &&\n\t    !atomic_test_bit(smp->flags, SMP_FLAG_SC) &&\n\t    !lism_input_legacy_permitted(smp->chan.chan.conn)) {\n\t\tlism_input_smp_blocked(smp->chan.chan.conn, LISM_INPUT_SMP_SC_REQUIRED);\n\t\tsmp_error(smp, BT_SMP_ERR_AUTH_REQUIREMENTS);\n\t\treturn 0;\n\t}\n${old}")
+  lism_smp_replace_once(code "${old}" "${new}")
+  # Public legacy user callbacks must not continue a revoked/stale handshake.
+  foreach(name bt_smp_auth_passkey_entry bt_smp_auth_pairing_confirm bt_smp_le_oob_set_tk)
+    string(FIND "${code}" "int ${name}(" first)
+    string(SUBSTRING "${code}" ${first} -1 tail)
+    string(FIND "${tail}" "\n}\n" end)
+    math(EXPR length "${end} + 3")
+    string(SUBSTRING "${tail}" 0 ${length} section)
+    set(original "${section}")
+    set(old "\tif (!atomic_test_and_clear_bit(smp->flags, SMP_FLAG_USER)) {")
+    lism_smp_replace_once(section "${old}" "\tif (!atomic_test_bit(smp->flags, SMP_FLAG_SC) &&\n\t    !lism_input_legacy_permitted(conn)) {\n\t\treturn -EACCES;\n\t}\n\n${old}")
+    lism_smp_replace_once(code "${original}" "${section}")
+  endforeach()
+  set(old "static bool smp_keys_check(struct bt_conn *conn)")
+  set(helper "static bool lism_input_legacy_permitted(struct bt_conn *conn)\n{\n\treturn conn && conn->role == BT_CONN_ROLE_CENTRAL &&\n\t       lism_input_legacy_allowed(conn);\n}\n\n")
+  lism_smp_replace_once(code "${old}" "${helper}${old}")
+  set(${variable} "${code}" PARENT_SCOPE)
+endfunction()

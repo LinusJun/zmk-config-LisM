@@ -1,0 +1,249 @@
+{
+  "passed": true,
+  "count": 30,
+  "hardware_tested": false,
+  "production_fingerprint": "077a7987249e08ed51fed8ba5e6042a13a2d110a06ba4b2ff351396673751c9c",
+  "checks": [
+    {
+      "test": "receiver_output_gate_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "de92671c4b01e238a840e7672eebe7281c2429cfc7ac427faafe0f63c0f13abb",
+      "log": "receiver_output_gate_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "left_radio_native_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "cd12c1a1e4d415a5a9f4e371a0e8adfbf45420336c6eaed9e91e421bd11bad51",
+      "log": "left_radio_native_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "route_command_epoch_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "d78571d89b139e107f67749987ea2b55fcb25614b7b1a477b133d482876cf2ef",
+      "log": "route_command_epoch_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "scan_advertising_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "e8d42745cea6d51f4f3237ed944e035cfbecb81569df38ff2c5fa9f99737e97d",
+      "log": "scan_advertising_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "left_route_policy_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "0804989214957de3ebef3c665e58e2cfa16f20911463753d83337e592765d63b",
+      "log": "left_route_policy_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "signal_worker_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "993d056ff4f412fa7bbd7e9c1388490b4cbe8f2c67ebc9f5da35f7755c132817",
+      "log": "signal_worker_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "fourwaystick_regression_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "5ee215634b7e6b28ba0a8581858058e3df7b3bca8f3bd5089cac84528144544b",
+      "log": "fourwaystick_regression_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "esb_inputs_ownership_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "dd2d554caf15ae9420980e907719c5b98ccf11cfac7338ab9a4682cac428671d",
+      "log": "esb_inputs_ownership_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "esb_coex_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "89828fb54d0137fb82eee8357fe445c0a92778b1e323500ea48fa10f5cefe486",
+      "log": "esb_coex_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "esb_usb_backpressure_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "a08b61b57013ebf641515d74a958695435fc18d86703b61ccf79e876e4b8691a",
+      "log": "esb_usb_backpressure_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "lism_input_parser_host_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "e87dc61471dd9e912dd070ed1c6f574367a523de9bf5c5715c840839be4d2c1f",
+      "log": "lism_input_parser_host_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "lism_input_merge_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "4bf75ce63abde336484f849e8d81fb967cec6e703787c9cda58fa3637bf2e376",
+      "log": "lism_input_merge_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "lism_input_key_storage_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "354a42483508e65d4312927a704728b17fcc9264817d34b61fc128af7aae4911",
+      "log": "lism_input_key_storage_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "lism_input_security_patch_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "3945e926e75c82de6d132d408c8345f1e93084f374193346a078660dd3bbc855",
+      "log": "lism_input_security_patch_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "lism_input_host_sessions_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "dbae98435937a7813aea405fc19adcd16f36f3ddb2a0d50f3d4602cad6b1b562",
+      "log": "lism_input_host_sessions_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "kb_route_native_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "cb54b9168d507c6b51e294ed41a6692a72d3f251ef56b76b19b0579603b8e1c5",
+      "log": "kb_route_native_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "kb_radio_native_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "087c93a9a4f18e1f0c66d6792ba4f96f752b020057a10e459213c8c6bdd71261",
+      "log": "kb_radio_native_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "kb_mode_transaction_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "37aefb827a49131634907fa1d2399d81915facee779be063ed984f8d419544ef",
+      "log": "kb_mode_transaction_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "kb_pointer_fence_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "71e7c46bad9a5eec82aa5c5b0a59d0cd2dfc6d31854bae13b12c99a283ca975d",
+      "log": "kb_pointer_fence_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "kb_mirror_display_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "78ed14c844846ea0cdd7f680bbd430fa9b074acd1ad0628d442ce695a3356eb5",
+      "log": "kb_mirror_display_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "kb_ptx_sdk_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "00e418fb41fe8a0a063e9b1ec1851eb14360590b04abbb24099647fadd39d748",
+      "log": "kb_ptx_sdk_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "kb_dongle_gate_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "f0c110f3b3499a153682a7fb27d0b0d68fc18f16246167109f03b58cab3608d4",
+      "log": "kb_dongle_gate_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "esb_rx_buffers_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "4e6cc7caffacfc8b6203adf0dbbc571f3f97429b5a7331d02e76d4f3a96ff75f",
+      "log": "esb_rx_buffers_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "ppi_reservation_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "4eff27015727aa197c405fcb4ee615af8721a1a0a4c96b26a35c2b6d55938dce",
+      "log": "ppi_reservation_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "hci_zephyr41_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "4eba5dddd1f72a36d06f32dc4cf1eed94c3abeb73db6ad77721950cdee9c430a",
+      "log": "hci_zephyr41_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "hog_routing_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "3db3adfe011e5668e2f2a640c8144c4a8056c5f6b3dc36eff815a05fb603515c",
+      "log": "hog_routing_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "startup_trace_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "bc5b799604136d877d9c98463e2a3242912336e7df78c587ca51ab2856bb0836",
+      "log": "startup_trace_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "timeslot_sdk_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "830e5e7385fa01b788252c1170d4ac8623608e60881838bb2c2a04730274dfea",
+      "log": "timeslot_sdk_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "ui_native_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "40be0c90137f0fb3528d5dd11a4772c3d42ae3a653d941fecb518e7fa9a49797",
+      "log": "ui_native_test.log",
+      "exit_code": 0
+    },
+    {
+      "test": "single_buffer_lvgl_test",
+      "passed": true,
+      "sanitizer_error": false,
+      "source_sha256": "d143f246ee9d1c3c5e2413bcf097566d2d43aacb4c6fe8d3bb3c06388d9ecce3",
+      "log": "single_buffer_lvgl_test.log",
+      "exit_code": 0
+    }
+  ],
+  "scope": "Actual C function, ABI, generated SDK and native LVGL tests; modeled queues/MMIO/host I/O. No physical RF, latency, power, or real device flashing validation."
+}

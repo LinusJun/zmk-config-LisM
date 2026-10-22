@@ -8,7 +8,7 @@ PINNED_SHA256 = "9393b6e9aa993e87e40657c7f58d517295d3546fb6709ca100b010e01dc9f05
 ANCHOR = "    select BT_SMP_SC_PAIR_ONLY\n"
 
 
-def generate(source, destination, legacy_build_policy=None):
+def generate(source, destination, legacy_build_policy=None, sdc_resources=False):
     source = Path(source).resolve()
     data = source.read_bytes()
     if hashlib.sha256(data).hexdigest() != PINNED_SHA256:
@@ -24,6 +24,13 @@ def generate(source, destination, legacy_build_policy=None):
         policy = "LISM_ESB_UNUSED_LEGACY_BUILD_POLICY"
         prefix = ("config LISM_ESB_UNUSED_LEGACY_BUILD_POLICY\n    bool\n    default " +
                   ("y" if legacy_build_policy else "n") + "\n\n")
+    if sdc_resources:
+        # Hidden nrfx option: provide its default before the upstream default.
+        prefix += ('config NRFX_RESERVED_RESOURCES_HEADER\n    string\n'
+                   '    default "lism_nrfx_reserved_resources.h" if BT_LL_SOFTDEVICE\n\n')
+    # The pinned upstream unconditionally defaults ZMK_LOG_LEVEL to 4 when
+    # non-minimal logging is enabled, even with the INF choice selected.
+    prefix += 'config ZMK_LOG_LEVEL\n    int\n    default 3\n\n'
     text = prefix + text.replace(ANCHOR, f"    select BT_SMP_SC_PAIR_ONLY if !{policy}\n")
     def absolute(match):
         path = match.group(2)

@@ -1,0 +1,47 @@
+{
+  "passed": true,
+  "production_fingerprint": "077a7987249e08ed51fed8ba5e6042a13a2d110a06ba4b2ff351396673751c9c",
+  "hardware_tested": false,
+  "targets": {
+    "left": {
+      "sha256": "a69c92905e3d7b8f42156c131a98b2d5fbfdddd0195e628cedaeca3499a2a2f4",
+      "bytes": 196608,
+      "flash": 98164,
+      "ram": 60268,
+      "ram_percent": 22.99
+    },
+    "right": {
+      "sha256": "90432228472c95695e5e9c399b5c6227fca3c7e1a8a78c9642efe80def59251e",
+      "bytes": 583168,
+      "flash": 291572,
+      "ram": 106968,
+      "ram_percent": 40.81,
+      "vectors": {
+        "flash_bytes": 291572,
+        "ram_bytes": 106968
+      },
+      "actual_preprocessed_sdk_flags": {
+        "ERRATA": 0,
+        "FEM": 0,
+        "NEVER": 0
+      }
+    },
+    "dongle": {
+      "sha256": "4ce0a066a0622c0b1ace7183004d606dc3b445be1cf47b226dd59f1d367d14e3",
+      "bytes": 1251328,
+      "flash": 625624,
+      "ram": 201408,
+      "ram_percent": 76.83,
+      "vectors": {
+        "flash_bytes": 625624,
+        "ram_bytes": 201412
+      },
+      "actual_preprocessed_sdk_flags": {
+        "ERRATA": 0,
+        "FEM": 0,
+        "NEVER": 0
+      }
+    }
+  },
+  "scope": "Actual final UF2/ELF/config/DTS and compiler preprocessing. Does not prove RF reliability, interrupt timing, power usage or real display performance."
+}

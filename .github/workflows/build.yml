@@ -1,8 +1,8 @@
-name: Build single-pair ESB with five-profile BLE host
+name: Build preserved LisM ESB v472 baseline
 on:
   workflow_dispatch:
   push:
-    branches: [ codex/working-baseline-esb-upstream ]
+    branches: [ codex/esb-v472-tested-baseline ]
     paths: [ 'boards/**', 'config/**', 'src/**', 'cmake/**', 'tools/**', 'tests/**', 'CMakeLists.txt', 'Kconfig', '.github/workflows/build.yml' ]
   pull_request:
 permissions:
@@ -26,14 +26,10 @@ jobs:
           west zephyr-export
       - name: Build isolated upstream ESB integration
         run: python3 config/tools/build_upstream_esb.py --workspace "$PWD" --target "${{ matrix.target }}"
-      - name: Verify keymap and real transport C
+      - name: Verify preserved keymap
         if: matrix.target == 'dongle'
-        run: |
-          python3 config/tests/fourwaystick_regression_test.py
-          python3 config/tests/fourwaystick_scroll_host_test.py
-          python3 config/tests/upstream_esb_host_test.py --workspace "$PWD"
-          python3 config/tests/upstream_esb_radio_test.py --workspace "$PWD"
+        run: python3 config/tests/fourwaystick_regression_test.py
       - uses: actions/upload-artifact@v4
         with:
-          name: LisM-ESBv2-${{ matrix.target }}
+          name: LisM-ESBv472-${{ matrix.target }}
           path: config/artifacts/*

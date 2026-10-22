@@ -26,6 +26,9 @@ pre=r'''
 #define DIV_ROUND_UP(n,d) (((n)+(d)-1)/(d))
 #define IS_ENABLED(x) (x)
 #define CONFIG_ZMK_SPLIT_ROLE_CENTRAL 1
+#define CONFIG_LISM_KB_HUB 0
+#include "/work/source/src/kb_route/left_protocol.h"
+static bool kb_route_left_allowed(const struct kb_left_packet*p){(void)p;return true;}
 #define CONFIG_ESB_MAX_PAYLOAD_LENGTH 64
 #define CONFIG_ZMK_SPLIT_ESB_PERIPHERAL_ID 0
 #define CONFIG_ZMK_SPLIT_ESB_MSG_POSTFIX_CRC 1
@@ -34,6 +37,7 @@ pre=r'''
 #define INPUT_BTN_LEFT 272
 #define INPUT_REL_X 0
 #define INPUT_REL_Y 1
+#define INPUT_REL_Z 2
 #define INPUT_REL_WHEEL 8
 #define INPUT_REL_HWHEEL 6
 #define ZMK_KEYMAP_HAS_SENSORS 0
@@ -152,7 +156,7 @@ int main(void) {
 '''
 driver=W/'module-dongle/src/split/esb'
 central=(driver/'central.c').read_text();begin=central.index('static int split_central_esb_get_available_source_ids(');end=central.index('\n}',begin)+2
-parts=[pre,c(W/'zephyr/include/zephyr/sys/ring_buffer.h'),c(W/'zephyr/lib/utils/ring_buffer.c'),c(W/'zephyr/lib/crc/crc32_sw.c'),c(W/'zmk/app/include/zmk/split/transport/types.h'),c(driver/'app_esb.h'),c(driver/'common.h'),c(ROOT/'src/esb_upstream/link.h'),sink,c(ROOT/'src/esb_upstream/common.c'),c(ROOT/'src/esb_upstream/link.c'),central[begin:end],main]
+parts=[pre,c(W/'zephyr/include/zephyr/sys/ring_buffer.h'),c(W/'zephyr/lib/utils/ring_buffer.c'),c(W/'zephyr/lib/crc/crc32_sw.c'),c(W/'include-dongle/zmk/split/transport/types.h'),c(driver/'app_esb.h'),c(driver/'common.h'),c(ROOT/'src/esb_upstream/link.h'),sink,c(ROOT/'src/esb_upstream/common.c'),c(ROOT/'src/esb_upstream/link.c'),central[begin:end],main]
 with tempfile.TemporaryDirectory() as d:
  p=Path(d);(p/'test.c').write_text('\n'.join(parts))
  subprocess.run(['cc','-std=c11','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer','-Werror=implicit-function-declaration',str(p/'test.c'),'-o',str(p/'test')],check=True)

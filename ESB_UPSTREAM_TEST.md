@@ -1,82 +1,40 @@
-# One LisM pair: ESB input with five-profile BLE/USB host
+# ESB v3.2 receiver packed trackball event fix
 
-Experimental continuation of the user-confirmed working BLE baseline
-`b116964cbc5669bc9acca233c5d0974d1be9cd32`.
-The preserved fallback is `baseline/lism-ble-working-20261020`.
-Do not move that baseline or overwrite its original UF2 files.
+LisM ESB v3.2 — 仅接收器轨迹球过滤修正，2026-10-20
 
-Only one receiver, left digital four-way stick and right PAW3222 keyboard half
-are supported. No second keyboard set, extra peripherals, touch UI, standalone
-half-to-host BLE, registry or multiple receivers are added.
-The original 46-position keymap (200 ms mod-tap, 125 ms prior idle), hardware
-definitions and OPERATOR layout remain the baseline versions.
+本次只刷01中的接收器UF2。左右手保持已刷的v3.1，不用Reset。
+硬件仍为原Prospector 1.69、左手4waystick、右手PAW3222；接收器仅USB输出。
+屏幕显示“USB / ESB v3.2”。旧v3.1接收器放在02，仅需对照回退时使用。
 
-## Radios and profiles
+已确认的情况
+你已实测v3.1左右连接、键盘打字、左手四向杆正常，右手轨迹球无反应。
+接收器日志持续收到ESB包，按键进入USB键盘输出，但未看到轨迹球进入输入分发。
+日志中的rx/valid差值包含所有拒绝原因，单凭这组总数不能把每个拒绝包都认作轨迹球。
 
-Both halves have BLE disabled and use ESB directly from boot. No Bluetooth
-discovery, pairing or GATT commissioning is required between halves and receiver.
-The receiver retains USB and host BLE HID, one active BLE connection and five
-computer profiles numbered 1–5. Its seven original bond slots are retained for
-NVS compatibility, including two legacy half bonds. A generated compatibility
-header fixes the actual host-profile count at five without enabling BLE split.
-The effective profile array and two-source battery array are checked in the ELF.
-The settings partition, existing profile indices and key namespaces are unchanged;
-normal firmware does not clear stored settings.
+确定性代码错误
+右手实际设备树采用zip_xyz，把有符号16位X/Y打包到REL_Z(code=2)的32位值发送。
+接收器配置了zip_zxy还原，但此前lism_valid_event只允许X/Y/滚轮，拒绝了REL_Z。
+这次仅为右手pipe=1、reg=1的相对事件补充允许REL_Z，保留来源、类型、长度、CRC、未知code等校验。
+压缩值不按单轴位移限幅，不能丢掉其中任意16位。另加入每5秒最多一次的
+“ESB trackball REL_Z queued: n”日志，表示已送入输入队列，不等于USB光标已实际移动。
+不改左右手固件、频道、地址、线格式、键位、200ms配置、轨迹球方向或滚动层。
 
-ESB API/envelopes start from
-[badjeff/zmk-feature-split-esb](https://github.com/badjeff/zmk-feature-split-esb/tree/314c7cbaf4a74e1add1d6ffc8249de3e29965b8c),
-pinned to `314c7cbaf4a74e1add1d6ffc8249de3e29965b8c`.
-Upstream currently documents only USB-only operation on Zephyr 4.1. This branch
-adds an experimental compatibility adapter for BLE-host coexistence; it is not
-an assertion of upstream support or hardware validation.
+怎么测试
+1. 只给接收器刷01里的LisM_ESBv32_USB_Prospector169.uf2，不用重新清设置。
+2. 重启接收器，左右手继续使用v3.1并保持开机。
+3. 在普通层转动轨迹球，观察鼠标移动和方向；再测试原滚动层。
+4. 保持接收器USB连接，告诉我刷好，我继续读日志核对REL_Z输入与鼠标输出。
+5. 最后确认普通打字、四向杆未受影响。新版本尚待这次实测，不能把软件回归当作光标已恢复。
 
-The receiver uses SDC/MPSL 4 ms requested windows; only MPSL owns RADIO/TIMER0/RTC0
-vectors. High-priority callbacks perform hardware operations and atomic/SPSC
-copies only. Kernel queues, callbacks, validation and logs execute in a cooperative
-thread. Halves own their ESB radio continuously. All three use one address set,
-pipes 0/1, 2 Mbps, +8 dBm, 2437 MHz; hopping is disabled for the first hardware
-comparison. Addresses are not cryptographic pairing secrets.
+验证记录
+接收器编译通过。设备树和配置与v3.1逐字节一致；原启动修复、IRQ与UF2检查继续通过。
+四组既有回归通过。新增1008组正负、边界、单轴与对角数据，使用实际xyz处理器、
+生产外围封装/CRC/过滤、实际ZMK中央及input-split分发、实际zxy处理器验证16位位模式与sync。
+固定解压器在这里输出的是0..65535的int32值，不做符号扩展；本测试不宣称下游有符号恢复已验证。
+对照旧过滤规则，每组压缩帧均被拒绝；新规则通过。错误pipe/reg/未知code及坏CRC仍被拒绝。
+测试替代了硬件、异步队列和USB HID，不声称已覆盖完整光标输出或所有滚动层的实机表现。
+左右手沿用UF2的SHA256记录在manifest中，未重新编译或更改它们。
 
-## Compatibility and recovery
-
-- Raw driver sources are hash-checked and copied into isolated generated modules.
-  Shared ZMK, Nordic SDK and Prospector checkouts are never patched in place.
-- TX records retain their own source/pipe and retry payload. Partial frames,
-  invalid sources/types/lengths, CRC failures and RX backpressure are checked.
-- Wire boot IDs and sequence numbers suppress duplicates. Commands are targeted
-  at the current half boot and acknowledged after valid receive-queue insertion.
-  Delayed bootloader/reset commands cannot execute on a later half boot.
-- Every half sends a 200 ms held-state snapshot/heartbeat. It restores all 46
-  positions, right mouse buttons and cached battery percentage after receiver
-  restart, and heals dropped key/button releases. Each source has its own 1500 ms
-  lease; one half cannot keep the other alive. Physical long holds are maintained
-  by heartbeat. Disconnect cleanup preserves the last battery display value.
-- Existing battery circles consume the original status and battery events,
-  now supplied by actual ESB link evidence. RGB startup and charge colors remain;
-  peripheral connectivity comes from ESB ACKs, not a nonexistent BLE connection.
-
-This first-test ESB wire format uses CRC, not encryption, authentication or
-cryptographic anti-replay. Boot/sequence checks are duplicate suppression only.
-Host BLE keeps the original secure-connections-only policy. RF delivery is not
-guaranteed by software tests: a hardware ACK can precede application processing;
-overflow or interference can still lose fast taps, relative movement or scroll.
-Snapshots repair held state, not lost relative motion. Range, latency, sleep/wake,
-interference, simultaneous typing/pointing and BLE coexistence need real testing.
-
-## Build and first test
-
-Use the custom workflow or `tools/build_upstream_esb.py --workspace /workspace
---target left|right|dongle|reset` after initializing west with `config/west.yml`.
-The generic baseline build entry points deliberately fail on this experimental
-branch, so they cannot silently produce old BLE-split binaries.
-
-Flash all three corresponding `LisM_ESBv2_*` images and restart them. Test USB
-output first, then select the original BLE output/profile and test the same
-keyboard and pointer inputs. No reset is required for ESB discovery. The separate
-settings-reset image erases host pairings/settings and is optional, not a cure
-for radio defects. Reflash all three archived original BLE UF2 files to revert.
-
-Verify before delivery: four successful builds, actual configuration/ELF vector
-and array checks, UF2 family/address checks, baseline keymap/scroll regressions,
-and the production C framing/link/radio host tests under ASan/UBSan.
-These tests fake hardware, timing and callbacks; they do not prove RF operation.
+ESB仍无加密认证；本版仅用于当前单套功能测试，不增加BLE、触控或菜单。
+03为已实测正常BLE整套回退包；需要回退到BLE时三台均刷其中对应正常固件。
+04含日志/构建/软件测试/证据，05是本次源码和固定驱动快照。

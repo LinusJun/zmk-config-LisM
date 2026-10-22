@@ -1,3 +1,8 @@
+#if defined(CONFIG_LISM_KB_HUB)
+#include "hub_radio.inc"
+#elif defined(CONFIG_SHIELD_LISM_L)
+#include "left_radio.inc"
+#else
 /* SPDX-License-Identifier: MIT
  * Nordic ESB + badjeff app_esb API. PTX owns its radio continuously; the BLE
  * host receiver owns ESB only inside MPSL slots. IRQ0 copies to an SPSC ring;
@@ -5,7 +10,12 @@
  */
 #include "app_esb.h"
 #include "common.h"
+#if IS_ENABLED(CONFIG_LISM_BLE_INPUT_BRIDGE)
+#include <lism_screen.h>
+#endif
 #include "link.h"
+#include <kb_route/route.h>
+#include <kb_route/signal.h>
 #include <esb.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/crc.h>
@@ -16,7 +26,11 @@
 #include <zephyr/logging/log.h>
 #if IS_ENABLED(CONFIG_ZMK_BLE)
 #include <mpsl_timeslot.h>
-extern void *__ptr__radio_dynamic_irq_handler;
+#include <sdc_soc.h>
+#include <mpsl/mpsl_work.h>
+extern int lism_esb_resources_init(void);
+extern void lism_esb_radio_irq(void);
+extern void lism_esb_ppi_channels_get(uint8_t *channels);
 #endif
 LOG_MODULE_REGISTER(lism_radio,LOG_LEVEL_INF);
 #if IS_ENABLED(CONFIG_MPSL_ASSERT_HANDLER)
@@ -24,15 +38,38 @@ LOG_MODULE_REGISTER(lism_radio,LOG_LEVEL_INF);
 void mpsl_assert_handle(const char *file,int line) { ARG_UNUSED(file);ARG_UNUSED(line);k_panic(); }
 #endif
 #define NODE DT_COMPAT_GET_ANY_STATUS_OKAY(zmk_esb_split)
+#if defined(CONFIG_SHIELD_LISM_L)
+static const uint8_t base0[]={0xB7,0x63,0xA9,0xE7},base1[]={0xC9,0x57,0x8D,0xF1};
+#else
 static const uint8_t base0[]=DT_PROP(NODE,base_addr_0),base1[]=DT_PROP(NODE,base_addr_1);
+#endif
 static const uint8_t prefixes[]=DT_PROP(NODE,addr_prefix);
 #define SLOT_US 4000
 #define WIRE_HEADER LISM_WIRE_HEADER
-struct tx_item { struct esb_payload payload;uint8_t retries;uint32_t target_boot; };
+struct tx_item { struct esb_payload payload;uint8_t retries;uint32_t target_boot,generation; };
+static atomic_t command_generation;
+static struct k_spinlock signal_lock;
+static struct {int8_t dbm;int64_t seen;} signals[2];
+bool kb_esb_signal(unsigned source,int8_t*dbm){
+    if(source>=2)return false;k_spinlock_key_t k=k_spin_lock(&signal_lock);
+    bool valid=signals[source].seen && k_uptime_get()-signals[source].seen<3000;
+    *dbm=signals[source].dbm;k_spin_unlock(&signal_lock,k);return valid;
+}
+void kb_receiver_fence_commands(void){atomic_inc(&command_generation);}
 K_MSGQ_DEFINE(tx_queue,sizeof(struct tx_item),32,4);
 static app_esb_callback_t callback;
 static app_esb_mode_t mode;
 static atomic_t enabled,ready,irq_error,tx_result,ring_overflow;
+static atomic_t diag_tx_ok,diag_tx_fail,diag_rx,diag_valid,diag_accepted;
+#if IS_ENABLED(CONFIG_ZMK_BLE)
+static atomic_t diag_slots,diag_blocked,diag_timer,diag_idle,diag_cancel,diag_radio;
+static atomic_t diag_signal,diag_requests,diag_request_rc,diag_handoffs;
+static atomic_t diag_power,diag_state,diag_shorts,diag_interrupts,diag_mpsl_work;
+static void mpsl_probe(struct k_work *work) {
+    ARG_UNUSED(work);atomic_inc(&diag_mpsl_work);
+}
+K_WORK_DEFINE(mpsl_probe_work,mpsl_probe);
+#endif
 static bool initialized,have_tx;
 static struct tx_item current;
 static uint32_t boot_id,next_seq=1;
@@ -53,6 +90,8 @@ static void collect_rx(void) {
     }
 }
 static void radio_event(const struct esb_evt *e) {
+    if(e->evt_id==ESB_EVENT_TX_SUCCESS)atomic_inc(&diag_tx_ok);
+    if(e->evt_id==ESB_EVENT_TX_FAILED)atomic_inc(&diag_tx_fail);
     if(e->evt_id==ESB_EVENT_TX_SUCCESS && mode==APP_ESB_MODE_PTX)atomic_set(&tx_result,1);
     else if(e->evt_id==ESB_EVENT_TX_FAILED)atomic_set(&tx_result,-1);
     /* One producer: direct mode uses this IRQ; MPSL mode drains at slot end. */
@@ -73,25 +112,46 @@ static int configure_radio(void) {
     if(!rc)rc=esb_set_prefixes(prefixes,ARRAY_SIZE(prefixes));
     if(!rc)rc=esb_enable_pipes(BIT(0)|BIT(1));
     if(!rc)rc=esb_set_rf_channel(37);
-    if(!rc && have_tx)rc=esb_write_payload(&current.payload);
+    if(!rc && have_tx && current.generation==(uint32_t)atomic_get(&command_generation))rc=esb_write_payload(&current.payload);
     if(!rc && mode==APP_ESB_MODE_PRX)rc=esb_start_rx();
     return rc;
 }
 #if IS_ENABLED(CONFIG_ZMK_BLE)
 BUILD_ASSERT(IS_ENABLED(CONFIG_ZMK_SPLIT_ROLE_CENTRAL));
+BUILD_ASSERT(!IS_ENABLED(CONFIG_MPSL_FEM),"Slot adapter assumes XIAO has no external FEM");
 static mpsl_timeslot_signal_return_param_t response;
 static mpsl_timeslot_request_t request={.request_type=MPSL_TIMESLOT_REQ_TYPE_EARLIEST,
     .params.earliest={.hfclk=MPSL_TIMESLOT_HFCLK_CFG_XTAL_GUARANTEED,
     .priority=MPSL_TIMESLOT_PRIORITY_NORMAL,.length_us=SLOT_US,.timeout_us=100000}};
 static void end_slot(void) {
     if(initialized) { collect_rx();esb_disable();initialized=false; }
+    /* The bounded SDK cleanup powers RADIO off. Return an enabled peripheral
+     * in DISABLED state to MPSL/SDC, never a powered-off radio. Valid grant only. */
+    nrf_radio_power_set(NRF_RADIO,false);
+    nrf_radio_power_set(NRF_RADIO,true);
+    __DSB();
+    nrf_radio_shorts_disable(NRF_RADIO,0xFFFFFFFF);
+    nrf_radio_int_disable(NRF_RADIO,0xFFFFFFFF);
     nrf_timer_int_disable(NRF_TIMER0,NRF_TIMER_INT_COMPARE0_MASK);
-    NVIC_ClearPendingIRQ(RADIO_IRQn);irq_enable(RADIO_IRQn);
+    nrf_timer_event_clear(NRF_TIMER0,NRF_TIMER_EVENT_COMPARE0);
+    NVIC_ClearPendingIRQ(RADIO_IRQn);
+    /* Sample only while owning the slot. Thread diagnostics read this cache. */
+    atomic_set(&diag_power,NRF_RADIO->POWER);
+    atomic_set(&diag_state,NRF_RADIO->STATE);
+    atomic_set(&diag_shorts,NRF_RADIO->SHORTS);
+    atomic_set(&diag_interrupts,NRF_RADIO->INTENSET);
+    atomic_inc(&diag_handoffs);
 }
 static mpsl_timeslot_signal_return_param_t *slot(mpsl_timeslot_session_id_t id,uint32_t signal) {
     ARG_UNUSED(id);response.callback_action=MPSL_TIMESLOT_SIGNAL_ACTION_NONE;
+    atomic_set(&diag_signal,signal);
     switch(signal) {
     case MPSL_TIMESLOT_SIGNAL_START: {
+        atomic_inc(&diag_slots);
+#if IS_ENABLED(CONFIG_LISM_BLE_INPUT_BRIDGE)
+        lism_coex_grant();
+#endif
+        if(!atomic_get(&enabled)) {end_slot();response.callback_action=MPSL_TIMESLOT_SIGNAL_ACTION_END;return &response;}
         NVIC_ClearPendingIRQ(RADIO_IRQn);
         nrf_radio_power_set(NRF_RADIO,false);nrf_radio_power_set(NRF_RADIO,true);
         nrf_timer_bit_width_set(NRF_TIMER0,NRF_TIMER_BIT_WIDTH_32);
@@ -103,18 +163,27 @@ static mpsl_timeslot_signal_return_param_t *slot(mpsl_timeslot_session_id_t id,u
         return &response;
     }
     case MPSL_TIMESLOT_SIGNAL_RADIO:
-        if(initialized)((void (*)(const void *))__ptr__radio_dynamic_irq_handler)(NULL);
+        atomic_inc(&diag_radio);
+        if(initialized)lism_esb_radio_irq();
         return &response;
     case MPSL_TIMESLOT_SIGNAL_TIMER0:
+        atomic_inc(&diag_timer);
         if(nrf_timer_event_check(NRF_TIMER0,NRF_TIMER_EVENT_COMPARE0)) {
             nrf_timer_event_clear(NRF_TIMER0,NRF_TIMER_EVENT_COMPARE0);end_slot();
             response.callback_action=MPSL_TIMESLOT_SIGNAL_ACTION_END;
         }
         return &response;
     case MPSL_TIMESLOT_SIGNAL_SESSION_IDLE:
-    case MPSL_TIMESLOT_SIGNAL_BLOCKED:
-    case MPSL_TIMESLOT_SIGNAL_CANCELLED:
+        atomic_inc(&diag_idle);
         atomic_set(&idle,1);return NULL;
+    case MPSL_TIMESLOT_SIGNAL_BLOCKED:
+        atomic_inc(&diag_blocked);
+        atomic_set(&idle,1);return NULL;
+    case MPSL_TIMESLOT_SIGNAL_CANCELLED:
+        atomic_inc(&diag_cancel);
+        atomic_set(&idle,1);return NULL;
+    case MPSL_TIMESLOT_SIGNAL_SESSION_CLOSED:
+        atomic_set(&irq_error,-ESHUTDOWN);return NULL;
     case MPSL_TIMESLOT_SIGNAL_INVALID_RETURN:
     case MPSL_TIMESLOT_SIGNAL_OVERSTAYED:
         atomic_set(&irq_error,-EIO);return NULL;
@@ -128,7 +197,9 @@ static int clocks_start(void) {
     if(!manager)return -ENXIO;
     sys_notify_init_spinwait(&client.notify);rc=onoff_request(manager,&client);
     if(rc<0)return rc;
-    while(sys_notify_fetch_result(&client.notify,&result))k_yield();
+    /* Yielding a cooperative thread does not let lower-priority USB/log
+     * workers run. Sleep while keeping this pending client's storage alive. */
+    while(sys_notify_fetch_result(&client.notify,&result))k_sleep(K_MSEC(1));
     return result;
 }
 static void notify(app_esb_event_type_t type) {
@@ -138,6 +209,7 @@ static void receive_frames(void) {
     unsigned t;
     while((t=(unsigned)atomic_get(&tail))!=(unsigned)atomic_get(&head)) {
         struct esb_payload p=receive_ring[t];atomic_set(&tail,(t+1)%ARRAY_SIZE(receive_ring));
+        atomic_inc(&diag_rx);
         if(p.pipe>=2 || p.length<WIRE_HEADER+sizeof(struct esb_msg_prefix)+2+sizeof(struct esb_msg_postfix) ||
             p.length>CONFIG_ESB_MAX_PAYLOAD_LENGTH || memcmp(p.data,"LsE2",4))continue;
         struct esb_msg_prefix prefix;memcpy(&prefix,p.data+WIRE_HEADER,sizeof(prefix));
@@ -147,6 +219,7 @@ static void receive_frames(void) {
         struct esb_msg_postfix crc;memcpy(&crc,p.data+WIRE_HEADER+frame_len,sizeof(crc));
         if(crc32_ieee(p.data+WIRE_HEADER,frame_len)!=crc.crc)continue;
         if(!lism_wire_valid(p.pipe,p.data+WIRE_HEADER,body_len))continue;
+        atomic_inc(&diag_valid);
         /* A delayed reset/bootloader command for a previous half boot must
          * never execute again after that half restarts. */
         if(mode==APP_ESB_MODE_PTX && get32(p.data+12)!=boot_id)continue;
@@ -162,6 +235,8 @@ static void receive_frames(void) {
         app_esb_event_t e={.evt_type=APP_ESB_EVT_RX,.pipe=p.pipe,
             .buf=p.data+WIRE_HEADER,.data_length=p.length-WIRE_HEADER};callback(&e);
         if(e.accepted) {
+            if(p.rssi && p.rssi<127){k_spinlock_key_t k=k_spin_lock(&signal_lock);signals[p.pipe].dbm=-(int)p.rssi;signals[p.pipe].seen=k_uptime_get();k_spin_unlock(&signal_lock,k);}
+            atomic_inc(&diag_accepted);
             last_seq[p.pipe]=s;
             if(mode==APP_ESB_MODE_PTX) {
                 k_mutex_lock(&send_mutex,K_FOREVER);
@@ -171,10 +246,32 @@ static void receive_frames(void) {
         }
     }
 }
+/* PRX puts a command in the ACK FIFO while RX remains running. esb_start_tx()
+ * belongs to PTX and returns an error on a continuously listening receiver. */
+static int submit_direct_payload(void) {
+    int rc=esb_write_payload(&current.payload);
+    if(!rc && mode==APP_ESB_MODE_PTX)rc=esb_start_tx();
+    return rc;
+}
 static void radio_thread(void *a,void *b,void *c) {
     ARG_UNUSED(a);ARG_UNUSED(b);ARG_UNUSED(c);
+    LOG_INF("ESB v4.7.2 radio thread entered, host BLE=%d",IS_ENABLED(CONFIG_ZMK_BLE));
     while(!callback)k_sleep(K_MSEC(1));
-    int rc=clocks_start();if(rc)goto failed;
+    int rc;
+#if IS_ENABLED(CONFIG_ZMK_BLE)
+    /* Own TIMER2/PPI for this app, but never access RADIO outside a slot.
+     * This non-preemptible thread serializes MPSL API calls like its sample. */
+    rc=lism_esb_resources_init();if(rc)goto failed;
+    uint8_t channels[6];uint32_t ppi_mask=0;
+    lism_esb_ppi_channels_get(channels);
+    for(unsigned i=0;i<ARRAY_SIZE(channels);i++)ppi_mask|=BIT(channels[i]);
+    LOG_INF("ESB PPI channels=%u,%u,%u,%u,%u,%u mask=%x",
+        channels[0],channels[1],channels[2],channels[3],channels[4],channels[5],ppi_mask);
+    if(ppi_mask & SDC_PPI_CHANNELS_USED_MASK) {rc=-EBUSY;goto failed;}
+
+#else
+    rc=clocks_start();if(rc)goto failed;
+#endif
     do { boot_id=sys_rand32_get(); }while(!boot_id);
 #if IS_ENABLED(CONFIG_ZMK_BLE)
     mpsl_timeslot_session_id_t session;
@@ -187,8 +284,30 @@ static void radio_thread(void *a,void *b,void *c) {
     notify(APP_ESB_EVT_TX_FAIL); /* kick frames queued before the HF clock was ready */
     LOG_INF("ESB ready: %s, pipe %d, RF 2437 MHz, host BLE %d",
         mode==APP_ESB_MODE_PRX?"PRX":"PTX",CONFIG_ZMK_SPLIT_ESB_PERIPHERAL_ID,IS_ENABLED(CONFIG_ZMK_BLE));
-    int64_t pending_since=0;bool in_flight=false;
+    int64_t pending_since=0,next_diag=0;bool in_flight=false;
     for(;;) {
+        if(k_uptime_get()>=next_diag) {
+            next_diag=k_uptime_get()+5000;
+            LOG_INF("ESB diag en=%d txOK=%d txFail=%d rx=%d valid=%d queued=%d",
+                (int)atomic_get(&enabled),(int)atomic_get(&diag_tx_ok),(int)atomic_get(&diag_tx_fail),
+                (int)atomic_get(&diag_rx),(int)atomic_get(&diag_valid),(int)atomic_get(&diag_accepted));
+#if IS_ENABLED(CONFIG_ZMK_BLE)
+            LOG_INF("ESB v4.7.2 slots=%d timer=%d idle_cb=%d blocked=%d cancel=%d radio=%d",
+                (int)atomic_get(&diag_slots),(int)atomic_get(&diag_timer),(int)atomic_get(&diag_idle),
+                (int)atomic_get(&diag_blocked),(int)atomic_get(&diag_cancel),(int)atomic_get(&diag_radio));
+            LOG_INF("ESB sched idle=%d last=%d req=%d rc=%d mpsl_work=%d",
+                (int)atomic_get(&idle),(int)atomic_get(&diag_signal),(int)atomic_get(&diag_requests),
+                (int)atomic_get(&diag_request_rc),(int)atomic_get(&diag_mpsl_work));
+            LOG_INF("ESB handoff n=%d POWER=%d STATE=%d SHORTS=%x INT=%x",
+                (int)atomic_get(&diag_handoffs),(int)atomic_get(&diag_power),(int)atomic_get(&diag_state),
+                (unsigned)atomic_get(&diag_shorts),(unsigned)atomic_get(&diag_interrupts));
+#if IS_ENABLED(CONFIG_LISM_BLE_INPUT_BRIDGE)
+            lism_coex_log();
+            LOG_INF("ESB command q=%u pending=%u age_ms=%u wire_seq=%u target=%u",k_msgq_num_used_get(&tx_queue),have_tx,have_tx?(unsigned)(k_uptime_get()-pending_since):0,have_tx?get32(current.payload.data+8):0,have_tx?current.target_boot:0);
+#endif
+            mpsl_work_submit(&mpsl_probe_work); /* thread only, nonblocking probe */
+#endif
+        }
         if((rc=atomic_set(&irq_error,0)))break;
         if(atomic_set(&ring_overflow,0))LOG_WRN("ESB RX ring overflow; snapshot will repair held state");
         receive_frames();
@@ -197,6 +316,7 @@ static void radio_thread(void *a,void *b,void *c) {
             if(have_tx && mode==APP_ESB_MODE_PRX && current.target_boot!=(uint32_t)atomic_get(&last_boot[current.payload.pipe])) {
                 have_tx=false;in_flight=false;notify(APP_ESB_EVT_TX_FAIL);
             }
+            if(have_tx && current.generation!=(uint32_t)atomic_get(&command_generation)){have_tx=false;in_flight=false;}
             if(have_tx && result==1) {
                 have_tx=false;in_flight=false;lism_ack_seen();notify(APP_ESB_EVT_TX_SUCCESS);
             } else if(have_tx && (result<0 || k_uptime_get()-pending_since>3000)) {
@@ -213,17 +333,18 @@ static void radio_thread(void *a,void *b,void *c) {
                 if(mode==APP_ESB_MODE_PRX && current.target_boot!=(uint32_t)atomic_get(&last_boot[current.payload.pipe])) {
                     have_tx=false;notify(APP_ESB_EVT_TX_FAIL);
                 }
+                if(current.generation!=(uint32_t)atomic_get(&command_generation))have_tx=false;
             }
         }
 #if IS_ENABLED(CONFIG_ZMK_BLE)
         if(atomic_get(&enabled) && atomic_get(&idle)) {
             atomic_set(&idle,0);rc=mpsl_timeslot_request(session,&request);
+            atomic_inc(&diag_requests);atomic_set(&diag_request_rc,rc);
             if(rc) { atomic_set(&idle,1);LOG_WRN("ESB slot request failed %d",rc);k_sleep(K_MSEC(10)); }
         }
 #else
         if(have_tx && !in_flight && atomic_get(&enabled)) {
-            rc=esb_write_payload(&current.payload);
-            if(!rc)rc=esb_start_tx();
+            rc=submit_direct_payload();
             if(!rc)in_flight=true;
             else if(rc!=-EBUSY) {LOG_WRN("ESB TX start %d",rc);esb_flush_tx();}
         }
@@ -236,9 +357,15 @@ static void radio_thread(void *a,void *b,void *c) {
 failed:
     atomic_clear(&ready);lism_notify_status();LOG_ERR("ESB radio stopped, error %d",rc);
 }
-K_THREAD_DEFINE(lism_radio_thread,4096,radio_thread,NULL,NULL,NULL,K_PRIO_COOP(8),0,SYS_FOREVER_MS);
-static int start_radio(void) { k_thread_start(lism_radio_thread);return 0; }
-SYS_INIT(start_radio,APPLICATION,99);
+/* Static threads are initialized AFTER APPLICATION SYS_INIT callbacks. A
+ * k_thread_start() in that level runs too early and is ineffective; FOREVER
+ * would then leave this thread asleep permanently. Let the kernel start it. */
+#if IS_ENABLED(CONFIG_ZMK_BLE)
+#define LISM_RADIO_PRIORITY K_PRIO_COOP(CONFIG_MPSL_THREAD_COOP_PRIO)
+#else
+#define LISM_RADIO_PRIORITY K_PRIO_COOP(8)
+#endif
+K_THREAD_DEFINE(lism_radio_thread,4096,radio_thread,NULL,NULL,NULL,LISM_RADIO_PRIORITY,0,0);
 bool lism_radio_ready(void) {return atomic_get(&ready);}
 int zmk_split_esb_init(app_esb_mode_t selected,app_esb_callback_t cb) {mode=selected;callback=cb;return 0;}
 int zmk_split_esb_set_enable(bool value) {atomic_set(&enabled,value);return 0;}
@@ -246,12 +373,12 @@ int zmk_split_esb_send(app_esb_data_t *p) {
     if(!p || p->pipe>=2 || !p->len || p->len>CONFIG_ESB_MAX_PAYLOAD_LENGTH-WIRE_HEADER)return -EINVAL;
     k_mutex_lock(&send_mutex,K_FOREVER);
     if(!boot_id || !next_seq) {k_mutex_unlock(&send_mutex);return -EAGAIN;}
-    struct tx_item item={.retries=p->max_retry};
+    struct tx_item item={.retries=p->max_retry,.generation=atomic_get(&command_generation)};
     item.target_boot=atomic_get(&last_boot[p->pipe]);
     item.payload.pipe=p->pipe;item.payload.noack=false;item.payload.length=p->len+WIRE_HEADER;
     memcpy(item.payload.data,"LsE2",4);put32(item.payload.data+4,boot_id);put32(item.payload.data+8,next_seq);
     if(mode==APP_ESB_MODE_PRX) {
-        put32(item.payload.data+12,item.target_boot);put32(item.payload.data+16,0);
+        put32(item.payload.data+12,item.target_boot);put32(item.payload.data+16,kb_receiver_route_epoch());
     } else {
         put32(item.payload.data+12,atomic_get(&command_ack_boot));
         put32(item.payload.data+16,atomic_get(&command_ack_seq));
@@ -260,3 +387,5 @@ int zmk_split_esb_send(app_esb_data_t *p) {
     int rc=k_msgq_put(&tx_queue,&item,K_NO_WAIT);if(!rc)next_seq++;
     k_mutex_unlock(&send_mutex);return rc;
 }
+
+#endif

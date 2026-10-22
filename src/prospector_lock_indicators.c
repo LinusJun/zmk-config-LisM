@@ -7,6 +7,7 @@
  */
 
 #include <lvgl.h>
+#include <kb_route/mirror.h>
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
 
@@ -56,6 +57,9 @@ static lv_obj_t *get_operator_modifier_row(lv_obj_t *screen) {
         lv_label_set_text(label, modifier_labels[label_index]);
         lv_obj_set_style_text_font(label, &FG_Medium_20, LV_PART_MAIN);
     }
+    for(unsigned i=1;i<lv_obj_get_child_cnt(modifiers);i+=2){
+        lv_obj_set_height(lv_obj_get_child(modifiers,i),16);
+    }
 
     return modifiers;
 }
@@ -70,7 +74,7 @@ static lv_obj_t *create_lock_label(lv_obj_t *parent, const char *text) {
 
 static void create_separator(lv_obj_t *parent) {
     lv_obj_t *separator = lv_obj_create(parent);
-    lv_obj_set_size(separator, 2, 24);
+    lv_obj_set_size(separator, 2, 16);
     lv_obj_set_style_bg_color(separator, lv_color_hex(COLOR_SEPARATOR), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(separator, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(separator, 0, LV_PART_MAIN);
@@ -97,6 +101,7 @@ static bool create_lock_indicator_row(void) {
 }
 
 static void lock_indicator_update_cb(struct lock_indicator_state state) {
+    struct kb_mirror m;if(kb_mirror_snapshot(&m))state.indicators=m.indicators;
     if (caps_label == NULL || num_label == NULL) {
         if (!create_lock_indicator_row()) {
             k_work_reschedule(&deferred_init_work, K_MSEC(250));
@@ -148,3 +153,5 @@ static int lism_lock_indicators_init(void) {
 }
 
 SYS_INIT(lism_lock_indicators_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);
+
+void kb_mirror_locks_refresh(void) {lock_indicator_update_cb(lock_indicator_get_state(NULL));}

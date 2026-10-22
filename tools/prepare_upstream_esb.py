@@ -12,7 +12,8 @@ def prepare(driver,dest):
         assert hashlib.sha256((driver/name).read_bytes()).hexdigest()==digest,name
     shutil.copytree(driver,dest,dirs_exist_ok=True,ignore=shutil.ignore_patterns('.git'))
     p=dest/'src/split/Kconfig'
-    p.write_text(replace(p.read_text(),'select MPSL_DYNAMIC_INTERRUPTS if !BLE','select MPSL_DYNAMIC_INTERRUPTS if !ZMK_BLE'))
+    t=replace(p.read_text(),'select MPSL_DYNAMIC_INTERRUPTS if !BLE','# MPSL uses its fixed vectors; ESB runs only inside granted slots.')
+    p.write_text(t)
     p=dest/'src/split/esb/Kconfig'
     p.write_text(replace(p.read_text(),'    depends on BLE','    depends on ZMK_BLE'))
     folder=dest/'src/split/esb'
@@ -25,11 +26,11 @@ zephyr_library_sources(common.c app_esb.c link.c)
 zephyr_library_sources_ifdef(CONFIG_ZMK_SPLIT_ROLE_CENTRAL central.c)
 zephyr_library_sources_ifndef(CONFIG_ZMK_SPLIT_ROLE_CENTRAL peripheral.c)
 ''')
-    for source,name in [('common.c','common.c'),('radio.c','app_esb.c'),('link.c','link.c'),('link.h','link.h')]:
+    for source,name in [('common.c','common.c'),('radio.c','app_esb.c'),('link.c','link.c'),('link.h','link.h'),('hub_radio.inc','hub_radio.inc'),('hub_motion.inc','hub_motion.inc'),('left_radio.inc','left_radio.inc')]:
         shutil.copyfile(ROOT/'src/esb_upstream'/source,folder/name)
     p=folder/'common.h';p.write_text(p.read_text()+'\n#include "link.h"\n')
     for name in ['central.c','peripheral.c']:
-        p=folder/name;t=p.read_text()
+        p=folder/name;t='#include <kb_route/route.h>\n'+p.read_text()
         # The new driver controls direct PTX as well as timeslot PRX.
         t=replace(t,'#if IS_ENABLED(CONFIG_ZMK_SPLIT_ESB_USE_TIMESLOT)'+(' ' if name=='peripheral.c' else '')+'\n    return zmk_split_esb_set_enable(enabled);\n#else\n    return 0;\n#endif','    return zmk_split_esb_set_enable(enabled);')
         t=replace(t,'.available = true,','.available = lism_radio_ready(),')
@@ -38,13 +39,26 @@ zephyr_library_sources_ifndef(CONFIG_ZMK_SPLIT_ROLE_CENTRAL peripheral.c)
         t=replace(t,'            case -EAGAIN:\n                break;','            case -EAGAIN:\n                return;')
         t=t.replace('while (ring_buf_size_get(rx_buf) > ESB_MSG_EXTRA_SIZE)','while (ring_buf_size_get(rx_buf) >= sizeof(struct esb_msg_prefix) + sizeof(struct esb_msg_postfix))')
         if name=='central.c':
+            # LisM admits only logical sources 0 and 1 before indexing RX.
+            # Keep Nordic's hardware pipe count and each live queue's depth;
+            # remove only the six unused software rings and their backing data.
+            t=replace(t,'struct ring_buf rx_bufs[CONFIG_ESB_PIPE_COUNT];\nuint8_t rx_bufs_data[CONFIG_ESB_PIPE_COUNT][RX_RING_BUF_SIZE];',
+'''#define LISM_RX_PIPE_COUNT 2
+BUILD_ASSERT(CONFIG_ESB_PIPE_COUNT >= LISM_RX_PIPE_COUNT);
+struct ring_buf rx_bufs[LISM_RX_PIPE_COUNT];
+uint8_t rx_bufs_data[LISM_RX_PIPE_COUNT][RX_RING_BUF_SIZE];''')
+            t=replace(t,'i < CONFIG_ESB_PIPE_COUNT','i < LISM_RX_PIPE_COUNT')
+            t=replace(t,'pipe < CONFIG_ESB_PIPE_COUNT','pipe < LISM_RX_PIPE_COUNT')
+            t=replace(t,'        ring_buf_reset(&tx_buf);\n        return -ENOSPC;','        return -ENOSPC; /* retain previously accepted commands */')
             t=replace(t,'    sources[0] = 0;\n\n    return 1;','    int count=0;\n    for(unsigned i=0;i<2;i++) if(lism_connected(i)) sources[count++]=i;\n    return count;')
             start=t.index('                if (&esb_central == active_transport) {')
             end=t.index('                break;\n            case -EAGAIN:',start)
             t=t[:start]+'''                if (lism_valid_event(pipe, &env))
                     lism_handle_event(env.payload.source, &env.payload.event);
 '''+t[end:]
-            fn='split_central_esb_send_command';sig='uint8_t source,\n                                          struct zmk_split_transport_central_command cmd'
+            t+='\nint kb_left_command(const struct zmk_split_transport_central_command *cmd) {return split_central_esb_send_command(0,*cmd); }\n'
+            t+='\n#if !IS_ENABLED(CONFIG_LISM_KB_HUB)\nvoid kb_route_flush_commands(void) {lism_tx_lock();ring_buf_reset(&tx_buf);lism_tx_unlock();kb_receiver_fence_commands();}\n#endif\n'
+            fn='split_central_esb_send_command' ;sig='uint8_t source,\n                                          struct zmk_split_transport_central_command cmd'
             wrap='''
 static int split_central_esb_send_command(uint8_t source, struct zmk_split_transport_central_command cmd) {
     if(source>=2) return -EINVAL;
@@ -81,8 +95,12 @@ static size_t lism_command_size(const struct zmk_split_transport_central_command
             wrap='''
 static int split_peripheral_esb_report_event(const struct zmk_split_transport_peripheral_event *event) {
     lism_tx_lock();lism_track_event(event);
+#if defined(CONFIG_SHIELD_LISM_L)
+    lism_tx_unlock();return 0; /* stamped, ordered data uses the left route queue */
+#else
     int rc=split_peripheral_esb_report_event_impl(event);
     lism_tx_unlock();return rc;
+#endif
 }
 '''
         t=replace(t,fn+'('+sig+')',fn+'_impl('+sig+')')

@@ -6,3 +6,25 @@ config LISM_PROSPECTOR_LOCK_INDICATORS
     help
       Extends the OPERATOR modifier row with CAP and NUM host LED indicators,
       using one compact font, baseline, and spacing scheme for all six labels.
+
+config LISM_BLE_INPUT_BRIDGE
+    bool "Standard BLE inputs with ESB-first admission control"
+    depends on ZMK_SPLIT_ROLE_CENTRAL && ZMK_BLE
+    select BT_CENTRAL
+    select BT_OBSERVER
+    select BT_GATT_CLIENT
+    default y if SHIELD_LISM_DONGLE
+config LISM_INPUT_LEGACY_COMPAT
+    bool
+    default y if LISM_BLE_INPUT_BRIDGE
+config LISM_INPUT_AUTO_PAIR
+    bool
+    default y if LISM_INPUT_LEGACY_COMPAT
+
+config LISM_KB_ROUTE
+    bool "Right-hand whole-keyboard BLE/dongle output routing"
+    default y
+config LISM_KB_HUB
+    bool "Right-hand ESB hub with five independent BLE computer slots"
+    default y if SHIELD_LISM_R
+    depends on ZMK_SPLIT_ROLE_CENTRAL && ZMK_BLE

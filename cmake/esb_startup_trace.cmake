@@ -1,0 +1,12 @@
+get_filename_component(_lism_display_source "${APPLICATION_SOURCE_DIR}/src/display/main.c" REALPATH)
+set(_lism_display_copy "${CMAKE_CURRENT_BINARY_DIR}/lism_display_startup.c")
+set(_lism_brightness "${LISM_DISPLAY_MODULE}/boards/shields/prospector_adapter/src/brightness.c")
+execute_process(COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/../tools/prepare_startup_trace.py"
+  "${_lism_display_source}" "${_lism_display_copy}" "${_lism_brightness}" RESULT_VARIABLE result)
+if(NOT result EQUAL 0)
+  message(FATAL_ERROR "Pinned display startup instrumentation failed")
+endif()
+set_source_files_properties("${_lism_display_source}" TARGET_DIRECTORY app PROPERTIES HEADER_FILE_ONLY ON)
+get_filename_component(_lism_display_directory "${_lism_display_source}" DIRECTORY)
+target_include_directories(app PRIVATE "${_lism_display_directory}")
+target_sources(app PRIVATE "${_lism_display_copy}")

@@ -1,0 +1,3 @@
+description: Whole LisM keyboard output route and its independent five BLE host profiles
+compatible: "lism,behavior-kb-route"
+include: one_param.yaml
