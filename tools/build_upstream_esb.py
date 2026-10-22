@@ -43,6 +43,9 @@ def build(target,ws,modules=None,driver=None):
         shutil.copyfile(ROOT/'src/esb_upstream/lism_hog_routing.h', compat.parent/'lism_hog_routing.h')
     display=ws/('display-'+target)
     shutil.copytree(ws/'prospector-zmk-module',display,dirs_exist_ok=True,ignore=shutil.ignore_patterns('.git'))
+    if display_central:
+        shutil.copyfile(ROOT/'src/display_jd9853a.c',display/'drivers/display/display_st7789v.c')
+        (display/'boards/shields/prospector_adapter/src/display_rotate_init.c').write_text('/* Fixed native landscape; no rotation buffer. */\n')
     p=display/'CMakeLists.txt';p.write_text(replace(p.read_text(),'        zephyr_library_sources(src/split/bluetooth/central_status_changed_observer.c)','        # ESB link emits the existing peripheral-status event directly.'))
     operator=display/'boards/shields/prospector_adapter/src/layouts/operator'
     for suffix in ['c','h']:
@@ -61,14 +64,18 @@ def build(target,ws,modules=None,driver=None):
     text=p.read_text()
     text=replace(text,'#include <lvgl.h>','#include <lvgl.h>\n#include <lism_screen.h>\n#include <kb_route/icons.h>\n#include <kb_route/mirror.h>')
     text=replace(text,'    return screen;','    kb_route_icons_create(screen);\n    kb_mirror_ui_start();\n    lism_screen_create(screen);\n    return screen;')
+    if display_central:
+        text='#include "xiao147_ui.h"\n'+text
+        text=replace(text,'    return screen;','    xiao147_ui_start(screen);\n    return screen;')
     p.write_text(text)
     mods=modules.split(';') if modules else subprocess.check_output(['west','list','-f','{abspath}'],cwd=ws,text=True).splitlines()
     mods=[m for m in mods if Path(m).is_dir() and Path(m).name not in ['prospector-zmk-module','zmk-feature-split-esb',ROOT.name]]
     mods=list(dict.fromkeys([str(ROOT),str(prepared),str(display),str(ws/'nrf'),str(ws/'nrfxlib')]+mods))
-    shield={'left':'lism_left rgbled_adapter','right':'lism_right rgbled_adapter','dongle':'lism_dongle prospector_adapter','reset':'settings_reset'}[target]
+    shield={'left':'lism_left rgbled_adapter','right':'lism_right rgbled_adapter','dongle':'lism_dongle prospector_adapter xiao_plus_147_touch','reset':'settings_reset'}[target]
     options=[];overlay=str(ROOT/'config/esb-upstream.overlay')
     if target!='reset':
         options=['-DEXTRA_CONF_FILE='+str(ROOT/'config/esb-upstream.conf'),'-DCONFIG_ZMK_SPLIT=y','-DCONFIG_ZMK_SPLIT_ROLE_CENTRAL='+('y' if central else 'n'),'-DLISM_COMPAT_INCLUDE='+str(compat.parent),'-DLISM_ESB_FOLDER='+str(prepared/'src/split/esb')]
+        if display_central:options+=['-DCONFIG_LISM_XIAO147_TOUCH=y','-DCONFIG_I2C=y','-DCONFIG_I2C_NRFX_TRANSFER_TIMEOUT=100','-DCONFIG_INPUT_GPIO_KEYS=y','-DCONFIG_LV_COLOR_16_SWAP=n']
         options+=['-DSNIPPET=zmk-usb-logging','-DCONFIG_LOG_PROCESS_THREAD_STARTUP_DELAY_MS=0',
                   '-DCONFIG_ZMK_LOG_LEVEL_INF=y','-DCONFIG_LOG_BUFFER_SIZE=8192']
         if central:
@@ -80,7 +87,7 @@ def build(target,ws,modules=None,driver=None):
                       '-DCONFIG_BT_KEYS_OVERWRITE_OLDEST=n','-DCONFIG_MPSL_TIMESLOT_SESSION_COUNT=1',
                       '-DCONFIG_MPSL_FEM_ONLY=n','-DCONFIG_MPSL_DYNAMIC_INTERRUPTS=n',
                       '-DCONFIG_ZMK_SPLIT_ESB_USE_TIMESLOT=y',
-                      '-DCONFIG_LV_Z_VDB_SIZE=20','-DCONFIG_LV_Z_DOUBLE_VDB=n','-DCONFIG_LV_Z_MEM_POOL_SIZE=24000','-DCONFIG_LV_FONT_MONTSERRAT_10=y','-DCONFIG_LV_FONT_MONTSERRAT_18=y','-DCONFIG_LV_FONT_MONTSERRAT_12=y','-DCONFIG_LV_FONT_MONTSERRAT_14=y','-DCONFIG_LV_USE_CUSTOM_SPRINTF=y']
+                      '-DCONFIG_LV_Z_VDB_SIZE=20','-DCONFIG_LV_Z_DOUBLE_VDB=n','-DCONFIG_LV_Z_MEM_POOL_SIZE='+('32768' if display_central else '24000'),'-DCONFIG_LV_FONT_MONTSERRAT_10=y','-DCONFIG_LV_FONT_MONTSERRAT_18=y','-DCONFIG_LV_FONT_MONTSERRAT_12=y','-DCONFIG_LV_FONT_MONTSERRAT_14=y','-DCONFIG_LV_USE_CUSTOM_SPRINTF=y']
             if not display_central:
                 options=[o for o in options if not o.startswith('-DCONFIG_LV_')]
                 options+=['-DCONFIG_LISM_BLE_INPUT_BRIDGE=n','-DCONFIG_ZMK_USB=n','-DCONFIG_ZMK_WPM=y','-DCONFIG_ZMK_HID_INDICATORS=y','-DCONFIG_ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS=2','-DCONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_QUEUE_SIZE=16','-DCONFIG_ZMK_SPLIT_ESB_PERIPHERAL_ID=1','-DCONFIG_ZMK_KEYBOARD_NAME="LisM Keyboard"']
@@ -128,7 +135,7 @@ def build(target,ws,modules=None,driver=None):
     assert production_fingerprint()[0]==fingerprint,'Production sources changed during this build; rebuild required'
     data=(dest/'zephyr/zmk.uf2').read_bytes();validate_uf2(data)
     out=ROOT/'artifacts';out.mkdir(exist_ok=True)
-    name={'left':'LisM_ESBv472_TEST_Left_4waystick.uf2','right':'LisM_ESBv472_TEST_Right_Trackball_BLE5_Hub.uf2','dongle':'LisM_ESBv472_TEST_Prospector169_BLE5_USB.uf2','reset':'settings_reset_XIAO_nRF52840.uf2'}[target]
+    name={'left':'LisM_ESBv472_TEST_Left_4waystick.uf2','right':'LisM_ESBv472_TEST_Right_Trackball_BLE5_Hub.uf2','dongle':'LisM_ESBv49_TEST_XIAO147_Touch_BLE5_USB.uf2','reset':'settings_reset_XIAO_nRF52840.uf2'}[target]
     (out/name).write_bytes(data);(out/(target+'.config')).write_text(conf);(out/(target+'.dts')).write_bytes((dest/'zephyr/zephyr.dts').read_bytes())
     rec={'target':target,'file':name,'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(data),'verified_base':BASE,'keymap_sha256':KEYMAP,'upstream_esb':'314c7cbaf4a74e1add1d6ffc8249de3e29965b8c','host_profiles':5 if central else 0,'simultaneous_host_connections':5 if central else 0,'host_ble':central,'split_transport':'ESB only' if target!='reset' else None,'hardware_tested':False,'pins':PINS,'production_fingerprint':fingerprint,'source_hashes':source_hashes,**mem}
     (out/(target+'-build.json')).write_text(json.dumps(rec,indent=2)+'\n');print('SUCCESS',json.dumps(rec),flush=True)

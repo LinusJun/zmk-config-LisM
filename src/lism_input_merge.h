@@ -51,3 +51,7 @@ void lism_input_merge_mouse(struct zmk_hid_mouse_report *copy);
 
 void lism_input_usb_bridge(bool active);
 bool lism_input_usb_nonblocking(void);
+
+#ifdef CONFIG_LISM_XIAO147_TOUCH
+int lism_input_merge_touch(uint32_t epoch,int token,uint8_t buttons);
+#endif

@@ -1,0 +1,2 @@
+config SHIELD_XIAO_PLUS_147_TOUCH
+    def_bool $(shields_list_contains,xiao_plus_147_touch)

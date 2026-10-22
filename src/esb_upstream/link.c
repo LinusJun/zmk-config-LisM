@@ -119,6 +119,10 @@ static bool menu_key(unsigned source,unsigned pos) {
     return (!source && pos>=42 && pos<=45) || (source==1 && pos==37);
 }
 static void apply_page(void) {
+#if IS_ENABLED(CONFIG_LISM_XIAO147_TOUCH)
+    bool requested;
+    if(lism_screen_take_request(&requested)){page_target=requested;page_pending=page_target!=lism_screen_active();}
+#endif
     if(lism_screen_take_toggle()) {
         page_target=page_pending?!page_target:!lism_screen_active();
         page_pending=page_target!=lism_screen_active();

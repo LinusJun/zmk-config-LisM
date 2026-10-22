@@ -28,3 +28,12 @@ config LISM_KB_HUB
     bool "Right-hand ESB hub with five independent BLE computer slots"
     default y if SHIELD_LISM_R
     depends on ZMK_SPLIT_ROLE_CENTRAL && ZMK_BLE
+
+config LISM_XIAO147_TOUCH
+    bool "XIAO 1.47 fixed landscape touch display"
+    depends on SHIELD_XIAO_PLUS_147_TOUCH && INPUT && I2C
+
+config LISM_XIAO147_AUTO_TOUCH
+    bool "Existing guarded automatic AXS touch classifier"
+    depends on LISM_XIAO147_TOUCH
+    default y

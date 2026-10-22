@@ -19,11 +19,13 @@ static void command_work(struct k_work *w) {
 }
 void kb_route_request(uint8_t mode) {if(mode>1)return;atomic_set(&request,mode);k_work_reschedule(&send_command,K_NO_WAIT);}
 int kb_route_select(uint8_t profile) {if(profile>=5)return -EINVAL;atomic_set(&request,10+profile);k_work_reschedule(&send_command,K_NO_WAIT);return 0;}
+static uint32_t local_route_generation=1;
+uint32_t kb_receiver_route_generation(void){k_spinlock_key_t k=k_spin_lock(&lock);uint32_t g=local_route_generation;k_spin_unlock(&lock,k);return g;}
 void kb_route_status_received(const struct kb_route_status *s) {
     if(s->version!=KB_ROUTE_VERSION || s->mode>KB_ROUTE_SWITCHING || s->profile>=5 || !s->epoch || !s->authority || s->phase>KB_LEFT_COMMIT || s->target>1)return;
     k_spinlock_key_t key=k_spin_lock(&lock);bool changed=authority!=s->authority || view.epoch!=s->epoch;k_spin_unlock(&lock,key);
     if(changed)kb_route_flush_commands();
-    key=k_spin_lock(&lock);authority=s->authority;view=(struct kb_route_view){.mode=s->mode,.profile=s->profile,.last_mode=s->mode,.epoch=s->epoch,.seen=k_uptime_get()};k_spin_unlock(&lock,key);
+    key=k_spin_lock(&lock);if(changed || view.mode!=s->mode || k_uptime_get()-view.seen>2500){if(!++local_route_generation)++local_route_generation;}authority=s->authority;view=(struct kb_route_view){.mode=s->mode,.profile=s->profile,.last_mode=s->mode,.epoch=s->epoch,.seen=k_uptime_get()};k_spin_unlock(&lock,key);
     atomic_set(&echo_phase,s->phase);atomic_set(&echo_epoch,s->epoch);k_work_reschedule(&send_command,K_NO_WAIT);
 }
 void kb_route_snapshot(struct kb_route_view *out) {

@@ -1,8 +1,8 @@
-name: Build preserved LisM ESB v472 baseline
+name: XIAO147 ESB v4.9 TEST
 on:
   workflow_dispatch:
   push:
-    branches: [ codex/esb-v472-tested-baseline ]
+    branches: [ codex/xiao147-esb-v49-test ]
     paths: [ 'boards/**', 'config/**', 'src/**', 'cmake/**', 'tools/**', 'tests/**', 'CMakeLists.txt', 'Kconfig', '.github/workflows/build.yml' ]
   pull_request:
 permissions:
@@ -31,5 +31,5 @@ jobs:
         run: python3 config/tests/fourwaystick_regression_test.py
       - uses: actions/upload-artifact@v4
         with:
-          name: LisM-ESBv472-${{ matrix.target }}
+          name: LisM-XIAO147v49-${{ matrix.target }}
           path: config/artifacts/*

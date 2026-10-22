@@ -7,6 +7,11 @@ if(CONFIG_LISM_PROSPECTOR_LOCK_INDICATORS)
 endif()
 if(CONFIG_ZMK_SPLIT_ESB)
   zephyr_include_directories("${CMAKE_CURRENT_LIST_DIR}/src")
+  if(CONFIG_LISM_XIAO147_TOUCH)
+    target_sources(app PRIVATE src/axs5106l_touchpad.c src/xiao147_auto_touch.c
+      src/xiao147_raw_capture.c src/xiao147_raw_gestures.c
+      src/xiao147_ui.c src/xiao147_pointer.c)
+  endif()
   if(NOT CONFIG_LISM_PROSPECTOR_LOCK_INDICATORS)
     zephyr_library()
   endif()

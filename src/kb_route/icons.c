@@ -57,19 +57,27 @@ static void refresh(lv_timer_t *timer) {
 static void draw_signals(lv_event_t*e){
     lv_layer_t*l=lv_event_get_layer(e);lv_area_t a;lv_obj_get_coords(lv_event_get_target(e),&a);
     for(unsigned i=0;i<3;i++){
-        int x=a.x1+3+i*40,y=a.y1+2;uint32_t color=i==2?0x569fa7:0xb9b9a7;
+        int x=a.x1+3+i*40,y=a.y1+3;uint32_t color=i==2?0x569fa7:0xb9b9a7;
         /* L/R radio antenna marks; Bluetooth rune for generic HID link. */
-        if(i<2){lv_draw_label_dsc_t d;lv_draw_label_dsc_init(&d);d.text=i?"R":"L";d.font=&lv_font_montserrat_10;d.color=lv_color_hex(0x7b7d93);lv_area_t label={x,y,x+8,y+13};lv_draw_label(l,&d,&label);}
-        else {box(l,x+2,y,1,12,0,0x569fa7,0);for(int n=0;n<4;n++){box(l,x+3+n,y+1+n,1,1,0,0x569fa7,0);box(l,x+6-n,y+4+n,1,1,0,0x569fa7,0);box(l,x+3+n,y+7+n,1,1,0,0x569fa7,0);}}
-        for(unsigned n=0;n<4;n++)box(l,x+11+n*4,y+10-n*2,3,2+n*2,0,n<bars[i]?color:0x353640,0);
+        if(i<2){lv_draw_label_dsc_t d;lv_draw_label_dsc_init(&d);d.text=i?"R":"L";d.font=&lv_font_montserrat_12;d.color=lv_color_hex(0x7b7d93);lv_area_t label={x,y,x+9,y+14};lv_draw_label(l,&d,&label);}
+        else {
+            /* Complete two-loop Bluetooth rune, with room below its baseline. */
+            static const int8_t points[][2]={{0,3},{8,9},{4,12},{4,0},{8,3},{0,9}};
+            lv_draw_line_dsc_t d;lv_draw_line_dsc_init(&d);d.width=1;d.color=lv_color_hex(0x569fa7);
+            for(unsigned n=1;n<sizeof(points)/sizeof(points[0]);n++){
+                d.p1=(lv_point_precise_t){x+points[n-1][0],y+points[n-1][1]};
+                d.p2=(lv_point_precise_t){x+points[n][0],y+points[n][1]};lv_draw_line(l,&d);
+            }
+        }
+        for(unsigned n=0;n<4;n++)box(l,x+12+n*4,y+12-n*2,3,2+n*2,0,n<bars[i]?color:0x353640,0);
     }
 }
 void kb_route_icons_create(lv_obj_t *parent) {
     icons=lv_obj_create(parent);lv_obj_remove_style_all(icons);lv_obj_set_size(icons,100,27);
-    lv_obj_set_pos(icons,170,42);lv_obj_set_style_bg_color(icons,lv_color_black(),0);lv_obj_set_style_bg_opa(icons,LV_OPA_COVER,0);lv_obj_set_style_radius(icons,4,0);
+    lv_obj_set_pos(icons,210,29);lv_obj_set_style_bg_color(icons,lv_color_black(),0);lv_obj_set_style_bg_opa(icons,LV_OPA_COVER,0);lv_obj_set_style_radius(icons,4,0);
     lv_obj_remove_flag(icons,LV_OBJ_FLAG_SCROLLABLE|LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_event_cb(icons,draw,LV_EVENT_DRAW_MAIN,NULL);refresh(NULL);lv_timer_create(refresh,200,NULL);
-    signal_icons=lv_obj_create(parent);lv_obj_remove_style_all(signal_icons);lv_obj_set_size(signal_icons,124,17);lv_obj_set_pos(signal_icons,10,116);
+    signal_icons=lv_obj_create(parent);lv_obj_remove_style_all(signal_icons);lv_obj_set_size(signal_icons,124,23);lv_obj_set_pos(signal_icons,10,70);
     lv_obj_set_style_bg_color(signal_icons,lv_color_black(),0);lv_obj_set_style_bg_opa(signal_icons,LV_OPA_COVER,0);lv_obj_set_style_radius(signal_icons,3,0);
     lv_obj_remove_flag(signal_icons,LV_OBJ_FLAG_SCROLLABLE|LV_OBJ_FLAG_CLICKABLE);lv_obj_add_event_cb(signal_icons,draw_signals,LV_EVENT_DRAW_MAIN,NULL);
 }

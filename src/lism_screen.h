@@ -13,3 +13,8 @@ void lism_coex_grant(void);
 void lism_coex_log(void);
 
 uint32_t lism_screen_generation(void);
+
+void lism_screen_present(void);
+void lism_screen_request_active(bool active);
+bool lism_screen_take_request(bool *active);
+void lism_screen_touch(uint8_t fingers,uint16_t x,uint16_t y);
