@@ -38,7 +38,8 @@ static bool create_lock_indicator_row(void){return true;}static int deferred_ini
 static int k_work_reschedule(void*w,int t){(void)w;(void)t;return 0;}
 struct modifier_indicator_state{bool mods[4];};struct layer_display_state{uint8_t index;};struct lock_indicator_state{uint8_t indicators;};struct wpm_meter_state{uint8_t wpm;};
 static float target_wpm;static int wpm_smooth_work;
-static int k_work_schedule(void*w,int t){(void)w;(void)t;return 0;}
+static void *zmk_display_work_q(void){return (void*)1;}
+static int k_work_schedule_for_queue(void*q,void*w,int t){assert(q==(void*)1);(void)w;(void)t;return 0;}
 #define ZMK_TRANSPORT_NONE 0
 #define ZMK_TRANSPORT_USB 1
 #define ZMK_TRANSPORT_BLE 2

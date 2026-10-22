@@ -1,23 +1,27 @@
-# LisM ESB v5.0 TEST：一套键盘，两台 Dongle
+# LisM ESB v5.0.1 TEST：一套键盘，两台 Dongle
 
 同一套左手四向杆＋右手轨迹球，可以带去家里或单位使用：**A 站为原 Prospector 1.69 英寸，B 站为 XIAO147**。两台都在附近时保持当前连接，需要时用按键手动选站。
 
-这是新协议测试版，已完成软件构建与自动验证，**尚未实机验证双站切换、无线延迟或真实射频表现**。日常使用的 [v4.7.2 实测正常基准](https://github.com/LinusJun/zmk-config-LisM/tree/codex/esb-v472-tested-baseline) 单独保留，可随时回退。
+本次 v5.0.1 修正 WPM 动画跨线程访问 LVGL，以及初始化前就调度任务的问题；WPM 显示归零时清除峰值线。保留原界面、无线协议、按键和 USB/BLE 功能。
+
+**已经刷好 v5.0：本次只需更新接收器，左右手 UF2 与 v5.0 逐字节相同。** 从 v4.x 更新时，仍须按下文更新左右手和两台接收器。原屏和 XIAO147 均有对应接收器修正版。绿色残留是否彻底消失仍需实机复核，软件测试不代替物理屏幕验证。
+
+这是 v5.0 系列协议测试版，已完成软件构建与自动验证，**尚未实机验证双站切换、无线延迟或真实射频表现**。日常使用的 [v4.7.2 实测正常基准](https://github.com/LinusJun/zmk-config-LisM/tree/codex/esb-v472-tested-baseline) 单独保留，可随时回退。
 
 ## 下载与刷写
 
-[下载四台完整 v5.0 测试包](firmware/LisM_ESB_v50_Dual_Dongle_TEST.zip?raw=true)。内含四台 UF2、可选 settings_reset、中文说明、编译与验证记录、SHA256 清单。
+[下载四台完整 v5.0.1 测试包](firmware/LisM_ESB_v501_Dual_Dongle_TEST.zip?raw=true)。内含四台 UF2、可选 settings_reset、中文说明、编译与验证记录、SHA256 清单。
 
 | 硬件 | 文件 |
 | --- | --- |
-| 左手，四向杆 | `LisM_ESBv50_TEST_Left_4waystick.uf2` |
-| 右手，轨迹球，直连 BLE 主机 | `LisM_ESBv50_TEST_Right_Trackball_BLE5_Hub.uf2` |
-| A 站，原 Prospector169 | `LisM_ESBv50_TEST_Dongle_A_Prospector169.uf2` |
-| B 站，XIAO147 带触摸 | `LisM_ESBv50_TEST_Dongle_B_XIAO147_Touch.uf2` |
+| 左手，四向杆 | `LisM_ESBv501_TEST_Left_4waystick.uf2` |
+| 右手，轨迹球，直连 BLE 主机 | `LisM_ESBv501_TEST_Right_Trackball_BLE5_Hub.uf2` |
+| A 站，原 Prospector169 | `LisM_ESBv501_TEST_Dongle_A_Prospector169.uf2` |
+| B 站，XIAO147 带触摸 | `LisM_ESBv501_TEST_Dongle_B_XIAO147_Touch.uf2` |
 
 先关闭左右手，依次更新 A、B 接收器，再更新左右手，然后正常断电重启。双击 XIAO Reset 进入启动盘，将对应 UF2 复制进去。首次测试建议只开一台接收器，验证输入，再试另一台，最后试两台同时开。
 
-**四台都要换成 v5.0，不能混用 v4.7.2／v4.7.2.1／v4.9。** 这是无线协议升级，并非只更新屏幕。通常无需清设置；各接收器和右手原有电脑 BLE 配对独立保留。仅需排查旧设置时，才先刷包内 `settings_reset_XIAO_nRF52840.uf2` 再刷对应固件；清设置会删除这台设备的配对，不会代替固件更新。
+**从 v4.x 升级时，四台都要换成 v5.0 系列，不能混用 v4.7.2／v4.7.2.1／v4.9。** 这是无线协议升级，并非只更新屏幕。通常无需清设置；各接收器和右手原有电脑 BLE 配对独立保留。仅需排查旧设置时，才先刷包内 `settings_reset_XIAO_nRF52840.uf2` 再刷对应固件；清设置会删除这台设备的配对，不会代替固件更新。
 
 
 UF2 刷写后自动启动偶发黑屏的问题尚未证明修复。若刷完黑屏或不能输入，先单按一次接收器 Reset；不要先清配对。
@@ -59,6 +63,8 @@ Dongle 模式仍是 **左手→当前 Dongle、右手→当前 Dongle 两条 ESB
 ## 验证范围
 
 四台固件使用同一份源码指纹。验证覆盖实际 C 协调器、左右手无线帧与队列、站点／启动会话／epoch 核对、旧回包拒绝、松键与宏队列屏障、接收器单独重启、左手 COMMIT 后失联、直连 BLE 不被后来的 Dongle 抢走，以及显示／触摸回归。
+
+WPM 修正使用实际组件与 LVGL，在原屏 RGB565 字节交换开启、XIAO147 关闭交换的两种配置下，检查动态局部刷新与整屏重绘的像素一致性，覆盖峰值移动、归零后重新输入、状态镜像和信号图标覆盖区。
 
 软件通过不代表已经达到实机 1ms，也不代表已经完成两台接收器共处时的射频和触摸共存测试。请首先使用备用的一套键盘验证。
 

@@ -136,7 +136,7 @@ def build(target,ws,modules=None,driver=None):
     assert production_fingerprint()[0]==fingerprint,'Production sources changed during this build; rebuild required'
     data=(dest/'zephyr/zmk.uf2').read_bytes();validate_uf2(data)
     out=ROOT/'artifacts';out.mkdir(exist_ok=True)
-    name={'left':'LisM_ESBv50_TEST_Left_4waystick.uf2','right':'LisM_ESBv50_TEST_Right_Trackball_BLE5_Hub.uf2','dongle_a':'LisM_ESBv50_TEST_Dongle_A_Prospector169.uf2','dongle_b':'LisM_ESBv50_TEST_Dongle_B_XIAO147_Touch.uf2','reset':'settings_reset_XIAO_nRF52840.uf2'}[target]
+    name={'left':'LisM_ESBv501_TEST_Left_4waystick.uf2','right':'LisM_ESBv501_TEST_Right_Trackball_BLE5_Hub.uf2','dongle_a':'LisM_ESBv501_TEST_Dongle_A_Prospector169.uf2','dongle_b':'LisM_ESBv501_TEST_Dongle_B_XIAO147_Touch.uf2','reset':'settings_reset_XIAO_nRF52840.uf2'}[target]
     (out/name).write_bytes(data);(out/(target+'.config')).write_text(conf);(out/(target+'.dts')).write_bytes((dest/'zephyr/zephyr.dts').read_bytes())
     rec={'target':target,'file':name,'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(data),'verified_base':BASE,'keymap_sha256':KEYMAP,'upstream_esb':'314c7cbaf4a74e1add1d6ffc8249de3e29965b8c','host_profiles':5 if central else 0,'simultaneous_host_connections':5 if central else 0,'host_ble':central,'split_transport':'ESB only' if target!='reset' else None,'hardware_tested':False,'pins':PINS,'production_fingerprint':fingerprint,'source_hashes':source_hashes,**mem}
     (out/(target+'-build.json')).write_text(json.dumps(rec,indent=2)+'\n');print('SUCCESS',json.dumps({k:rec[k] for k in ['target','file','sha256','bytes','production_fingerprint'] }|mem),flush=True)

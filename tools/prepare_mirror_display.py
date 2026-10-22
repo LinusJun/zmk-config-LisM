@@ -1,6 +1,7 @@
 """Compose read-only telemetry at every OPERATOR widget drawing entry point."""
 from pathlib import Path
 from prepare_upstream_esb import replace
+from prepare_wpm_display import prepare as prepare_wpm
 
 def prepare(operator):
     operator=Path(operator)
@@ -9,7 +10,7 @@ def prepare(operator):
     s=replace(s,'static void layer_update_cb(struct layer_state state) {','static void layer_update_cb(struct layer_state state) {\n    struct kb_mirror m;if(kb_mirror_snapshot(&m))state.index=m.layer;')
     s=replace(s,'const char *layer_name = zmk_keymap_layer_name(zmk_keymap_layer_index_to_id(state.index));','const char *layer_name = state.index==255?"--":zmk_keymap_layer_name(zmk_keymap_layer_index_to_id(state.index));')
     s=replace(s,'        lv_label_set_text(widget->layer_label, display_name);','        kb_layer_label_update(widget->layer_label, display_name);')
-    s+='\nvoid kb_mirror_wpm_refresh(void) {wpm_meter_update_cb(wpm_meter_get_state(NULL));layer_update_cb(layer_get_state(NULL));}\n';f.write_text(s)
+    s+='\nvoid kb_mirror_wpm_refresh(void) {wpm_meter_update_cb(wpm_meter_get_state(NULL));layer_update_cb(layer_get_state(NULL));}\n';f.write_text(s);prepare_wpm(f)
     f=operator/'layer_display.c';s='#include <kb_route/mirror.h>\n'+f.read_text();s=replace(s,'static void layer_display_update_cb(struct layer_display_state state) {','static void layer_display_update_cb(struct layer_display_state state) {\n    struct kb_mirror m;if(kb_mirror_snapshot(&m))state.index=m.layer;');s+='\nvoid kb_mirror_layer_refresh(void) {layer_display_update_cb(layer_display_get_state(NULL));}\n';f.write_text(s)
     f=operator/'modifier_indicator.c';s='#include <kb_route/mirror.h>\n'+f.read_text();s=replace(s,'static void modifier_indicator_update_cb(struct modifier_indicator_state state) {','''static void modifier_indicator_update_cb(struct modifier_indicator_state state) {
     struct kb_mirror m;if(kb_mirror_snapshot(&m)) {
