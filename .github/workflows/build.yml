@@ -1,4 +1,4 @@
-name: Build LisM ESB v502 XIAO147 two-page UI TEST
+name: Build LisM ESB v503 XIAO147 scan identity and readable UI TEST
 on:
   workflow_dispatch:
   push:
@@ -31,5 +31,5 @@ jobs:
         run: python3 config/tests/fourwaystick_regression_test.py
       - uses: actions/upload-artifact@v4
         with:
-          name: LisM-ESBv502-${{ matrix.target }}
+          name: LisM-ESBv503-${{ matrix.target }}
           path: config/artifacts/*

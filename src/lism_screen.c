@@ -84,15 +84,15 @@ static void normalize_focus(void) {
 }
 static void create_modal(void) {
     if(modal)return;
-    modal=panel(root,8,22,304,146);lv_obj_set_style_border_color(modal,lv_color_hex(0x569fa7),0);
-    modal_title=text(modal,10,4,282,&lv_font_montserrat_14);
-    modal_text=text(modal,10,24,282,&lv_font_montserrat_12);lv_label_set_long_mode(modal_text,LV_LABEL_LONG_WRAP);
-    modal_value=text(modal,18,58,270,&lv_font_montserrat_18);
-    modal_hint=text(modal,10,82,282,&lv_font_montserrat_10);lv_label_set_long_mode(modal_hint,LV_LABEL_LONG_WRAP);
+    modal=panel(root,4,4,312,164);lv_obj_set_style_border_color(modal,lv_color_hex(0x569fa7),0);
+    modal_title=text(modal,10,4,290,&lv_font_montserrat_20);
+    modal_text=text(modal,10,28,290,&lv_font_montserrat_14);lv_label_set_long_mode(modal_text,LV_LABEL_LONG_SCROLL_CIRCULAR);
+    modal_value=text(modal,10,62,290,&lv_font_montserrat_20);lv_obj_set_height(modal_value,24);
+    modal_hint=text(modal,10,88,290,&lv_font_montserrat_14);lv_label_set_long_mode(modal_hint,LV_LABEL_LONG_CLIP);lv_obj_set_height(modal_hint,48);
     static const char *const names[]={"Left","Right","Up","Down","OK"};
     for(unsigned i=0;i<5;i++) {
-        touch_keys[i]=text(modal,5+i*59,122,56,&lv_font_montserrat_12);
-        lv_label_set_text(touch_keys[i],names[i]);lv_obj_set_height(touch_keys[i],21);
+        touch_keys[i]=text(modal,4+i*60,138,56,&lv_font_montserrat_18);
+        lv_label_set_text(touch_keys[i],names[i]);lv_obj_set_height(touch_keys[i],24);
         lv_obj_set_style_bg_color(touch_keys[i],lv_color_hex(0x303d46),0);
         lv_obj_set_style_bg_opa(touch_keys[i],LV_OPA_COVER,0);lv_obj_set_style_text_align(touch_keys[i],LV_TEXT_ALIGN_CENTER,0);
     }
@@ -101,6 +101,7 @@ static void render_modal(void) {
     char s[160];
     if(!shown.auth_type && dialog==NONE) {if(modal)lv_obj_add_flag(modal,LV_OBJ_FLAG_HIDDEN);return;}
     create_modal();lv_obj_clear_flag(modal,LV_OBJ_FLAG_HIDDEN);lv_obj_move_foreground(modal);
+    lv_obj_set_height(modal_text,shown.auth_type?32:56);
     if(!shown.auth_type)set_text(modal_value,"");
     if(shown.auth_type) {
         if(auth_token!=shown.auth_token){auth_token=shown.auth_token;memset(pin,0,sizeof(pin));pin_cursor=0;choice=1;}
@@ -138,10 +139,18 @@ static void render(void) {
         layout=next_layout;
         for(unsigned i=0;i<4;i++) {
             int x=8,y,w=304,h;
-            if(view==DEVICES) {y=i<2?28+i*44:118;w=i<2?304:148;h=i<2?40:28;if(i==3)x=164;}
-            else {y=i<3?28+i*32:128;h=i<3?28:26;}
+            if(view==DEVICES) {y=i<2?26+i*50:125;w=i<2?304:148;h=i<2?48:28;if(i==3)x=164;}
+            else {y=i<3?28+i*36:140;w=i<3?304:106;h=i<3?32:30;}
             lv_obj_set_pos(tiles[i],x,y);lv_obj_set_size(tiles[i],w,h);
-            lv_obj_set_style_pad_top(tiles[i],view==DEVICES && i<2?3:5,0);
+            lv_obj_set_style_pad_top(tiles[i],view==DEVICES?(i<2?0:1):3,0);
+            lv_obj_set_style_text_font(tiles[i],&lv_font_montserrat_18,0);
+        }
+        if(view==SEARCH){
+            lv_obj_set_pos(status_label,126,142);lv_obj_set_size(status_label,186,28);
+            lv_obj_set_style_text_font(status_label,&lv_font_montserrat_20,0);
+        }else{
+            lv_obj_set_pos(status_label,8,154);lv_obj_set_size(status_label,304,18);
+            lv_obj_set_style_text_font(status_label,&lv_font_montserrat_14,0);
         }
     }
     set_text(title,view==DEVICES?"BLE DEVICES":"ADD DEVICE");
@@ -150,7 +159,7 @@ static void render(void) {
         bool show=true;
         if(view==DEVICES) {
             if(i<2){const struct lism_input_peer_status *p=&shown.peers[i];snprintf(s,sizeof(s),"%u  %s\n%s",i+1,p->name[0]?p->name:"Empty slot",shown.enabled?peer_state(p):"BLE inputs off");}
-            else snprintf(s,sizeof(s),"%s",i==2?(shown.enabled?"BLE inputs: ON":"BLE inputs: OFF"):"Back");
+            else snprintf(s,sizeof(s),"%s",i==2?(shown.enabled?"BLE: ON":"BLE: OFF"):"Back");
         } else if(i<3) {
             const struct lism_hid_candidate *c=&shown.candidates[page*3+i];
             if(c->valid)snprintf(s,sizeof(s),"%s",c->name);
@@ -162,10 +171,10 @@ static void render(void) {
         lv_obj_set_style_border_width(tiles[i],focus==i?2:1,0);
         lv_obj_set_style_border_color(tiles[i],lv_color_hex(focus==i?ACCENT:0x353640),0);
     }
-    const char *hint=view==SEARCH?(result_pages()>1?"Left/right: more devices":"Select a device"):(shown.enabled?"Select a slot to add / manage":"Switch on to connect / add devices");
+    const char *hint=view==SEARCH?(result_pages()>1?"Left/right: more devices":"Select a device"):(shown.enabled?"Select a slot to add / manage":"Switch BLE on to add devices");
     if(notice[0])hint=notice;
-    else if(view==SEARCH && shown.searching){snprintf(s,sizeof(s),"Searching... %us   %s",shown.seconds_left,result_pages()>1?"Left/right: more":"Select a device");hint=s;}
-    else if(view==SEARCH && !shown.searching)hint=shown.message[0]?shown.message:"Search ended; Back to retry";
+    else if(view==SEARCH && shown.searching){snprintf(s,sizeof(s),"Search: %us",shown.seconds_left);hint=s;}
+    else if(view==SEARCH && !shown.searching)hint="Search ended";
     else if(strstr(shown.message,"fail") || strstr(shown.message,"timeout") || strstr(shown.message,"paused"))hint=shown.message;
     set_text(status_label,dialog!=NONE || shown.auth_type?"":hint);render_modal();
 }
@@ -244,15 +253,15 @@ static void action(unsigned position) {
 static void create_view(void) {
     root=panel(parent_screen,0,0,320,172);lv_obj_set_style_radius(root,0,0);lv_obj_set_style_border_width(root,0,0);
     lv_obj_set_style_bg_color(root,lv_color_hex(0),0);
-    title=text(root,8,4,220,&lv_font_montserrat_18);lv_obj_set_style_text_color(title,lv_color_hex(ACCENT),0);
-    pager=text(root,238,8,76,&lv_font_montserrat_12);
+    title=text(root,8,2,220,&lv_font_montserrat_20);lv_obj_set_style_text_color(title,lv_color_hex(ACCENT),0);
+    pager=text(root,224,6,90,&lv_font_montserrat_14);
     for(unsigned i=0;i<4;i++) {
         tiles[i]=lv_label_create(root);lv_label_set_long_mode(tiles[i],LV_LABEL_LONG_CLIP);
         lv_obj_set_style_bg_color(tiles[i],lv_color_hex(0x181d23),0);lv_obj_set_style_bg_opa(tiles[i],LV_OPA_COVER,0);
-        lv_obj_set_style_radius(tiles[i],7,0);lv_obj_set_style_text_font(tiles[i],&lv_font_montserrat_12,0);
+        lv_obj_set_style_radius(tiles[i],7,0);lv_obj_set_style_text_font(tiles[i],&lv_font_montserrat_18,0);
         lv_obj_set_style_pad_hor(tiles[i],10,0);lv_obj_set_style_text_line_space(tiles[i],2,0);
     }
-    status_label=text(root,8,157,304,&lv_font_montserrat_10);layout=-1;
+    status_label=text(root,8,154,304,&lv_font_montserrat_14);layout=-1;
 }
 static void set_home_visibility(bool hide) {
     for(unsigned i=0;i<lv_obj_get_child_count(parent_screen) && i<64;i++) {
