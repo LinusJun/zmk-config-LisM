@@ -15,6 +15,9 @@ static K_MUTEX_DEFINE(scan_lock);
 static int pause_locked(void) {
     if(!running)return 0;
     int rc=bt_le_scan_stop();if(!rc || rc==-EALREADY)running=false;
+#if IS_ENABLED(CONFIG_LISM_XIAO147_TOUCH)
+    LOG_INF("XIAO BLE scan stop rc=%d",rc);
+#endif
     return rc;
 }
 int lism_hid_scan_pause(void) {
@@ -36,6 +39,9 @@ void lism_hid_scan_resume(void) {
     const struct bt_le_scan_param p={.type=BT_LE_SCAN_TYPE_ACTIVE,
         .options=BT_LE_SCAN_OPT_FILTER_DUPLICATE,.interval=160,.window=8};
     int rc=bt_le_scan_start(&p,NULL);
+#if IS_ENABLED(CONFIG_LISM_XIAO147_TOUCH)
+    LOG_INF("XIAO BLE scan start rc=%d interval=%u window=%u",rc,p.interval,p.window);
+#endif
     if(!rc || rc==-EALREADY)running=true;else LOG_WRN("Input scan start rc=%d",rc);
 done:k_mutex_unlock(&scan_lock);
 }

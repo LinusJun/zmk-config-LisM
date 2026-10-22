@@ -164,11 +164,14 @@ static void render(void) {
     }
     const char *hint=view==SEARCH?(result_pages()>1?"Left/right: more devices":"Select a device"):(shown.enabled?"Select a slot to add / manage":"Switch on to connect / add devices");
     if(notice[0])hint=notice;
+    else if(view==SEARCH && shown.searching){snprintf(s,sizeof(s),"Searching... %us   %s",shown.seconds_left,result_pages()>1?"Left/right: more":"Select a device");hint=s;}
+    else if(view==SEARCH && !shown.searching)hint=shown.message[0]?shown.message:"Search ended; Back to retry";
     else if(strstr(shown.message,"fail") || strstr(shown.message,"timeout") || strstr(shown.message,"paused"))hint=shown.message;
     set_text(status_label,dialog!=NONE || shown.auth_type?"":hint);render_modal();
 }
 static void start_search(unsigned target) {
     slot=target;page=0;focus=3;view=SEARCH;dialog=NONE;notice[0]=0;
+    LOG_INF("XIAO BLE search requested slot=%u ui=%u",slot,(unsigned)atomic_get(&generation));
     lism_input_host_search(slot,false); /* Preserve HID-only default. */
 }
 static bool same_peer(void) {
@@ -275,7 +278,7 @@ static void poll(lv_timer_t *timer) {
     }
     if(visible) {
         struct lism_input_status next;lism_input_host_snapshot(&next);
-        if(memcmp(&next,&shown,sizeof(shown))){touch_armed=false;shown=next;dirty=true;}
+        if(memcmp(&next,&shown,sizeof(shown))){shown=next;dirty=true;}
         if(dirty)render();
     }
 }
@@ -299,11 +302,46 @@ static int touch_at(uint16_t x,uint16_t y) {
     for(unsigned i=0;i<4;i++)if(inside(tiles[i],x,y) && selectable(i))return i;
     return -1;
 }
+/* Capture only the identity and action being touched. Countdown/RSSI/name
+ * completion on unrelated rows must not cancel a tap, but replacement peers,
+ * new auth prompts, changed menus and page generations must remain inert. */
+struct touch_context {
+    uint32_t generation,auth_token,identity_token;
+    uint8_t target,view,dialog,page,slot,choice,pin_cursor,auth_type,selected;
+    bool enabled,saved,connected,ready,valid,searching;
+    char identity[24];
+};
+static struct touch_context pressed_context;
+static struct touch_context touch_context_get(unsigned target,const struct lism_input_status *state){
+    struct touch_context c;memset(&c,0,sizeof(c));
+    c.generation=atomic_get(&generation);c.target=target;c.view=view;c.dialog=dialog;
+    c.page=page;c.slot=slot;c.choice=choice;c.pin_cursor=pin_cursor;
+    c.auth_type=state->auth_type;c.auth_token=state->auth_type?state->auth_token:0;
+    if(state->auth_type)return c;
+    int peer=-1,candidate=-1;
+    if(dialog==DEVICE || dialog==FORGET)peer=slot;
+    else if(dialog==CONNECT)candidate=chosen_index;
+    else if(target<4){
+        if(view==DEVICES){if(target<2)peer=target;else if(target==2)c.enabled=state->enabled;}
+        else if(target<3)candidate=page*3+target;
+    }
+    if(peer>=0 && peer<LISM_INPUT_PEERS){
+        const struct lism_input_peer_status*p=&state->peers[peer];
+        c.enabled=state->enabled;c.saved=p->saved;c.connected=p->connected;c.ready=p->ready;
+        c.identity_token=p->legacy_token;snprintf(c.identity,sizeof(c.identity),"%s",p->name);
+    }
+    if(candidate>=0 && candidate<LISM_HID_CANDIDATES){
+        const struct lism_hid_candidate*p=&state->candidates[candidate];
+        c.selected=state->selected;c.valid=p->valid;c.searching=state->searching;
+        c.identity_token=p->token;snprintf(c.identity,sizeof(c.identity),"%s",p->address);
+    }
+    return c;
+}
 void lism_screen_touch(uint8_t fingers,uint16_t x,uint16_t y) {
     if(!visible || fingers>1){touch_armed=false;touching=fingers!=0;touch_blocked=fingers!=0;return;}
     if(fingers==1) {
         int target=touch_at(x,y);
-        if(!touching){touch_target=target;touch_x=x;touch_y=y;touch_generation=atomic_get(&generation);touch_armed=target>=0 && !touch_blocked;}
+        if(!touching){touch_target=target;touch_x=x;touch_y=y;touch_generation=atomic_get(&generation);touch_armed=target>=0 && !touch_blocked;if(touch_armed)pressed_context=touch_context_get(target,&shown);}
         else if(touch_armed && (target!=touch_target || abs((int)x-touch_x)>12 || abs((int)y-touch_y)>12))touch_armed=false;
         touching=true;
         return;
@@ -313,7 +351,9 @@ void lism_screen_touch(uint8_t fingers,uint16_t x,uint16_t y) {
     int target=touch_target;touch_armed=false;
     if(touch_generation!=(uint32_t)atomic_get(&generation) || !visible)return;
     struct lism_input_status latest;lism_input_host_snapshot(&latest);
-    if(memcmp(&latest,&shown,sizeof(shown)))return; /* Never act on a replacement row/dialog. */
+    struct touch_context current=touch_context_get(target,&latest);
+    if(memcmp(&current,&pressed_context,sizeof(current)))return;
+    shown=latest; /* Dispatch against fresh state after identity validation. */
     if(target<4){focus=target;action(37);}
     else if(target<15){static const unsigned actions[]={45,43,42,44,37};action(actions[target-10]);}
     else action(target==20?45:43);

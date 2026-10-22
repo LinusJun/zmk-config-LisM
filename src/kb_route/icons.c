@@ -75,7 +75,7 @@ static void draw_signals(lv_event_t*e){
 void kb_route_icons_create(lv_obj_t *parent) {
     icons=lv_obj_create(parent);lv_obj_remove_style_all(icons);lv_obj_set_size(icons,100,27);
 #ifdef CONFIG_LISM_XIAO147_TOUCH
-    lv_obj_set_pos(icons,210,29);
+    lv_obj_set_pos(icons,216,29);
 #else
     lv_obj_set_pos(icons,170,42);
 #endif
@@ -84,7 +84,7 @@ void kb_route_icons_create(lv_obj_t *parent) {
     lv_obj_add_event_cb(icons,draw,LV_EVENT_DRAW_MAIN,NULL);refresh(NULL);lv_timer_create(refresh,200,NULL);
     signal_icons=lv_obj_create(parent);lv_obj_remove_style_all(signal_icons);
 #ifdef CONFIG_LISM_XIAO147_TOUCH
-    lv_obj_set_size(signal_icons,124,23);lv_obj_set_pos(signal_icons,10,70);
+    lv_obj_set_size(signal_icons,124,23);lv_obj_set_pos(signal_icons,4,70);
 #else
     lv_obj_set_size(signal_icons,124,22);lv_obj_set_pos(signal_icons,10,116);
 #endif

@@ -125,6 +125,9 @@ static void control(struct k_work *work);
 static void tick(struct k_work *work);
 K_WORK_DEFINE(control_work, control);
 K_WORK_DELAYABLE_DEFINE(tick_work, tick);
+#if IS_ENABLED(CONFIG_LISM_XIAO147_TOUCH)
+static unsigned search_advertisements,search_visible;
+#endif
 static void scanner_state(void);
 static void close_session(unsigned slot, const char *why);
 static const struct bt_conn_auth_cb auth_callbacks;
@@ -791,6 +794,9 @@ static void advertisement(const struct advertisement *ad) {
         if (s->conn && !bt_addr_le_cmp(&ad->addr,&s->target)) { return; }
     }
     if (!lism_screen_active() || !search_until || elapsed(k_uptime_get_32(),search_until)) { return; }
+#if IS_ENABLED(CONFIG_LISM_XIAO147_TOUCH)
+    if(!search_advertisements++)LOG_INF("XIAO BLE first advertisement connectable=%u HID=%u name=%s",ad->connectable,ad->hint,ad->name);
+#endif
     int index=-1,empty=-1,oldest=0;
     for (unsigned i=0;i < AD_CACHE;i++) {
         if (cache[i].public.valid && !bt_addr_le_cmp(&cache[i].addr,&ad->addr)) { index=i; break; }
@@ -819,6 +825,9 @@ static void advertisement(const struct advertisement *ad) {
         if (identity_conflict(&c->addr,search_slot)) { return; }
         uint32_t token=candidates[slot].public.token;
         if (!candidates[slot].public.valid) { token=++next_token; if (!token) { token=++next_token; } }
+#if IS_ENABLED(CONFIG_LISM_XIAO147_TOUCH)
+        if(!search_visible++)LOG_INF("XIAO BLE first candidate name=%s",c->public.name);
+#endif
         candidates[slot]=*c; candidates[slot].public.token=token;
         if (!candidates[slot].public.name[0]) { snprintf(candidates[slot].public.name,24,"Unnamed BLE device"); }
     }
@@ -1273,6 +1282,10 @@ static void command_received(const struct command *cmd) {
         }
         if (busy_setup()) { message(-1,"Finish current pairing first"); return; }
         search_slot=cmd->slot; show_other=cmd->accept; search_until=now+30000;
+#if IS_ENABLED(CONFIG_LISM_XIAO147_TOUCH)
+        search_advertisements=search_visible=0;
+        LOG_INF("XIAO BLE search accepted slot=%u ui=%u",cmd->slot,cmd->ui_epoch);
+#endif
         memset(candidates,0,sizeof(candidates)); memset(cache,0,sizeof(cache));
         k_mutex_lock(&status_lock,K_FOREVER);
         status.generation++; status.selected=search_slot; status.show_other=show_other;
@@ -1440,7 +1453,12 @@ static void control(struct k_work *work) {
         if (fault || atomic_set(&s->fault,0)) { close_session(i,"Input queue/report fault; Retry"); }
         if (s->conn && s->stage != READY && elapsed(now,s->deadline)) { close_session(i,"Input setup timeout; Retry"); }
     }
-    if (search_until && elapsed(now,search_until)) { search_until=0; message(-1,"Search ended; tap Search to retry"); }
+    if (search_until && elapsed(now,search_until)) {
+#if IS_ENABLED(CONFIG_LISM_XIAO147_TOUCH)
+        LOG_INF("XIAO BLE search ended advertisements=%u candidates=%u",search_advertisements,search_visible);
+#endif
+        search_until=0; message(-1,"Search ended; tap Search to retry");
+    }
     if (prompt_until && elapsed(now,prompt_until)) {
         unsigned slot=status.auth_slot;
         if (slot < LISM_INPUT_PEERS) { bt_conn_auth_cancel(sessions[slot].conn); close_session(slot,"Pairing prompt timed out; Retry"); }

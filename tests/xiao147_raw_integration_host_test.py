@@ -55,7 +55,7 @@ static void host_log(const char *format, ...) {(void)format;}
 #define K_MSEC(x) (x)
 #define DT_INST_FOREACH_STATUS_OKAY(x)
 #define CONTAINER_OF(p,t,m) ((t *)((char *)(p)-offsetof(t,m)))
-enum xiao147_page {XIAO147_PAGE_STATUS,XIAO147_PAGE_SETTINGS,XIAO147_PAGE_DEVICES};
+enum xiao147_page {XIAO147_PAGE_STATUS,XIAO147_PAGE_DEVICES};
 struct k_work {int unused;};
 struct k_work_delayable {struct k_work work;};
 struct i2c_dt_spec {int unused;};
@@ -309,7 +309,7 @@ static void verify_identity_before_write(void) {
     feed("AXS_RAW_START 0101\n");drain();assert(!factory_writes);
 }
 static void input_ownership(void) {
-    fixture();page=XIAO147_PAGE_SETTINGS;poll();contact(1,40,70);poll();
+    fixture();page=XIAO147_PAGE_DEVICES;poll();contact(1,40,70);poll();
     assert(state.fingers==1&&menu_samples==1);
     info();assert(menu_cancels==1&&!state.fingers&&state.swallow_until_release);
     page=XIAO147_PAGE_STATUS;start();until_phase(XIAO147_RAW_PAIR_WAIT,40);

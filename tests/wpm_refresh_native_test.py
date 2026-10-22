@@ -94,8 +94,8 @@ int main(void){
  lv_obj_t*screen=lv_screen_active();lv_obj_set_style_pad_all(screen,0,0);lv_obj_set_style_bg_color(screen,lv_color_black(),0);lv_obj_set_style_bg_opa(screen,255,0);
  struct zmk_widget_wpm_meter meter={0};zmk_widget_wpm_meter_init(&meter,screen);lv_obj_set_pos(meter.obj,10,42);
 #ifdef CONFIG_LISM_XIAO147_TOUCH
- lv_obj_set_pos(meter.obj,10,28);lv_obj_set_size(meter.obj,300,65);
- for(unsigned i=0;i<26;i++){unsigned x=i*302/26,end=(i+1)*302/26-2;lv_obj_set_pos(meter.bars[i],x,0);lv_obj_set_size(meter.bars[i],end-x,65);}lv_obj_set_height(meter.peak_indicator,65);
+ lv_obj_set_pos(meter.obj,4,28);lv_obj_set_size(meter.obj,312,65);
+ for(unsigned i=0;i<26;i++){unsigned x=i*314/26,end=(i+1)*314/26-2;lv_obj_set_pos(meter.bars[i],x,0);lv_obj_set_size(meter.bars[i],end-x,65);}lv_obj_set_height(meter.peak_indicator,65);
 #endif
  kb_layer_label_update(meter.layer_label,"GameJoystick");kb_route_icons_create(screen);check_frame(d,screen);
  /* Startup and a tiny positive input must still progress past zero. */

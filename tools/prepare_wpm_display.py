@@ -17,6 +17,13 @@ def prepare(path):
         '        return;\n'
         '    }\n\n'
         '    bool peak_changed = false;')
+    # XIAO resizes the bars natively; center its peak on the actual bar.
+    s=replace(s,'            lv_obj_set_pos(widget->peak_indicator, peak_x, 0);',
+        '#if defined(CONFIG_LISM_XIAO147_TOUCH)\n'
+        '            peak_x = lv_obj_get_style_x(widget->bars[peak_slot], 0) +\n'
+        '                (lv_obj_get_style_width(widget->bars[peak_slot], 0) - 4) / 2;\n'
+        '#endif\n'
+        '            lv_obj_set_pos(widget->peak_indicator, peak_x, 0);')
     init='    k_work_init_delayable(&wpm_smooth_work, wpm_smooth_work_handler);'
     s=replace(s,init,'')
     s=replace(s,'    widget_wpm_meter_init();',

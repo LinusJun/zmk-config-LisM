@@ -1,4 +1,4 @@
-name: Build LisM ESB v501 WPM refresh TEST
+name: Build LisM ESB v502 XIAO147 two-page UI TEST
 on:
   workflow_dispatch:
   push:
@@ -31,5 +31,5 @@ jobs:
         run: python3 config/tests/fourwaystick_regression_test.py
       - uses: actions/upload-artifact@v4
         with:
-          name: LisM-ESBv501-${{ matrix.target }}
+          name: LisM-ESBv502-${{ matrix.target }}
           path: config/artifacts/*

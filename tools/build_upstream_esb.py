@@ -76,7 +76,7 @@ def build(target,ws,modules=None,driver=None):
     if target!='reset':
         options=['-DEXTRA_CONF_FILE='+str(ROOT/'config/esb-upstream.conf'),'-DCONFIG_ZMK_SPLIT=y','-DCONFIG_ZMK_SPLIT_ROLE_CENTRAL='+('y' if central else 'n'),'-DLISM_COMPAT_INCLUDE='+str(compat.parent),'-DLISM_ESB_FOLDER='+str(prepared/'src/split/esb')]
         if display_central:options+=['-DCONFIG_LISM_DONGLE_STATION='+('1' if xiao else '0')]
-        if xiao:options+=['-DCONFIG_LISM_XIAO147_TOUCH=y','-DCONFIG_I2C=y','-DCONFIG_I2C_NRFX_TRANSFER_TIMEOUT=100','-DCONFIG_INPUT_GPIO_KEYS=y','-DCONFIG_LV_COLOR_16_SWAP=n']
+        if xiao:options+=['-DCONFIG_PROSPECTOR_FIXED_BRIGHTNESS=100','-DCONFIG_LISM_XIAO147_TOUCH=y','-DCONFIG_I2C=y','-DCONFIG_I2C_NRFX_TRANSFER_TIMEOUT=100','-DCONFIG_INPUT_GPIO_KEYS=y','-DCONFIG_LV_COLOR_16_SWAP=n']
         options+=['-DSNIPPET=zmk-usb-logging','-DCONFIG_LOG_PROCESS_THREAD_STARTUP_DELAY_MS=0',
                   '-DCONFIG_ZMK_LOG_LEVEL_INF=y','-DCONFIG_LOG_BUFFER_SIZE=8192']
         if central:
@@ -136,7 +136,7 @@ def build(target,ws,modules=None,driver=None):
     assert production_fingerprint()[0]==fingerprint,'Production sources changed during this build; rebuild required'
     data=(dest/'zephyr/zmk.uf2').read_bytes();validate_uf2(data)
     out=ROOT/'artifacts';out.mkdir(exist_ok=True)
-    name={'left':'LisM_ESBv501_TEST_Left_4waystick.uf2','right':'LisM_ESBv501_TEST_Right_Trackball_BLE5_Hub.uf2','dongle_a':'LisM_ESBv501_TEST_Dongle_A_Prospector169.uf2','dongle_b':'LisM_ESBv501_TEST_Dongle_B_XIAO147_Touch.uf2','reset':'settings_reset_XIAO_nRF52840.uf2'}[target]
+    name={'left':'LisM_ESBv501_TEST_Left_4waystick.uf2','right':'LisM_ESBv501_TEST_Right_Trackball_BLE5_Hub.uf2','dongle_a':'LisM_ESBv501_TEST_Dongle_A_Prospector169.uf2','dongle_b':'LisM_ESBv502_TEST_Dongle_B_XIAO147_Touch.uf2','reset':'settings_reset_XIAO_nRF52840.uf2'}[target]
     (out/name).write_bytes(data);(out/(target+'.config')).write_text(conf);(out/(target+'.dts')).write_bytes((dest/'zephyr/zephyr.dts').read_bytes())
     rec={'target':target,'file':name,'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(data),'verified_base':BASE,'keymap_sha256':KEYMAP,'upstream_esb':'314c7cbaf4a74e1add1d6ffc8249de3e29965b8c','host_profiles':5 if central else 0,'simultaneous_host_connections':5 if central else 0,'host_ble':central,'split_transport':'ESB only' if target!='reset' else None,'hardware_tested':False,'pins':PINS,'production_fingerprint':fingerprint,'source_hashes':source_hashes,**mem}
     (out/(target+'-build.json')).write_text(json.dumps(rec,indent=2)+'\n');print('SUCCESS',json.dumps({k:rec[k] for k in ['target','file','sha256','bytes','production_fingerprint'] }|mem),flush=True)
