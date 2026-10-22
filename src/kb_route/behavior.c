@@ -5,7 +5,7 @@
 #include <zmk/behavior.h>
 #include "route.h"
 static int press(struct zmk_behavior_binding *b,struct zmk_behavior_binding_event e) {
-    ARG_UNUSED(e);if(b->param1<2)kb_route_request(b->param1);else if(b->param1>=10 && b->param1<15)kb_route_select(b->param1-10);
+    ARG_UNUSED(e);if(b->param1<2)kb_route_request(b->param1);else if(b->param1>=10 && b->param1<15)kb_route_select(b->param1-10);else if(b->param1>=30 && b->param1<32)kb_route_select_dongle(b->param1-30);
     return ZMK_BEHAVIOR_OPAQUE;
 }
 static int release(struct zmk_behavior_binding *b,struct zmk_behavior_binding_event e) {ARG_UNUSED(b);ARG_UNUSED(e);return ZMK_BEHAVIOR_OPAQUE;}

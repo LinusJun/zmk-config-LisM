@@ -2,17 +2,27 @@
 #include <lvgl.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <zephyr/kernel.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/logging/log.h>
 #include "lism_screen.h"
 #include "lism_input_host.h"
+#include "xiao147_ui.h"
 LOG_MODULE_REGISTER(lism_screen,LOG_LEVEL_INF);
-static atomic_t toggles,active,generation;
+static atomic_t toggles,active,generation,requested_active=ATOMIC_INIT(-1);
 struct navigation {uint32_t generation;uint8_t position;};
 K_MSGQ_DEFINE(screen_nav,sizeof(struct navigation),16,4);
-void lism_screen_request_next(void) {atomic_inc(&toggles);}
+void lism_screen_request_next(void) {
+#ifdef CONFIG_LISM_XIAO147_TOUCH
+    xiao147_ui_next_page();
+#else
+    atomic_inc(&toggles);
+#endif
+}
 bool lism_screen_take_toggle(void) {return atomic_set(&toggles,0)&1;}
+void lism_screen_request_active(bool value){atomic_set(&requested_active,value?1:0);}
+bool lism_screen_take_request(bool *value){int v=atomic_set(&requested_active,-1);if(v<0)return false;*value=v!=0;return true;}
 bool lism_screen_active(void) {return atomic_get(&active);}
 void lism_screen_commit(bool value) {atomic_inc(&generation);atomic_set(&active,value);}
 void lism_screen_nav(unsigned position) {
@@ -25,6 +35,8 @@ void lism_screen_nav(unsigned position) {
 static lv_obj_t *parent_screen,*root,*title,*pager,*tiles[4],*status_label;
 static lv_obj_t *modal,*modal_title,*modal_text,*modal_value,*modal_hint;
 static bool visible;
+static bool touch_armed,touching,touch_blocked;static int touch_target=-1;static uint32_t touch_generation;static uint16_t touch_x,touch_y;
+static lv_obj_t *touch_keys[5];
 static uint64_t originally_hidden;
 enum view {DEVICES,SEARCH};
 enum dialog {NONE,DEVICE,CONNECT,FORGET};
@@ -72,11 +84,18 @@ static void normalize_focus(void) {
 }
 static void create_modal(void) {
     if(modal)return;
-    modal=panel(root,8,28,264,197);lv_obj_set_style_border_color(modal,lv_color_hex(0x569fa7),0);
-    modal_title=text(modal,12,12,240,&lv_font_montserrat_14);
-    modal_text=text(modal,12,40,240,&lv_font_montserrat_12);lv_label_set_long_mode(modal_text,LV_LABEL_LONG_WRAP);
-    modal_value=text(modal,24,89,220,&lv_font_montserrat_18);
-    modal_hint=text(modal,12,126,240,&lv_font_montserrat_12);lv_label_set_long_mode(modal_hint,LV_LABEL_LONG_WRAP);
+    modal=panel(root,8,22,304,146);lv_obj_set_style_border_color(modal,lv_color_hex(0x569fa7),0);
+    modal_title=text(modal,10,4,282,&lv_font_montserrat_14);
+    modal_text=text(modal,10,24,282,&lv_font_montserrat_12);lv_label_set_long_mode(modal_text,LV_LABEL_LONG_WRAP);
+    modal_value=text(modal,18,58,270,&lv_font_montserrat_18);
+    modal_hint=text(modal,10,82,282,&lv_font_montserrat_10);lv_label_set_long_mode(modal_hint,LV_LABEL_LONG_WRAP);
+    static const char *const names[]={"Left","Right","Up","Down","OK"};
+    for(unsigned i=0;i<5;i++) {
+        touch_keys[i]=text(modal,5+i*59,122,56,&lv_font_montserrat_12);
+        lv_label_set_text(touch_keys[i],names[i]);lv_obj_set_height(touch_keys[i],21);
+        lv_obj_set_style_bg_color(touch_keys[i],lv_color_hex(0x303d46),0);
+        lv_obj_set_style_bg_opa(touch_keys[i],LV_OPA_COVER,0);lv_obj_set_style_text_align(touch_keys[i],LV_TEXT_ALIGN_CENTER,0);
+    }
 }
 static void render_modal(void) {
     char s[160];
@@ -118,15 +137,15 @@ static void render(void) {
     if(layout!=next_layout) {
         layout=next_layout;
         for(unsigned i=0;i<4;i++) {
-            int x=10,y,w=260,h;
-            if(view==DEVICES) {y=i<2?36+i*61:174;w=i<2?260:126;h=i<2?52:34;if(i==3)x=144;}
-            else {y=i<3?36+i*48:188;h=i<3?42:30;}
+            int x=8,y,w=304,h;
+            if(view==DEVICES) {y=i<2?28+i*44:118;w=i<2?304:148;h=i<2?40:28;if(i==3)x=164;}
+            else {y=i<3?28+i*32:128;h=i<3?28:26;}
             lv_obj_set_pos(tiles[i],x,y);lv_obj_set_size(tiles[i],w,h);
-            lv_obj_set_style_pad_top(tiles[i],view==DEVICES && i<2?5:8,0);
+            lv_obj_set_style_pad_top(tiles[i],view==DEVICES && i<2?3:5,0);
         }
     }
     set_text(title,view==DEVICES?"BLE DEVICES":"ADD DEVICE");
-    if(view==SEARCH && result_pages()>1){snprintf(s,sizeof(s),"%u/%u",page+1,result_pages());set_text(pager,s);}else set_text(pager,"");
+    if(view==SEARCH && result_pages()>1){snprintf(s,sizeof(s),"< %u/%u >",page+1,result_pages());set_text(pager,s);}else set_text(pager,"");
     for(unsigned i=0;i<4;i++) {
         bool show=true;
         if(view==DEVICES) {
@@ -158,6 +177,7 @@ static bool same_peer(void) {
         (latest.peers[slot].saved || latest.peers[slot].connected);
 }
 static void action(unsigned position) {
+    touch_armed=false;
     bool enter=position==37;bool direction=position>=42 && position<=45;
     if(shown.auth_type) {
         if(shown.auth_type==LISM_INPUT_AUTH_ENTRY) {
@@ -219,17 +239,17 @@ static void action(unsigned position) {
     } else lism_screen_request_next();
 }
 static void create_view(void) {
-    root=panel(parent_screen,0,0,280,240);lv_obj_set_style_radius(root,0,0);lv_obj_set_style_border_width(root,0,0);
+    root=panel(parent_screen,0,0,320,172);lv_obj_set_style_radius(root,0,0);lv_obj_set_style_border_width(root,0,0);
     lv_obj_set_style_bg_color(root,lv_color_hex(0),0);
-    title=text(root,10,6,230,&lv_font_montserrat_18);lv_obj_set_style_text_color(title,lv_color_hex(ACCENT),0);
-    pager=text(root,246,10,30,&lv_font_montserrat_12);
+    title=text(root,8,4,220,&lv_font_montserrat_18);lv_obj_set_style_text_color(title,lv_color_hex(ACCENT),0);
+    pager=text(root,238,8,76,&lv_font_montserrat_12);
     for(unsigned i=0;i<4;i++) {
         tiles[i]=lv_label_create(root);lv_label_set_long_mode(tiles[i],LV_LABEL_LONG_CLIP);
         lv_obj_set_style_bg_color(tiles[i],lv_color_hex(0x181d23),0);lv_obj_set_style_bg_opa(tiles[i],LV_OPA_COVER,0);
         lv_obj_set_style_radius(tiles[i],7,0);lv_obj_set_style_text_font(tiles[i],&lv_font_montserrat_12,0);
         lv_obj_set_style_pad_hor(tiles[i],10,0);lv_obj_set_style_text_line_space(tiles[i],2,0);
     }
-    status_label=text(root,10,222,260,&lv_font_montserrat_10);layout=-1;
+    status_label=text(root,8,157,304,&lv_font_montserrat_10);layout=-1;
 }
 static void set_home_visibility(bool hide) {
     for(unsigned i=0;i<lv_obj_get_child_count(parent_screen) && i<64;i++) {
@@ -241,7 +261,7 @@ static void set_home_visibility(bool hide) {
 static void poll(lv_timer_t *timer) {
     ARG_UNUSED(timer);bool value=lism_screen_active(),dirty=false;
     if(value!=visible) {
-        visible=value;dialog=NONE;auth_token=0;focus=0;page=0;view=DEVICES;notice[0]=0;dirty=true;
+        touch_armed=false;visible=value;dialog=NONE;auth_token=0;focus=0;page=0;view=DEVICES;notice[0]=0;dirty=true;
         if(visible){set_home_visibility(true);create_view();lism_input_host_snapshot(&shown);}
         else {
             set_home_visibility(false);lv_obj_delete(root);root=NULL;modal=NULL;
@@ -255,7 +275,7 @@ static void poll(lv_timer_t *timer) {
     }
     if(visible) {
         struct lism_input_status next;lism_input_host_snapshot(&next);
-        if(memcmp(&next,&shown,sizeof(shown))){shown=next;dirty=true;}
+        if(memcmp(&next,&shown,sizeof(shown))){touch_armed=false;shown=next;dirty=true;}
         if(dirty)render();
     }
 }
@@ -265,3 +285,37 @@ void lism_screen_create(lv_obj_t *screen) {
 }
 
 uint32_t lism_screen_generation(void){return atomic_get(&generation);}
+
+/* Called only by the XIAO display-thread controller. */
+void lism_screen_present(void) {poll(NULL);} /* Reflect input-thread commit, never bypass its release barrier. */
+static bool inside(lv_obj_t *o,uint16_t x,uint16_t y) {
+    if(!o || lv_obj_has_flag(o,LV_OBJ_FLAG_HIDDEN))return false;
+    lv_area_t a;lv_obj_get_coords(o,&a);return x>=a.x1 && x<=a.x2 && y>=a.y1 && y<=a.y2;
+}
+static int touch_at(uint16_t x,uint16_t y) {
+    if(!visible || !root)return -1;
+    if(dialog!=NONE || shown.auth_type) {for(unsigned i=0;i<5;i++)if(inside(touch_keys[i],x,y))return 10+i;return -1;}
+    if(view==SEARCH && result_pages()>1 && inside(pager,x,y))return x<276?20:21;
+    for(unsigned i=0;i<4;i++)if(inside(tiles[i],x,y) && selectable(i))return i;
+    return -1;
+}
+void lism_screen_touch(uint8_t fingers,uint16_t x,uint16_t y) {
+    if(!visible || fingers>1){touch_armed=false;touching=fingers!=0;touch_blocked=fingers!=0;return;}
+    if(fingers==1) {
+        int target=touch_at(x,y);
+        if(!touching){touch_target=target;touch_x=x;touch_y=y;touch_generation=atomic_get(&generation);touch_armed=target>=0 && !touch_blocked;}
+        else if(touch_armed && (target!=touch_target || abs((int)x-touch_x)>12 || abs((int)y-touch_y)>12))touch_armed=false;
+        touching=true;
+        return;
+    }
+    touching=false;if(touch_blocked){touch_blocked=false;touch_armed=false;return;}
+    if(!touch_armed)return;
+    int target=touch_target;touch_armed=false;
+    if(touch_generation!=(uint32_t)atomic_get(&generation) || !visible)return;
+    struct lism_input_status latest;lism_input_host_snapshot(&latest);
+    if(memcmp(&latest,&shown,sizeof(shown)))return; /* Never act on a replacement row/dialog. */
+    if(target<4){focus=target;action(37);}
+    else if(target<15){static const unsigned actions[]={45,43,42,44,37};action(actions[target-10]);}
+    else action(target==20?45:43);
+    render();
+}

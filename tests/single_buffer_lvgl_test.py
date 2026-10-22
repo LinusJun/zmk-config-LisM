@@ -61,7 +61,7 @@ static void submit(lv_display_t*d,const lv_area_t*a,uint8_t*map){
  lvgl_flush_display(&req);
 }
 int main(void){
- lv_init();lv_display_t*d=lv_display_create(280,240);static uint8_t buffer[26880];
+ lv_init();lv_display_t*d=lv_display_create(320,172);static uint8_t buffer[22016];
  struct lvgl_disp_data data={0};lv_display_set_user_data(d,&data);
  lv_display_set_color_format(d,LV_COLOR_FORMAT_RGB565);
  lv_display_set_buffers(d,buffer,NULL,sizeof(buffer),LV_DISPLAY_RENDER_MODE_PARTIAL);

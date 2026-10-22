@@ -11,6 +11,8 @@ pre=r'''
 #include <assert.h>
 #include <errno.h>
 #define LISM_KEYS 46
+#define CONFIG_LISM_XIAO147_TOUCH 1
+#define IS_ENABLED(x) (x)
 #define ZMK_SPLIT_TRANSPORT_PERIPHERAL_EVENT_TYPE_INPUT_EVENT 2
 #define INPUT_EV_KEY 1
 static bool kb_route_dongle_key_allowed(void){return true;}
@@ -22,6 +24,8 @@ static uint64_t quarantine[2];
 static bool page_pending,page_target; /* compiled if used by production */
 static int esb_central;
 static bool active,toggle,fail_release;
+static int touch_request=-1;
+static bool lism_screen_take_request(bool *out){if(touch_request<0)return false;*out=touch_request;touch_request=-1;return true;}
 static bool host[2][46];static unsigned presses,releases,navs;
 static bool lism_screen_take_toggle(void){bool v=toggle;toggle=false;return v;}
 static bool lism_screen_active(void){return active;}
@@ -58,6 +62,10 @@ int main(void){
  inject(0,45,false);assert(!quarantine[0]);
  inject(1,37,true);toggle=true;apply_page();assert(!active);
  inject(1,37,false);assert(!host[1][37]);inject(1,37,true);assert(host[1][37]);inject(1,37,false);
+ /* A touch page request must also wait for the old joystick release. */
+ inject(0,42,true);assert(host[0][42]);touch_request=1;fail_release=true;apply_page();assert(!active&&host[0][42]);
+ fail_release=false;apply_page();assert(active&&!host[0][42]);inject(0,42,false);
+ touch_request=0;apply_page();assert(!active);
  return 0;
 }
 '''

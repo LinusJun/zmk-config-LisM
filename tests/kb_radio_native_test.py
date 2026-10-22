@@ -14,14 +14,20 @@ typedef struct {int evt_type;unsigned pipe;uint8_t *buf;size_t data_length;bool 
 #define APP_ESB_EVT_RX 0
 #define APP_ESB_EVT_TX_SUCCESS 1
 #define APP_ESB_EVT_TX_FAIL 2
-struct hub_tx {struct esb_payload p;uint32_t peer,generation;int64_t since;};
+struct hub_tx {struct esb_payload p;uint32_t peer,generation,local_boot;uint8_t station;int64_t since;};
 struct hub_link {uint32_t boot,next_seq,last_boot[2],previous_boot[2],last_seq[2],ack_boot[2],ack_seq[2];struct hub_tx tx;bool have;atomic_t result;uint32_t success,fail;};
 static struct hub_link links[2];static struct hub_tx latest_mirror;static bool mirror_pending;
-struct hub_rx {struct esb_payload p;uint8_t link;uint32_t boot;};
-static struct hub_rx rx[64];static atomic_t head,tail,uplink_generation;static int tx_lock;static uint32_t left_route_epoch,control_last_seq;static uint8_t left_route_phase,left_route_target;static int64_t next_left_control;
+struct hub_rx {struct esb_payload p;uint8_t link,station;uint32_t boot;};
+static struct hub_rx rx[64];static atomic_t head,tail,uplink_generation;static int tx_lock;static uint32_t left_route_epoch,control_last_seq;static uint8_t left_route_phase,left_route_target,left_route_station;static uint32_t left_route_receiver_boot;
+static atomic_t station_selected,station_requested;static int64_t uplink_seen;
+struct queue;static void k_msgq_purge(struct queue*q);
+static uint32_t sys_rand32_get(void){static uint32_t n=900;return ++n;}
+static int atomic_inc(atomic_t*p);static uint8_t kb_uplink_station_current(void){return station_selected;}
+static bool kb_uplink_is_probe(const uint8_t*p,size_t n){(void)p;(void)n;return false;}static int64_t next_left_control;
 struct queue {struct hub_tx items[64];unsigned size,head,count;};static struct queue left_tx={.size=16},dongle_tx={.size=64};
 static int k_msgq_put(struct queue *q,const struct hub_tx*t,int wait){(void)wait;if(q->count==q->size)return -ENOSPC;q->items[(q->head+q->count++)%64]=*t;return 0;}
 static int k_msgq_get(struct queue *q,struct hub_tx*t,int wait){(void)wait;if(!q->count)return -ENOMSG;*t=q->items[q->head++%64];q->count--;return 0;}
+static void k_msgq_purge(struct queue*q){q->head=q->count=0;}
 static uint32_t crc32_ieee(const void*data,size_t n){uint32_t c=~0U;const uint8_t*p=data;for(size_t i=0;i<n;i++){c^=p[i];for(int b=0;b<8;b++)c=(c>>1)^((c&1)?0xedb88320:0);}return ~c;}
 static unsigned deliveries[2];static bool reject;
 static void native_callback(app_esb_event_t *e){if(!reject){deliveries[0]++;e->accepted=true;}}
@@ -36,6 +42,7 @@ for name in ['receive_frames','receive_ring','head','tail','diag_rx','diag_valid
     receiver=re.sub(r'\b'+name+r'\b','d_'+name,receiver)
 pre+=r'''
 #define WIRE_HEADER LISM_WIRE_HEADER
+#define CONFIG_LISM_DONGLE_STATION 0
 #define APP_ESB_MODE_PRX 0
 #define APP_ESB_MODE_PTX 1
 static int atomic_inc(atomic_t*p){return (*p)++;}
@@ -47,18 +54,18 @@ static struct k_spinlock signal_lock;static struct {int8_t dbm;int64_t seen;} si
 static unsigned d_mirrors,d_events;
 static void d_callback(app_esb_event_t*e){struct esb_event_envelope env={0};memcpy(&env,e->buf,e->data_length-sizeof(struct esb_msg_postfix));d_events++;if(env.payload.event.type==KB_MIRROR_EVENT)d_mirrors++;e->accepted=true;}
 '''
-code=pre+'\n'+(P/'src/esb_upstream/hub_motion.inc').read_text()+'\n'+ '\n'.join(function(t,n) for t,n in [(radio,'get32'),(radio,'put32'),(link,'lism_valid_event'),((P/'src/esb_upstream/common.c').read_text(),'lism_wire_valid'),(hub,'kb_uplink_valid'),(radio,'valid_body'),(radio,'receive'),(radio,'enqueue'),(radio,'kb_uplink_send'),(radio,'next_tx'),(radio,'tx_live')])+'\n'+receiver
+code=pre+'\n'+(P/'src/esb_upstream/hub_motion.inc').read_text()+'\n'+ '\n'.join(function(t,n) for t,n in [(radio,'get32'),(radio,'put32'),(link,'lism_valid_event'),((P/'src/esb_upstream/common.c').read_text(),'lism_wire_valid'),(hub,'kb_uplink_valid'),(radio,'valid_body'),(radio,'receive'),(radio,'enqueue'),(radio,'kb_uplink_send'),(radio,'next_tx'),(radio,'tx_live'),(radio,'apply_station_request')])+'\n'+receiver
 main=r'''
 static struct esb_payload frame(unsigned net,unsigned source,uint32_t peer_boot,uint32_t seq,uint32_t target,bool command){
  struct esb_payload p={.pipe=source};uint8_t body[64]={0};size_t n;
  if(command){struct esb_command_envelope e={.prefix={.magic_prefix="ZmKe",.payload_size=1+sizeof(e.payload.cmd.type)},.payload={.source=source,.cmd={.type=ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_POLL_EVENTS}}};n=sizeof(e.prefix)+e.prefix.payload_size;memcpy(body,&e,n);}
  else {struct esb_event_envelope e={.prefix={.magic_prefix="ZmKe",.payload_size=1+sizeof(e.payload.event.type)+sizeof(struct lism_snapshot)},.payload={.source=source,.event={.type=127}}};struct lism_snapshot s={.keys=1,.battery=81};memcpy(&e.payload.event.data,&s,sizeof(s));n=sizeof(e.prefix)+e.prefix.payload_size;memcpy(body,&e,n);}
  struct esb_msg_postfix crc={.crc=crc32_ieee(body,n)};memcpy(body+n,&crc,sizeof(crc));n+=sizeof(crc);
- p.length=20+n;memcpy(p.data,"LsE2",4);put32(p.data+4,peer_boot);put32(p.data+8,seq);put32(p.data+12,target);memcpy(p.data+20,body,n);return p;
+ p.length=20+n;memcpy(p.data,"LsE3",4);put32(p.data+4,peer_boot);put32(p.data+8,seq);put32(p.data+12,target);memcpy(p.data+20,body,n);return p;
 }
 static void feed(unsigned net,struct esb_payload p){unsigned h=head;rx[h]=(struct hub_rx){.p=p,.link=net,.boot=links[net].boot};head=(h+1)%64;receive();}
 int main(void){
- links[0].boot=100;links[1].boot=200;links[0].next_seq=links[1].next_seq=1;
+ links[0].boot=100;links[1].boot=200;d_boot_id=400;links[0].next_seq=links[1].next_seq=1;
  struct esb_payload p=frame(0,0,300,1,0,false);feed(0,p);assert(deliveries[0]==1&&links[0].last_boot[0]==300&&!links[1].last_boot[0]);feed(0,p);assert(deliveries[0]==1);
  p.data[25]^=1;feed(0,p);assert(deliveries[0]==1);p.data[25]^=1;
  p=frame(0,0,301,1,0,false);feed(0,p);assert(deliveries[0]==2);p=frame(0,0,300,2,0,false);feed(0,p);assert(deliveries[0]==2); /* previous boot replay */
@@ -70,7 +77,7 @@ int main(void){
  uplink_generation=1;assert(!tx_live(1,&tx,now));tx.generation=1;assert(tx_live(1,&tx,now));assert(!tx_live(1,&tx,now+501));
  /* Telemetry is a single replaceable slot and never consumes the reliable queue. */
  struct zmk_split_transport_peripheral_event e={.type=KB_MIRROR_EVENT};for(int i=0;i<1000;i++){e.data.input_event.value=i;assert(!kb_uplink_send(1,&e));}assert(!dongle_tx.count&&mirror_pending);assert(next_tx(1,&tx)&&!mirror_pending);assert(!next_tx(1,&tx));assert(tx.p.length<=64);
- struct hub_tx ordinary={.p.pipe=1,.generation=1,.since=now};assert(!k_msgq_put(&dongle_tx,&ordinary,0));assert(!enqueue(1,&d,true));assert(next_tx(1,&tx)&&tx.p.length==0);assert(next_tx(1,&tx)&&tx.p.length>0); /* releases/control first */
+ struct hub_tx ordinary={.p.pipe=1,.generation=1,.station=0,.local_boot=200,.since=now};assert(!k_msgq_put(&dongle_tx,&ordinary,0));assert(!enqueue(1,&d,true));assert(next_tx(1,&tx)&&tx.p.length==0);assert(next_tx(1,&tx)&&tx.p.length>0); /* releases/control first */
  dongle_tx.size=1;assert(!enqueue(1,&d,false));uint32_t seq=links[1].next_seq;assert(enqueue(1,&d,false)==-ENOSPC&&links[1].next_seq==seq);
 
  /* Actual publish -> mirror -> snapshots order must survive the dongle's
@@ -81,7 +88,7 @@ int main(void){
  for(int cycle=0;cycle<100;cycle++){
   e=(struct zmk_split_transport_peripheral_event){.type=KB_ROUTE_EVENT};assert(!kb_uplink_send(1,&e));
   e.type=KB_MIRROR_EVENT;assert(!kb_uplink_send(1,&e));
-  e.type=LISM_SNAPSHOT_TYPE;assert(!kb_uplink_send(0,&e));assert(!kb_uplink_send(1,&e));
+  e.type=LISM_SNAPSHOT_TYPE;assert(!kb_uplink_send(1,&e));assert(!kb_uplink_send(1,&e));
   unsigned selected=0;
   while(next_tx(1,&tx)){
    uint32_t wire=get32(tx.p.data+8);assert(wire>previous);previous=wire;selected++;
@@ -110,6 +117,15 @@ int main(void){
  assert(!kb_uplink_send(1,&move));now+=41;uint32_t seq_before=links[1].next_seq;assert(!next_tx(1,&tx)&&links[1].next_seq==seq_before);
  assert(!kb_uplink_send(1,&move));uplink_generation++;assert(!next_tx(1,&tx));
 
+ /* A station mutation invalidates queued motion, mirror, retry and RX origin. */
+ struct hub_tx old=tx;old.generation=uplink_generation;old.station=0;old.local_boot=200;old.since=now;
+ assert(tx_live(1,&old,now));
+ assert(!kb_uplink_send(1,&move));e.type=KB_MIRROR_EVENT;assert(!kb_uplink_send(1,&e));
+ links[1].have=true;station_requested=1;apply_station_request();
+ assert(station_selected==1 && links[1].boot!=200 && !links[1].have && !motion_pending && !mirror_pending && !dongle_tx.count);
+ assert(!tx_live(1,&old,now));
+ unsigned delivered=deliveries[1];struct esb_payload stale=frame(1,1,400,99,links[1].boot,true);
+ rx[head]=(struct hub_rx){.p=stale,.link=1,.station=0,.boot=links[1].boot};head=(head+1)%64;receive();assert(deliveries[1]==delivered);
  puts("PASS actual two-link wire functions: isolated boot/seq/ACK, duplicate+replay rejection, CRC/source/direction checks, full-queue retry admission, stale epoch/age, telemetry coalescing, release priority, actual hub-to-dongle priority interleaving/dedup and producer-after-selection race");return 0;}
 '''
 with tempfile.TemporaryDirectory() as tmp:

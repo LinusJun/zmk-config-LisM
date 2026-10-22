@@ -50,14 +50,14 @@ static int k_spin_lock(struct k_spinlock *l){(void)l;return 0;}static void k_spi
 static void k_mutex_lock(void*l,int t){(void)l;(void)t;}static void k_mutex_unlock(void*l){(void)l;}
 '''+strip(abi)+strip((P/'src/kb_route/view.h').read_text())+r'''
 #define KB_ROUTE_EVENT 126
-#define KB_ROUTE_VERSION 2
+#define KB_ROUTE_VERSION 3
 #include "/work/source/src/kb_route/left_protocol.h"
 #define LISM_SNAPSHOT_TYPE 127
 #define LISM_KEYS 46
 #define LISM_LEASE_MS 1500
 #define LISM_WIRE_HEADER 20
 struct lism_snapshot {uint64_t keys;uint8_t buttons,battery;} __packed;
-struct kb_route_status {uint8_t version,mode,profile;uint32_t epoch,authority;uint8_t phase,target;} __packed;
+struct kb_route_status {uint8_t version,mode,profile;uint32_t epoch,authority;uint8_t phase,target,station,owner_station;uint32_t receiver_boot;} __packed;
 '''
 route_pre=r'''
 struct zmk_position_state_changed {uint8_t source;uint32_t position;bool state;int64_t timestamp;};
@@ -67,6 +67,7 @@ static struct k_spinlock state_lock;static struct lism_snapshot physical[2];
 static bool initialized=true,switching;static uint8_t current_mode;static int64_t left_seen,confirmed_at,device_down;
 static uint64_t offline_consumed;static int requested_mode=-1;
 static void kb_route_request(uint8_t m){requested_mode=m;}
+static int kb_route_select_dongle(uint8_t s){requested_mode=30+s;return 0;}
 struct recorded {unsigned source;struct zmk_split_transport_peripheral_event e;};static struct recorded record[256];static unsigned count;
 static int kb_uplink_send(unsigned s,const struct zmk_split_transport_peripheral_event *e){record[count++]=(struct recorded){s,*e};return 0;}
 '''

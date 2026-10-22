@@ -11,6 +11,21 @@ __attribute__((weak)) bool lism_input_merge_local_allowed(void){return true;}
 __attribute__((weak)) bool lism_input_merge_external_frame(void){return false;}
 __attribute__((weak)) void lism_input_merge_external_mouse(struct zmk_hid_mouse_report *copy){(void)copy;}
 
+#ifdef CONFIG_LISM_XIAO147_TOUCH
+static uint8_t touch_buttons;
+static int touch_token=-1;
+extern int xiao147_touch_endpoint(void);
+int lism_input_merge_touch(uint32_t epoch,int token,uint8_t buttons) {
+    /* Resolve outside merge_lock: the context itself reads merge generation. */
+    if(buttons && (token<0 || token!=xiao147_touch_endpoint()))return -ESTALE;
+    k_spinlock_key_t key=k_spin_lock(&merge_lock);
+    int rc=epoch==generation?0:-ESTALE;
+    if(!rc){touch_buttons=buttons;touch_token=token;}
+    k_spin_unlock(&merge_lock,key);return rc;
+}
+#endif
+
+
 uint32_t lism_input_merge_generation(void) {
     k_spinlock_key_t key = k_spin_lock(&merge_lock);
     uint32_t value = generation;
@@ -45,6 +60,9 @@ void lism_input_merge_endpoint_reset(void) {
     lism_input_merge_endpoint_changing();
     k_spinlock_key_t key = k_spin_lock(&merge_lock);
     memset(peers, 0, sizeof(peers));
+#ifdef CONFIG_LISM_XIAO147_TOUCH
+    touch_buttons=0;touch_token=-1;
+#endif
     if (++generation == 0) {
         generation = 1;
     }
@@ -151,11 +169,17 @@ void lism_input_merge_consumer(struct zmk_hid_consumer_report *copy) {
 }
 
 void lism_input_merge_mouse(struct zmk_hid_mouse_report *copy) {
+#ifdef CONFIG_LISM_XIAO147_TOUCH
+    int current_touch=xiao147_touch_endpoint();
+#endif
     if(!lism_input_merge_local_allowed()){
         memset(&copy->body,0,sizeof(copy->body));
         if(lism_input_merge_external_frame())lism_input_merge_external_mouse(copy);
     }
     k_spinlock_key_t key=k_spin_lock(&merge_lock);
     for(unsigned i=0;i<LISM_INPUT_MERGE_SLOTS;i++)copy->body.buttons|=peers[i].buttons;
+#ifdef CONFIG_LISM_XIAO147_TOUCH
+    if(current_touch>=0 && current_touch==touch_token)copy->body.buttons|=touch_buttons;
+#endif
     k_spin_unlock(&merge_lock,key);
 }

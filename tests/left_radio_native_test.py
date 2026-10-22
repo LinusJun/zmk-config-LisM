@@ -69,17 +69,17 @@ static void k_sleep(int ms){
 }
 static struct esb_payload command(uint32_t authority,uint32_t seq,uint32_t epoch,unsigned phase,unsigned target){
  struct esb_payload p={.pipe=0};struct esb_command_envelope env={.prefix={.magic_prefix="ZmKe"},.payload={.source=0,.cmd={.type=ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_INVOKE_BEHAVIOR}}};
- __typeof__(env.payload.cmd.data.invoke_behavior) b={0};strcpy(b.behavior_dev,"KB_LEFT_ROUTE");b.param1=(phase<<1)|target;b.param2=epoch;b.state=1;memcpy(&env.payload.cmd.data.invoke_behavior,&b,sizeof(b));
+ __typeof__(env.payload.cmd.data.invoke_behavior) b={0};strcpy(b.behavior_dev,"KB_LEFT_ROUTE3");b.param1=(phase<<4)|(target<<2)|(target?2:0);b.param2=epoch;b.position=target?0:777;b.state=1;memcpy(&env.payload.cmd.data.invoke_behavior,&b,sizeof(b));
  env.prefix.payload_size=1+sizeof(env.payload.cmd.type)+sizeof(b);size_t n=sizeof(env.prefix)+env.prefix.payload_size;
- p.length=20+n+4;memcpy(p.data,"LsE2",4);put32(p.data+4,authority);put32(p.data+8,seq);put32(p.data+12,boot_id);put32(p.data+16,epoch);memcpy(p.data+20,&env,n);struct esb_msg_postfix crc={.crc=crc32_ieee(p.data+20,n)};memcpy(p.data+20+n,&crc,sizeof(crc));return p;
+ p.length=20+n+4;memcpy(p.data,"LsE3",4);put32(p.data+4,authority);put32(p.data+8,seq);put32(p.data+12,boot_id);put32(p.data+16,epoch);memcpy(p.data+20,&env,n);struct esb_msg_postfix crc={.crc=crc32_ieee(p.data+20,n)};memcpy(p.data+20+n,&crc,sizeof(crc));return p;
 }
 int main(int argc,char**argv){
  if(argc==4){phase_mode=true;phase_period=atoi(argv[1]);phase_offset=atoi(argv[2]);rng=atoi(argv[3]);callback=received_callback;enabled=1;budget=1500;now=1;if(!setjmp(stop))radio_thread(NULL,NULL,NULL);assert(control_success);return 0;}
  if(argc==2)missing_control_callbacks=true;
- callback=received_callback;enabled=1;policy=(struct kb_left_policy){.authority=99,.epoch=1,.phase=KB_LEFT_APPLIED,.target=0,.prepared=true};route_generation=1;
+ callback=received_callback;enabled=1;policy=(struct kb_left_policy){.authority=99,.epoch=1,.phase=KB_LEFT_APPLIED,.target=0,.station=0,.receiver_boot=777,.prepared=true};route_generation=1;
  struct zmk_split_transport_peripheral_event key={.type=ZMK_SPLIT_TRANSPORT_PERIPHERAL_EVENT_TYPE_KEY_POSITION_EVENT,.data.key_position_event={.position=4,.pressed=1}};
  kb_left_track(&key);key.data.key_position_event.pressed=0;kb_left_track(&key);
- budget=600;now=1;if(!setjmp(stop))radio_thread(NULL,NULL,NULL);
+ budget=600;now=1;coordinator_seen=1;if(!setjmp(stop))radio_thread(NULL,NULL,NULL);
  assert(press_delivered&&release_delivered&&control_between&&successes==2&&!warnings&&last_seq_seen>first_seq);
  /* Capture the ACK's provenance at IRQ enqueue, then change the active net. */
  fifo[0]=command(88,1,2,0,0);fn=1;fh=0;current_net=0;event(&(struct esb_evt){ESB_EVENT_RX_RECEIVED});current_net=1;receive();

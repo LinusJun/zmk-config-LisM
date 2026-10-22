@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: MIT
- * Left has two DISTINCT PTX addresses. A bounded private control exchange
+ * Left has three distinct PTX networks. A bounded private control exchange
  * cannot be blocked by retries to a powered-off data target. */
 #include "app_esb.h"
 #include "common.h"
@@ -19,19 +19,21 @@ static const uint8_t prefixes[]=DT_PROP(NODE,addr_prefix);
 static app_esb_callback_t callback;
 static atomic_t ready,enabled,tx_result;
 static struct k_spinlock left_lock;
-static struct kb_left_policy policy;
+static struct kb_left_policy policy={.target=1,.station=KB_STATION_NONE};
 static struct lism_snapshot physical;
 struct left_edge {struct kb_left_packet packet;uint32_t generation;};
 K_MSGQ_DEFINE(edges,sizeof(struct left_edge),64,4);
-static uint32_t route_generation,boot_id,data_seq[2]={1,1},control_seq=1,command_boot[2],previous_boot[2],command_seq[2];
+static uint32_t route_generation,boot_id,data_seq[KB_NET_COUNT]={1,1,1},control_seq=1,command_boot[KB_NET_COUNT],previous_boot[KB_NET_COUNT],command_seq[KB_NET_COUNT];
+static int64_t coordinator_seen;
 static atomic_t edge_fault;
 struct left_rx {struct esb_payload p;unsigned net;};
 static struct left_rx received[8];static atomic_t rx_head,rx_tail;
 static unsigned current_net;
+static atomic_t control_urgent;
 static void put32(uint8_t*p,uint32_t v){for(unsigned i=0;i<4;i++)p[i]=v>>(i*8);}
 static uint32_t get32(const uint8_t*p){return p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24);}
 static bool all_up(void){return !physical.keys && !physical.buttons;}
-static void packet(struct kb_left_packet*p){*p=(struct kb_left_packet){.authority=policy.authority,.epoch=policy.epoch,.buttons=physical.buttons,.battery=physical.battery};kb_left_pack_keys(p,physical.keys);}
+static void packet(struct kb_left_packet*p){*p=(struct kb_left_packet){.authority=policy.authority,.epoch=policy.epoch,.receiver_boot=policy.receiver_boot,.station=policy.station,.buttons=physical.buttons,.battery=physical.battery};kb_left_pack_keys(p,physical.keys);}
 static void queue_snapshot(void){struct left_edge e={.generation=route_generation};packet(&e.packet);if(k_msgq_put(&edges,&e,K_NO_WAIT))atomic_set(&edge_fault,route_generation+1);}
 void kb_left_track(const struct zmk_split_transport_peripheral_event*e){
     k_spinlock_key_t k=k_spin_lock(&left_lock);
@@ -50,12 +52,14 @@ static void event(const struct esb_evt*e){
 }
 static int configure(unsigned net){
     struct esb_config c=ESB_DEFAULT_CONFIG;c.protocol=ESB_PROTOCOL_ESB_DPL;c.bitrate=ESB_BITRATE_2MBPS;c.mode=ESB_MODE_PTX;c.tx_mode=ESB_TXMODE_MANUAL_START;c.selective_auto_ack=true;c.event_handler=event;c.retransmit_delay=600;c.retransmit_count=0;c.tx_output_power=ESB_TX_POWER_8DBM;c.use_fast_ramp_up=true;
-    int rc=esb_init(&c);if(!rc)rc=esb_set_base_address_0(net?private_base0:dongle_base0);if(!rc)rc=esb_set_base_address_1(net?private_base1:dongle_base1);if(!rc)rc=esb_set_prefixes(prefixes,ARRAY_SIZE(prefixes));if(!rc)rc=esb_enable_pipes(BIT(0));if(!rc)rc=esb_set_rf_channel(37);current_net=net;return rc;
+    if(net>=KB_NET_COUNT)return -EINVAL;
+    unsigned station=net==KB_NET_DONGLE_B?1:0;
+    int rc=esb_init(&c);if(!rc)rc=esb_set_base_address_0(net==KB_NET_PRIVATE?private_base0:kb_station_base0[station]);if(!rc)rc=esb_set_base_address_1(net==KB_NET_PRIVATE?private_base1:kb_station_base1[station]);if(!rc)rc=esb_set_prefixes(prefixes,ARRAY_SIZE(prefixes));if(!rc)rc=esb_enable_pipes(BIT(0));if(!rc)rc=esb_set_rf_channel(37);current_net=net;return rc;
 }
 static void receive(void){
     unsigned t;while((t=atomic_get(&rx_tail))!=(unsigned)atomic_get(&rx_head)){
         struct left_rx item=received[t];struct esb_payload p=item.p;atomic_set(&rx_tail,(t+1)%ARRAY_SIZE(received));
-        if(p.pipe || p.length<LISM_WIRE_HEADER+sizeof(struct esb_msg_prefix)+2+sizeof(struct esb_msg_postfix) || p.length>64 || memcmp(p.data,"LsE2",4) || get32(p.data+12)!=boot_id)continue;
+        if(p.pipe || p.length<LISM_WIRE_HEADER+sizeof(struct esb_msg_prefix)+2+sizeof(struct esb_msg_postfix) || p.length>64 || memcmp(p.data,"LsE3",4) || get32(p.data+12)!=boot_id)continue;
         size_t n=p.length-LISM_WIRE_HEADER;struct esb_command_envelope env={0};if(n-sizeof(struct esb_msg_postfix)>sizeof(env))continue;
         struct esb_msg_postfix crc;memcpy(&crc,p.data+p.length-sizeof(crc),sizeof(crc));
         if(crc32_ieee(p.data+LISM_WIRE_HEADER,n-sizeof(crc))!=crc.crc || !lism_wire_valid(0,p.data+LISM_WIRE_HEADER,n))continue;
@@ -64,15 +68,17 @@ static void receive(void){
         unsigned net=item.net;if(b!=command_boot[net]){if(b==previous_boot[net])continue;previous_boot[net]=command_boot[net];command_boot[net]=b;command_seq[net]=0;}
         if(s<=command_seq[net])continue;
         const struct zmk_split_transport_central_command*c=&env.payload.cmd;bool accepted=false;
-        if(net && c->type==ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_INVOKE_BEHAVIOR && !strcmp(c->data.invoke_behavior.behavior_dev,"KB_LEFT_ROUTE")){
+        if(net==KB_NET_PRIVATE && c->type==ZMK_SPLIT_TRANSPORT_CENTRAL_CMD_TYPE_INVOKE_BEHAVIOR && !strcmp(c->data.invoke_behavior.behavior_dev,"KB_LEFT_ROUTE3")){
             if(c->data.invoke_behavior.state!=1)continue;
             unsigned v=c->data.invoke_behavior.param1;uint32_t ep=c->data.invoke_behavior.param2;
             k_spinlock_key_t k=k_spin_lock(&left_lock);struct kb_left_policy old=policy;
-            accepted=kb_left_policy_command(&policy,b,ep,v>>1,v&1,all_up());
-            if(accepted && memcmp(&old,&policy,sizeof(old))){route_generation++;k_msgq_purge(&edges);if(policy.phase==KB_LEFT_APPLIED)queue_snapshot();}
+            unsigned station=(v&3)==2?KB_STATION_NONE:(v&3);
+            accepted=kb_left_policy_command(&policy,b,ep,v>>4,(v>>2)&3,station,c->data.invoke_behavior.position,all_up());
+            if(accepted)coordinator_seen=k_uptime_get();
+            if(accepted && memcmp(&old,&policy,sizeof(old))){atomic_set(&control_urgent,1);route_generation++;k_msgq_purge(&edges);if(policy.phase==KB_LEFT_APPLIED)queue_snapshot();}
             k_spin_unlock(&left_lock,k);
         }else{
-            k_spinlock_key_t k=k_spin_lock(&left_lock);bool allowed=policy.phase==KB_LEFT_APPLIED && policy.target==net && get32(p.data+16)==policy.epoch;k_spin_unlock(&left_lock,k);
+            k_spinlock_key_t k=k_spin_lock(&left_lock);bool allowed=policy.phase==KB_LEFT_APPLIED && kb_left_network(policy.target,policy.station)==net && get32(p.data+16)==policy.epoch && (net==KB_NET_PRIVATE || b==policy.receiver_boot);k_spin_unlock(&left_lock,k);
             if(allowed){app_esb_event_t e={.evt_type=APP_ESB_EVT_RX,.pipe=0,.buf=p.data+LISM_WIRE_HEADER,.data_length=n};callback(&e);accepted=e.accepted;}
         }
         if(accepted)command_seq[net]=s;
@@ -80,7 +86,7 @@ static void receive(void){
 }
 static void frame(struct esb_payload*p,unsigned net,unsigned type,const void*data,size_t bytes){
     *p=(struct esb_payload){.pipe=0,.length=LISM_WIRE_HEADER+sizeof(struct esb_msg_prefix)+1+sizeof(enum zmk_split_transport_peripheral_event_type)+bytes+sizeof(struct esb_msg_postfix)};
-    memcpy(p->data,"LsE2",4);put32(p->data+4,boot_id);put32(p->data+8,type==KB_LEFT_CONTROL?control_seq++:data_seq[net]++);put32(p->data+12,command_boot[net]);put32(p->data+16,command_seq[net]);
+    memcpy(p->data,"LsE3",4);put32(p->data+4,boot_id);put32(p->data+8,type==KB_LEFT_CONTROL?control_seq++:data_seq[net]++);put32(p->data+12,net==KB_NET_PRIVATE?command_boot[net]:((const struct kb_left_packet*)data)->receiver_boot);put32(p->data+16,command_seq[net]);
     struct esb_event_envelope env={.prefix={.magic_prefix=ZMK_SPLIT_ESB_ENVELOPE_MAGIC_PREFIX,.payload_size=1+sizeof(env.payload.event.type)+bytes},.payload={.source=0,.event={.type=type}}};memcpy(&env.payload.event.data,data,bytes);size_t n=sizeof(env.prefix)+env.prefix.payload_size;memcpy(p->data+LISM_WIRE_HEADER,&env,n);struct esb_msg_postfix crc={.crc=crc32_ieee(p->data+LISM_WIRE_HEADER,n)};memcpy(p->data+LISM_WIRE_HEADER+n,&crc,sizeof(crc));
 }
 static int clocks_start(void){struct onoff_manager*m=z_nrf_clock_control_get_onoff(CLOCK_CONTROL_NRF_SUBSYS_HF);struct onoff_client c;int result,rc;if(!m)return -ENXIO;sys_notify_init_spinwait(&c.notify);rc=onoff_request(m,&c);if(rc<0)return rc;while(sys_notify_fetch_result(&c.notify,&result))k_sleep(K_MSEC(1));return result;}
@@ -90,6 +96,14 @@ static void radio_thread(void*a,void*b,void*c){
     struct esb_payload tx,data_tx;struct left_edge edge;bool data_pending=false;int64_t data_since=0,control_seen=0;unsigned probe_rounds=0;bool have=false,in_flight=false,is_control=false,control_yield_data=false;int64_t next_control=0,since=0;uint32_t selected_generation=0;unsigned net=1,attempts=0;
     for(;;){
         receive();int result=atomic_set(&tx_result,0);int64_t now=k_uptime_get();
+        if(atomic_set(&control_urgent,0)){next_control=0;control_yield_data=false;}
+        /* The coordinator is a lease, not a hardware ACK. In asymmetric RF
+         * loss the left must stop renewing an abandoned station by itself. */
+        k_spinlock_key_t lease=k_spin_lock(&left_lock);
+        if(policy.phase==KB_LEFT_APPLIED && (!coordinator_seen || now-coordinator_seen>=KB_LEFT_CONTROL_LEASE_MS)){
+            policy.phase=KB_LEFT_FREEZE;policy.prepared=false;policy.needs_freeze=true;route_generation++;k_msgq_purge(&edges);
+        }
+        k_spin_unlock(&left_lock,lease);
         k_spinlock_key_t k=k_spin_lock(&left_lock);bool invalid=!is_control && (selected_generation!=route_generation || policy.phase!=KB_LEFT_APPLIED);k_spin_unlock(&left_lock,k);
         if(have && (result==1 || invalid || now-since>=(is_control?3:12))){
             if(in_flight){esb_disable();if((rc=configure(current_net)))goto fail;}have=in_flight=false;
@@ -110,7 +124,7 @@ static void radio_thread(void*a,void*b,void*c){
         }
         if(!have && atomic_get(&enabled)){
             if(now>=next_control && !(control_yield_data && (data_pending || k_msgq_num_used_get(&edges)))){
-                struct kb_left_control ctrl;k=k_spin_lock(&left_lock);packet(&ctrl.physical);ctrl.phase=policy.phase;ctrl.target=policy.target;k_spin_unlock(&left_lock,k);
+                struct kb_left_control ctrl;k=k_spin_lock(&left_lock);packet(&ctrl.physical);ctrl.phase=policy.phase;ctrl.target=policy.target;ctrl.prepared=policy.prepared;k_spin_unlock(&left_lock,k);
                 net=1;is_control=true;frame(&tx,net,KB_LEFT_CONTROL,&ctrl,sizeof(ctrl));have=true;
                 /* Noncommensurate bounded jitter avoids a permanent phase
                  * miss against the right's periodic private receive grant. */
@@ -119,10 +133,10 @@ static void radio_thread(void*a,void*b,void*c){
                 k=k_spin_lock(&left_lock);bool live=data_pending && edge.generation==route_generation && policy.phase==KB_LEFT_APPLIED;k_spin_unlock(&left_lock,k);
                 if(data_pending && !live)data_pending=false;
                 if(!data_pending)for(unsigned n=0;n<8 && !k_msgq_get(&edges,&edge,K_NO_WAIT);n++){
-                    k=k_spin_lock(&left_lock);bool valid=edge.generation==route_generation && policy.phase==KB_LEFT_APPLIED;net=policy.target;selected_generation=route_generation;k_spin_unlock(&left_lock,k);
+                    k=k_spin_lock(&left_lock);bool valid=edge.generation==route_generation && policy.phase==KB_LEFT_APPLIED;net=kb_left_network(policy.target,policy.station);selected_generation=route_generation;k_spin_unlock(&left_lock,k);
                     if(!valid)continue;frame(&data_tx,net,KB_LEFT_DATA,&edge.packet,sizeof(edge.packet));data_pending=true;data_since=now;break;
                 }
-                if(data_pending){k=k_spin_lock(&left_lock);net=policy.target;selected_generation=route_generation;k_spin_unlock(&left_lock,k);tx=data_tx;is_control=false;have=true;control_yield_data=false;}
+                if(data_pending){k=k_spin_lock(&left_lock);net=kb_left_network(policy.target,policy.station);selected_generation=route_generation;k_spin_unlock(&left_lock,k);tx=data_tx;is_control=false;have=true;control_yield_data=false;}
             }
             if(have){since=now;attempts=0;if(net!=current_net){esb_disable();if((rc=configure(net)))goto fail;}atomic_clear(&tx_result);}
         }

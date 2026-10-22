@@ -77,6 +77,7 @@ bool lism_valid_event(uint8_t pipe,const struct esb_event_envelope *env) {
     const struct zmk_split_transport_peripheral_event *e=&env->payload.event;
     size_t n;
     switch((int)e->type) {
+    case KB_PROBE_EVENT:n=sizeof(struct kb_discovery);if(pipe!=1 || IS_ENABLED(CONFIG_LISM_KB_HUB))return false;break;
     case KB_LEFT_DATA:n=sizeof(struct kb_left_packet);if(pipe)return false;break;
     case KB_LEFT_CONTROL:n=sizeof(struct kb_left_control);if(pipe || !IS_ENABLED(CONFIG_LISM_KB_HUB))return false;break;
     case LISM_SNAPSHOT_TYPE:n=sizeof(struct lism_snapshot);break;
@@ -119,6 +120,10 @@ static bool menu_key(unsigned source,unsigned pos) {
     return (!source && pos>=42 && pos<=45) || (source==1 && pos==37);
 }
 static void apply_page(void) {
+#if IS_ENABLED(CONFIG_LISM_XIAO147_TOUCH)
+    bool requested;
+    if(lism_screen_take_request(&requested)){page_target=requested;page_pending=page_target!=lism_screen_active();}
+#endif
     if(lism_screen_take_toggle()) {
         page_target=page_pending?!page_target:!lism_screen_active();
         page_pending=page_target!=lism_screen_active();
@@ -204,6 +209,18 @@ static int reconcile(unsigned source,const struct lism_snapshot *wanted) {
 }
 int lism_handle_event(uint8_t source,const struct zmk_split_transport_peripheral_event *e) {
     if(source>=2)return -EINVAL;
+#if !IS_ENABLED(CONFIG_LISM_KB_HUB)
+    if((int)e->type==KB_PROBE_EVENT){
+        struct kb_discovery p;memcpy(&p,&e->data,sizeof(p));
+        if(source!=1 || p.version!=KB_PROTOCOL_VERSION || p.station!=CONFIG_LISM_DONGLE_STATION || !p.cookie || !p.authority)return -EINVAL;
+        k_mutex_lock(&state_mutex,K_FOREVER);
+        if(kb_route_discovery_release(&p))for(unsigned i=0;i<2;i++){
+            struct lism_snapshot empty={.battery=held[i].battery};
+            if(reconcile(i,&empty)<0){k_mutex_unlock(&state_mutex);return -EAGAIN;}
+        }
+        int rc=kb_route_discovery_received(&p);k_mutex_unlock(&state_mutex);return rc;
+    }
+#endif
     if((int)e->type==KB_LEFT_CONTROL){
 #if IS_ENABLED(CONFIG_LISM_KB_HUB)
         struct kb_left_control c;memcpy(&c,&e->data,sizeof(c));kb_route_left_control(&c);
@@ -223,6 +240,7 @@ int lism_handle_event(uint8_t source,const struct zmk_split_transport_peripheral
         if(!kb_route_dongle_key_allowed() && m.left_online && m.left_battery<=100){struct lism_snapshot s={.battery=m.left_battery};struct zmk_split_transport_peripheral_event b={.type=LISM_SNAPSHOT_TYPE};memcpy(&b.data,&s,sizeof(s));lism_handle_event(0,&b);}return 0;}
     if((int)e->type==KB_ROUTE_EVENT) {
         struct kb_route_status s;memcpy(&s,&e->data,sizeof(s));
+        if(!kb_route_status_valid(&s))return -EINVAL;
         k_mutex_lock(&state_mutex,K_FOREVER);
         /* Release the old keymap BEFORE the status gate closes. */
         if(s.version==KB_ROUTE_VERSION && s.mode<=KB_ROUTE_SWITCHING && s.profile<5 && s.epoch && s.mode!=KB_ROUTE_DONGLE) {

@@ -11,7 +11,7 @@
 #include <zmk/events/hid_indicators_changed.h>
 #include <zmk/events/wpm_state_changed.h>
 void kb_mirror_emit(void) {
-    if(!kb_route_ble_enabled())return;
+    if(!kb_route_mirror_enabled())return;
     struct kb_route_view v;kb_route_snapshot(&v);
     /* Read the final single-byte HID modifier mask, including implicit LS/LG
      * and masked modifiers, rather than only the explicit key presses. */

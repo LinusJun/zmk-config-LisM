@@ -41,7 +41,8 @@ void mpsl_assert_handle(const char *file,int line) { ARG_UNUSED(file);ARG_UNUSED
 #if defined(CONFIG_SHIELD_LISM_L)
 static const uint8_t base0[]={0xB7,0x63,0xA9,0xE7},base1[]={0xC9,0x57,0x8D,0xF1};
 #else
-static const uint8_t base0[]=DT_PROP(NODE,base_addr_0),base1[]=DT_PROP(NODE,base_addr_1);
+static const uint8_t base0[]= {0xb7,0x63,0xa9,CONFIG_LISM_DONGLE_STATION==0?0xd5:0xb3};
+static const uint8_t base1[]= {0xc9,0x57,0x8d,CONFIG_LISM_DONGLE_STATION==0?0xab:0xc5};
 #endif
 static const uint8_t prefixes[]=DT_PROP(NODE,addr_prefix);
 #define SLOT_US 4000
@@ -73,9 +74,11 @@ K_WORK_DEFINE(mpsl_probe_work,mpsl_probe);
 static bool initialized,have_tx;
 static struct tx_item current;
 static uint32_t boot_id,next_seq=1;
+uint32_t kb_receiver_boot(void){return boot_id;}
 static struct esb_payload receive_ring[64];
 static atomic_t head,tail,idle=ATOMIC_INIT(1);
 static atomic_t last_boot[2];
+uint32_t kb_receiver_peer_boot(unsigned source){return source<2?(uint32_t)atomic_get(&last_boot[source]):0;}
 static uint32_t previous_boot[2],last_seq[2];
 static atomic_t command_ack_boot,command_ack_seq;
 static K_MUTEX_DEFINE(send_mutex);
@@ -211,7 +214,7 @@ static void receive_frames(void) {
         struct esb_payload p=receive_ring[t];atomic_set(&tail,(t+1)%ARRAY_SIZE(receive_ring));
         atomic_inc(&diag_rx);
         if(p.pipe>=2 || p.length<WIRE_HEADER+sizeof(struct esb_msg_prefix)+2+sizeof(struct esb_msg_postfix) ||
-            p.length>CONFIG_ESB_MAX_PAYLOAD_LENGTH || memcmp(p.data,"LsE2",4))continue;
+            p.length>CONFIG_ESB_MAX_PAYLOAD_LENGTH || memcmp(p.data,"LsE3",4))continue;
         struct esb_msg_prefix prefix;memcpy(&prefix,p.data+WIRE_HEADER,sizeof(prefix));
         size_t body_len=p.length-WIRE_HEADER,frame_len=sizeof(prefix)+prefix.payload_size;
         if(memcmp(prefix.magic_prefix,"ZmKe",4) || prefix.payload_size<2 ||
@@ -219,6 +222,12 @@ static void receive_frames(void) {
         struct esb_msg_postfix crc;memcpy(&crc,p.data+WIRE_HEADER+frame_len,sizeof(crc));
         if(crc32_ieee(p.data+WIRE_HEADER,frame_len)!=crc.crc)continue;
         if(!lism_wire_valid(p.pipe,p.data+WIRE_HEADER,body_len))continue;
+        struct esb_event_envelope body={0};
+        if(mode==APP_ESB_MODE_PRX)memcpy(&body,p.data+WIRE_HEADER,body_len-sizeof(struct esb_msg_postfix));
+        bool probe=mode==APP_ESB_MODE_PRX && (int)body.payload.event.type==KB_PROBE_EVENT;
+        /* Only discovery may bootstrap without the current receiver boot.
+         * Ordinary input from before a receiver reboot is never re-admitted. */
+        if(mode==APP_ESB_MODE_PRX && !probe && get32(p.data+12)!=boot_id)continue;
         atomic_inc(&diag_valid);
         /* A delayed reset/bootloader command for a previous half boot must
          * never execute again after that half restarts. */
@@ -235,7 +244,7 @@ static void receive_frames(void) {
         app_esb_event_t e={.evt_type=APP_ESB_EVT_RX,.pipe=p.pipe,
             .buf=p.data+WIRE_HEADER,.data_length=p.length-WIRE_HEADER};callback(&e);
         if(e.accepted) {
-            if(p.rssi && p.rssi<127){k_spinlock_key_t k=k_spin_lock(&signal_lock);signals[p.pipe].dbm=-(int)p.rssi;signals[p.pipe].seen=k_uptime_get();k_spin_unlock(&signal_lock,k);}
+            if(!probe && p.rssi && p.rssi<127){k_spinlock_key_t k=k_spin_lock(&signal_lock);signals[p.pipe].dbm=-(int)p.rssi;signals[p.pipe].seen=k_uptime_get();k_spin_unlock(&signal_lock,k);}
             atomic_inc(&diag_accepted);
             last_seq[p.pipe]=s;
             if(mode==APP_ESB_MODE_PTX) {
@@ -376,7 +385,7 @@ int zmk_split_esb_send(app_esb_data_t *p) {
     struct tx_item item={.retries=p->max_retry,.generation=atomic_get(&command_generation)};
     item.target_boot=atomic_get(&last_boot[p->pipe]);
     item.payload.pipe=p->pipe;item.payload.noack=false;item.payload.length=p->len+WIRE_HEADER;
-    memcpy(item.payload.data,"LsE2",4);put32(item.payload.data+4,boot_id);put32(item.payload.data+8,next_seq);
+    memcpy(item.payload.data,"LsE3",4);put32(item.payload.data+4,boot_id);put32(item.payload.data+8,next_seq);
     if(mode==APP_ESB_MODE_PRX) {
         put32(item.payload.data+12,item.target_boot);put32(item.payload.data+16,kb_receiver_route_epoch());
     } else {

@@ -1,6 +1,7 @@
 #define KB_DONGLE 0
 #define KB_BLE 1
 #define KB_BLE_SEL(n) (10 + (n))
+#define KB_DONGLE_SEL(n) (30 + (n))
 #define ZMK_POINTING_DEFAULT_SCRL_VAL 200
 /* Independent stick rate; do not alter existing mouse/encoder scroll speed. */
 #define LISM_4WAY_SCROLL_SPEED 25
@@ -283,7 +284,7 @@
                 &to 1  &to 5  &screen_next  &none  &bt BT_CLR  &bt BT_SEL 0  &bt BT_SEL 1  &bt BT_SEL 2  &bt BT_SEL 3  &bt BT_SEL 4
                 &to 5  &out OUT_BLE  &out OUT_USB  &out OUT_TOG  &trans  &kb_route KB_BLE  &out OUT_TOG  &out OUT_USB  &out OUT_BLE  &kb_route KB_DONGLE
                 &sys_reset  &none  &none  &none  &none  &kb_route KB_BLE_SEL(0)  &kb_route KB_BLE_SEL(1)  &kb_route KB_BLE_SEL(2)  &kb_route KB_BLE_SEL(3)  &kb_route KB_BLE_SEL(4)
-                &bootloader  &bt BT_CLR_ALL  &none  &none  &none  &none  &studio_unlock  &none  &none  &none  &none  &bootloader
+                &bootloader  &bt BT_CLR_ALL  &none  &none  &none  &none  &studio_unlock  &none  &none  &kb_route KB_DONGLE_SEL(0)  &kb_route KB_DONGLE_SEL(1)  &bootloader
                 &trans  &trans  &trans  &trans /* Left 4waystick: Up Right Down Left. */
             >;
         };

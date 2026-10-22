@@ -19,7 +19,7 @@ static bool motion_old(const struct hub_tx *tx) {
 }
 static bool merge_motion(struct hub_tx *a,const struct hub_tx *b) {
     struct esb_event_envelope x,y;
-    if(a->generation!=b->generation || !motion_event(a,&x) || !motion_event(b,&y))return false;
+    if(a->generation!=b->generation || a->station!=b->station || a->local_boot!=b->local_boot || !motion_event(a,&x) || !motion_event(b,&y))return false;
     uint32_t av=x.payload.event.data.input_event.value,bv=y.payload.event.data.input_event.value;
     int32_t hi=(int16_t)(av>>16)+(int32_t)(int16_t)(bv>>16);
     int32_t lo=(int16_t)av+(int32_t)(int16_t)bv;

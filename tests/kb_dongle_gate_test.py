@@ -7,17 +7,18 @@ for n in tree.body:
  if isinstance(n,ast.Assign) and isinstance(n.value,ast.Constant) and isinstance(n.value.value,str):
   for t in n.targets:
    if isinstance(t,ast.Name):values[t.id]=n.value.value
-pre=values['pre']+r'''
+pre=values['pre']+'\n#include "/work/source/src/kb_route/stations.h"\n'+r'''
 
 #define CONFIG_LISM_BLE_INPUT_BRIDGE 1
 #define MAX(a,b) ((a)>(b)?(a):(b))
 #define KB_ROUTE_EVENT 126
 #define KB_MIRROR_EVENT 125
-#define KB_ROUTE_VERSION 2
+#define KB_ROUTE_VERSION 3
+#define CONFIG_LISM_DONGLE_STATION 0
 #define KB_ROUTE_DONGLE 0
 #define KB_ROUTE_BLE 1
 #define KB_ROUTE_SWITCHING 2
-struct kb_route_status{uint8_t version,mode,profile;uint32_t epoch,authority;uint8_t phase,target;} __packed;
+struct kb_route_status{uint8_t version,mode,profile;uint32_t epoch,authority;uint8_t phase,target,station,owner_station;uint32_t receiver_boot;} __packed;
 struct kb_mirror{uint32_t epoch;uint8_t version,wpm,layer,mods,indicators,profile,host_connected,left_battery,left_online;} __packed;
 static bool gate,page_active,page_toggle;static unsigned mirror_count;
 static bool kb_route_dongle_key_allowed(void){return gate;}
@@ -25,11 +26,14 @@ static bool lism_screen_take_toggle(void){bool v=page_toggle;page_toggle=false;r
 static bool lism_screen_active(void){return page_active;}
 static void lism_screen_commit(bool v){page_active=v;}
 static void lism_screen_nav(unsigned p){(void)p;}
-static void kb_route_status_received(const struct kb_route_status*s){if(s->version==2&&s->mode<=2&&s->profile<5&&s->epoch)gate=s->mode==0;}
+static bool kb_route_status_valid(const struct kb_route_status*s){return s->version==3 && s->station==0 && s->receiver_boot==777;}
+static bool kb_route_discovery_release(const struct kb_discovery*p){(void)p;return false;}
+static int kb_route_discovery_received(const struct kb_discovery*p){(void)p;return 0;}
+static void kb_route_status_received(const struct kb_route_status*s){if(s->version==3&&s->mode<=2&&s->profile<5&&s->epoch)gate=s->mode==0;}
 static void kb_mirror_received(const struct kb_mirror*m){(void)m;mirror_count++;}
 '''
 main=r'''
-static void status(unsigned mode){struct zmk_split_transport_peripheral_event e={.type=KB_ROUTE_EVENT};struct kb_route_status s={.version=2,.mode=mode,.profile=0,.epoch=2};memcpy(&e.data,&s,sizeof(s));int rc=lism_handle_event(1,&e);assert(rc==(forced_return==-EINVAL?-EAGAIN:0));}
+static void status(unsigned mode){struct zmk_split_transport_peripheral_event e={.type=KB_ROUTE_EVENT};struct kb_route_status s={.version=3,.mode=mode,.profile=0,.epoch=2,.receiver_boot=777};memcpy(&e.data,&s,sizeof(s));int rc=lism_handle_event(1,&e);assert(rc==(forced_return==-EINVAL?-EAGAIN:0));}
 int main(void){
  struct zmk_split_transport_peripheral_event key={.type=ZMK_SPLIT_TRANSPORT_PERIPHERAL_EVENT_TYPE_KEY_POSITION_EVENT,.data.key_position_event={.position=4,.pressed=1}};
  assert(!gate);now=1;lism_handle_event(0,&key);assert(!actual_keys[0]&&!held[0].keys);

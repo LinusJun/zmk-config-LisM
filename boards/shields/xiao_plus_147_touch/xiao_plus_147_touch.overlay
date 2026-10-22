@@ -1,0 +1,86 @@
+/*
+ * Seeed XIAO 1.47" touch display (nRF52840 Plus) on the LisM ZMK dongle.
+ * Extends Prospector's shield, preserving the existing two-keyboard central.
+ * The JD9853A panel uses the ST7789-compatible init path as documented by Seeed.
+ */
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+
+&spi3 {
+    cs-gpios = <&xiao_d 2 GPIO_ACTIVE_LOW>; /* D2: LCD_CS */
+};
+
+&{/mipi_dbi} {
+    dc-gpios = <&xiao_d 3 GPIO_ACTIVE_HIGH>; /* D3: LCD_DC */
+    /* Seeed BSP 5948eafd: D17=38, g_ADigitalPinMap[38]=35 -> P1.03.
+     * Resolve variant.h aliases through the array; its D17/D19 comments are
+     * stale. D17 is LCD_RST, joined to CTP_RST by R9 on the expansion board. */
+    reset-gpios = <&gpio1 3 GPIO_ACTIVE_LOW>;
+};
+
+&st7789 {
+    mipi-max-frequency = <8000000>; /* Conservative first-hardware test. */
+    width = <320>;
+    height = <172>;
+    x-offset = <0>;
+    y-offset = <34>;
+    mdac = <0x28>; /* MV | BGR, landscape */
+    colmod = <0x55>;
+    ram-param = [00 E0]; /* XIAO driver emits MSB-first pixels. */
+    inversion-off;
+};
+
+&pwm1_default {
+    group1 {
+        psels = <NRF_PSEL(PWM_OUT0, 1, 5)>; /* D18: LCD_BL */
+        /delete-property/ nordic,invert; /* Board NMOS backlight is active high. */
+    };
+};
+
+&pwm1_sleep {
+    group1 {
+        psels = <NRF_PSEL(PWM_OUT0, 1, 5)>;
+        low-power-enable;
+    };
+};
+
+&apds9960 {
+    status = "disabled"; /* D2 is LCD_CS on this display. */
+};
+
+&i2c1 {
+    status = "okay";
+    touch_sensor: touchpad@63 {
+        compatible = "lism,axs5106l-touchpad";
+        reg = <0x63>;
+        status = "okay";
+    };
+};
+
+/ {
+    xiao_touch_left_button: xiao_touch_left_button {
+        compatible = "gpio-keys";
+        /* Sole USR1 input path. Keep existing 20ms polling; USR2's working
+         * interrupt path is unchanged. Neither key owns LCD/CTP reset. */
+        polling-mode;
+        debounce-interval-ms = <20>;
+
+        button_left {
+            /* Corrected Seeed BSP: D19=36 -> array[36]=39 -> P1.07. */
+            gpios = <&gpio1 7 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; /* D19/USR1 */
+            zephyr,code = <INPUT_BTN_0>;
+        };
+
+    };
+
+    xiao_touch_menu_button: xiao_touch_menu_button {
+        compatible = "gpio-keys";
+        debounce-interval-ms = <15>;
+        button_right {
+            gpios = <&gpio0 10 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; /* D15/USR2 */
+            zephyr,code = <INPUT_BTN_1>;
+        };
+    };
+
+    /* Touch owns a separate merge source; never write physical HID buttons. */
+
+};

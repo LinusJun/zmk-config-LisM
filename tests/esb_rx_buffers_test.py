@@ -22,7 +22,7 @@ pre=values['pre']+r'''
 #define LOG_WRN(...) ((void)0)
 #define LOG_ERR(...) ((void)0)
 #define K_WORK_DEFINE(n,f) struct k_work n
-struct kb_route_status{uint8_t version,mode,profile;uint32_t epoch,authority;uint8_t phase,target;} __packed;
+struct kb_route_status{uint8_t version,mode,profile;uint32_t epoch,authority;uint8_t phase,target,station,owner_station;uint32_t receiver_boot;} __packed;
 struct kb_mirror{uint32_t epoch;uint8_t version,wpm,layer,mods,indicators,profile,host_connected,left_battery,left_online;} __packed;
 static struct k_work notify_status_work,process_rx_work;
 static unsigned submits,dispatched;static uint64_t trace=1469598103934665603ULL;

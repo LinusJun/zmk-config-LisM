@@ -8,7 +8,6 @@ target_sources(app PRIVATE
   "${CMAKE_CURRENT_LIST_DIR}/../src/lism_input_parser.c"
   "${CMAKE_CURRENT_LIST_DIR}/../src/lism_input_merge.c"
   "${CMAKE_CURRENT_LIST_DIR}/../src/lism_input_scanner.c"
-  "${CMAKE_CURRENT_LIST_DIR}/../src/lism_screen.c"
   "${CMAKE_CURRENT_LIST_DIR}/../src/lism_coex.c"
   "${CMAKE_CURRENT_LIST_DIR}/../src/behavior_screen_next.c")
 include("${CMAKE_CURRENT_LIST_DIR}/lism_input_security.cmake")
@@ -32,4 +31,10 @@ execute_process(COMMAND "${PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/../too
   "${_lism_hog_copy}" "${_lism_endpoint_copy}" "${_lism_ble_copy}" RESULT_VARIABLE result)
 if(NOT result EQUAL 0)
   message(FATAL_ERROR "Input integration anchors changed")
+endif()
+
+if(CONFIG_LISM_XIAO147_TOUCH)
+  target_sources(app PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../src/lism_screen.c")
+else()
+  target_sources(app PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../src/lism_screen169.c")
 endif()

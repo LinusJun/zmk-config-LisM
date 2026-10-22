@@ -41,6 +41,9 @@ for index, (name, bindings) in enumerate(layers.items()):
         previous[2] = "&screen_next"
         assert previous[15]=="&none" and previous[19]=="&none"
         previous[15]="&kb_route KB_BLE";previous[19]="&kb_route KB_DONGLE"
+        for i in range(2):
+            assert previous[39+i]=="&none"
+            previous[39+i]=f"&kb_route KB_DONGLE_SEL({i})"
         for i in range(5):
             assert previous[25+i]==("&sys_reset" if i==4 else "&none")
             previous[25+i]=f"&kb_route KB_BLE_SEL({i})"

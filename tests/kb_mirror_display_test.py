@@ -84,7 +84,7 @@ typedef uint8_t zmk_mod_flags_t;typedef uint8_t zmk_mod_t;
 struct zmk_hid_keyboard_report{struct{uint8_t modifiers;}body;};
 static struct zmk_hid_keyboard_report keyboard_report;
 static struct kb_mirror emitted;static unsigned emissions;static bool ble_enabled=true;
-static bool kb_route_ble_enabled(void){return ble_enabled;}
+static bool kb_route_mirror_enabled(void){return ble_enabled;}
 void kb_route_snapshot(struct kb_route_view*v){v->epoch=7;}
 static uint8_t zmk_wpm_get_state(void){return 52;}
 static uint8_t zmk_keymap_highest_layer_active(void){return 2;}

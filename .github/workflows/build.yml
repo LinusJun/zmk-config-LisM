@@ -1,8 +1,8 @@
-name: Build preserved LisM ESB v472 baseline
+name: Build LisM ESB v50 dual dongle TEST
 on:
   workflow_dispatch:
   push:
-    branches: [ codex/esb-v472-tested-baseline ]
+    branches: [ codex/esb-v50-dual-dongle ]
     paths: [ 'boards/**', 'config/**', 'src/**', 'cmake/**', 'tools/**', 'tests/**', 'CMakeLists.txt', 'Kconfig', '.github/workflows/build.yml' ]
   pull_request:
 permissions:
@@ -14,7 +14,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [ left, right, dongle, reset ]
+        target: [ left, right, dongle_a, dongle_b, reset ]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -27,9 +27,9 @@ jobs:
       - name: Build isolated upstream ESB integration
         run: python3 config/tools/build_upstream_esb.py --workspace "$PWD" --target "${{ matrix.target }}"
       - name: Verify preserved keymap
-        if: matrix.target == 'dongle'
+        if: matrix.target == 'dongle_a'
         run: python3 config/tests/fourwaystick_regression_test.py
       - uses: actions/upload-artifact@v4
         with:
-          name: LisM-ESBv472-${{ matrix.target }}
+          name: LisM-ESBv50-${{ matrix.target }}
           path: config/artifacts/*
