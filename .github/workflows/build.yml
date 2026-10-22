@@ -1,8 +1,8 @@
-name: Build preserved LisM ESB v472 baseline
+name: Prospector169 v4.7.2.1 显示修正版
 on:
   workflow_dispatch:
   push:
-    branches: [ codex/esb-v472-tested-baseline ]
+    branches: [ codex/esb-v4721-prospector-ui ]
     paths: [ 'boards/**', 'config/**', 'src/**', 'cmake/**', 'tools/**', 'tests/**', 'CMakeLists.txt', 'Kconfig', '.github/workflows/build.yml' ]
   pull_request:
 permissions:
@@ -31,5 +31,5 @@ jobs:
         run: python3 config/tests/fourwaystick_regression_test.py
       - uses: actions/upload-artifact@v4
         with:
-          name: LisM-ESBv472-${{ matrix.target }}
+          name: LisM-v4721-${{ matrix.target }}
           path: config/artifacts/*
