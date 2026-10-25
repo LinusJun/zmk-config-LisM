@@ -4,11 +4,13 @@
  * No live SDK object, queued frame or receive provenance is shared across links.
  */
 #include "app_esb.h"
+#include <kb_route/radio_channels.h>
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 #include "common.h"
 #include "link.h"
 #include <kb_route/route.h>
 #include <kb_route/mirror.h>
+#include <kb_route/private_signal.h>
 #include <esb.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/crc.h>
@@ -38,10 +40,11 @@ struct hub_link {
 };
 static struct hub_link links[2];
 static struct hub_tx latest_mirror;static bool mirror_pending;
-struct hub_rx {struct esb_payload p;uint8_t link,station;uint32_t boot;};
+struct hub_rx {struct esb_payload p;uint8_t link,station;uint32_t boot,sampled_ms;};
 static struct hub_rx rx[64];static atomic_t head,tail,overflow;
 static atomic_t idle=ATOMIC_INIT(1),ready,enabled,error;
 static atomic_t uplink_generation;
+static atomic_t grant_requested_ms;
 static atomic_t station_requested,station_selected;
 static atomic_t probe_transmitted;
 void kb_uplink_station_request(uint8_t station){if(station<KB_STATION_COUNT)atomic_set(&station_requested,station);}
@@ -55,26 +58,44 @@ static uint32_t left_route_epoch;
 static uint8_t left_route_phase,left_route_target,left_route_station;
 static uint32_t left_route_receiver_boot;
 static int64_t next_left_control;
+static struct kb_private_signal_cache private_left_signal;
+/* Call only under tx_lock, shared with route setters and receive admission. */
+static struct kb_private_signal_tuple private_signal_tuple(void){
+    return (struct kb_private_signal_tuple){.authority=links[0].boot,.peer=links[0].last_boot[0],
+        .epoch=left_route_epoch,.receiver_boot=left_route_receiver_boot,.phase=left_route_phase,
+        .target=left_route_target,.station=left_route_station};
+}
+bool kb_private_left_signal(int8_t *dbm){
+    k_mutex_lock(&tx_lock,K_FOREVER);
+    struct kb_private_signal_tuple t=private_signal_tuple();
+    bool ok=kb_private_signal_read(&private_left_signal,&t,k_uptime_get_32(),dbm);
+    k_mutex_unlock(&tx_lock);return ok;
+}
 uint32_t kb_private_authority(void){return links[0].boot;}
 void kb_left_set_route(uint32_t epoch,uint8_t phase,uint8_t target,uint8_t station,uint32_t receiver_boot){
     k_mutex_lock(&tx_lock,K_FOREVER);
-    if(left_route_epoch!=epoch || left_route_phase!=phase || left_route_target!=target || left_route_station!=station || left_route_receiver_boot!=receiver_boot)next_left_control=0;
+    if(left_route_epoch!=epoch || left_route_phase!=phase || left_route_target!=target || left_route_station!=station || left_route_receiver_boot!=receiver_boot){next_left_control=0;kb_private_signal_invalidate(&private_left_signal);}
     left_route_epoch=epoch;left_route_phase=phase;left_route_target=target;left_route_station=station;left_route_receiver_boot=receiver_boot;
     k_mutex_unlock(&tx_lock);
 }
 static bool sdk_ready;
+/* DIAG41_BEGIN: cumulative IRQ0 counters; thread logs are approximate snapshots. */
+static atomic_t diag_private_start,diag_private_selected,diag_ack_load,diag_ack_fail,diag_rx_start,diag_rx_fail,diag_setup_fail;
+static atomic_t diag_loaded_peer,diag_loaded_generation,diag_loaded_sequence,diag_loaded_bytes,diag_load_rc;
+/* DIAG41_END */
 static int64_t uplink_seen;static uint32_t control_last_seq;
 uint32_t kb_uplink_peer_boot(void){return links[1].last_boot[1];}
 bool kb_uplink_connected(void) {return uplink_seen && k_uptime_get()-uplink_seen<1500;}
 static uint32_t get32(const uint8_t *p) {return p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24);}
 static void put32(uint8_t *p,uint32_t v) {for(unsigned i=0;i<4;i++)p[i]=v>>(i*8);}
+#include "hub_prx_trace.inc"
 static bool tx_live(unsigned net,const struct hub_tx *tx,int64_t now) {
     return now-tx->since<=500 && (net?(tx->generation==(uint32_t)atomic_get(&uplink_generation) && tx->station==kb_uplink_station_current() && tx->local_boot==links[1].boot):tx->peer==links[net].last_boot[tx->p.pipe] && tx->generation==left_route_epoch);
 }
 static void collect(void) {
     struct esb_payload p;while(!esb_read_rx_payload(&p)) {
         unsigned h=atomic_get(&head),n=(h+1)%ARRAY_SIZE(rx);if(n==(unsigned)atomic_get(&tail)){atomic_inc(&overflow);continue;}
-        rx[h]=(struct hub_rx){.p=p,.link=grant_link,.station=kb_uplink_station_current(),.boot=links[grant_link].boot};atomic_set(&head,n);
+        rx[h]=(struct hub_rx){.p=p,.link=grant_link,.station=kb_uplink_station_current(),.boot=links[grant_link].boot,.sampled_ms=(uint32_t)atomic_get(&grant_requested_ms)};atomic_set(&head,n);
     }
 }
 static void esb_event(const struct esb_evt *e) {
@@ -83,6 +104,7 @@ static void esb_event(const struct esb_evt *e) {
     else if(e->evt_id==ESB_EVENT_TX_FAILED){atomic_set(&l->result,-1);l->fail++;}
 }
 static int setup(void) {
+    if(!grant_link){atomic_inc(&diag_private_start);prx_grant_cycle=k_cycle_get_32();}
     struct esb_config c=ESB_DEFAULT_CONFIG;c.protocol=ESB_PROTOCOL_ESB_DPL;c.bitrate=ESB_BITRATE_2MBPS;
     c.mode=grant_link?ESB_MODE_PTX:ESB_MODE_PRX;c.tx_mode=ESB_TXMODE_MANUAL_START;c.selective_auto_ack=true;
     c.event_handler=esb_event;c.retransmit_delay=600;c.retransmit_count=0;
@@ -92,12 +114,20 @@ static int setup(void) {
     if(!rc)rc=esb_set_base_address_1(grant_link?kb_station_base1[kb_uplink_station_current()]:keyboard_base1);
     if(!rc)rc=esb_set_prefixes(prefixes,ARRAY_SIZE(prefixes));
     if(!rc)rc=esb_enable_pipes(grant_link?(BIT(0)|BIT(1)):BIT(0));
-    if(!rc)rc=esb_set_rf_channel(37);
+    if(!rc)rc=esb_set_rf_channel(kb_radio_channel(grant_link ? KB_NET_DONGLE_A : KB_NET_PRIVATE));
     /* A transition may happen after requesting a grant but before START.
      * Recheck its epoch in IRQ0 before loading/starting the old PTX frame. */
     bool transmit=links[grant_link].have && (links[grant_link].tx.generation==(grant_link?(uint32_t)atomic_get(&uplink_generation):left_route_epoch)) && (!grant_link || (links[1].tx.station==kb_uplink_station_current() && links[1].tx.local_boot==links[1].boot));
-    if(!rc && transmit)rc=esb_write_payload(&links[grant_link].tx.p);
-    if(!rc)rc=grant_link?(transmit?esb_start_tx():0):esb_start_rx();
+    if(!grant_link){if(transmit)atomic_inc(&diag_private_selected);if(rc)atomic_inc(&diag_setup_fail);}
+    if(!rc && transmit){
+        rc=esb_write_payload(&links[grant_link].tx.p);
+        if(!grant_link){
+            atomic_set(&diag_load_rc,rc);
+            if(rc)atomic_inc(&diag_ack_fail);
+            else{atomic_inc(&diag_ack_load);atomic_set(&diag_loaded_peer,links[0].tx.peer);atomic_set(&diag_loaded_generation,links[0].tx.generation);atomic_set(&diag_loaded_sequence,get32(links[0].tx.p.data+8));atomic_set(&diag_loaded_bytes,links[0].tx.p.length);}
+        }
+    }
+    if(!rc){rc=grant_link?(transmit?esb_start_tx():0):esb_start_rx();if(!grant_link){if(rc)atomic_inc(&diag_rx_fail);else atomic_inc(&diag_rx_start);}}
     if(!rc && grant_link && transmit){
         struct esb_event_envelope body={0};memcpy(&body,links[1].tx.p.data+LISM_WIRE_HEADER,links[1].tx.p.length-LISM_WIRE_HEADER-sizeof(struct esb_msg_postfix));
         if((int)body.payload.event.type==KB_PROBE_EVENT){struct kb_discovery p;memcpy(&p,&body.payload.event.data,sizeof(p));atomic_set(&probe_transmitted,p.cookie);}
@@ -107,7 +137,7 @@ static int setup(void) {
 static mpsl_timeslot_signal_return_param_t response;
 static mpsl_timeslot_request_t request={.request_type=MPSL_TIMESLOT_REQ_TYPE_EARLIEST,.params.earliest={.hfclk=MPSL_TIMESLOT_HFCLK_CFG_XTAL_GUARANTEED,.priority=MPSL_TIMESLOT_PRIORITY_NORMAL,.length_us=HUB_SLOT_US,.timeout_us=100000}};
 static void end_slot(void) {
-    if(sdk_ready){lism_esb_slot_service();collect();esb_disable();sdk_ready=false;}
+    if(sdk_ready){lism_esb_slot_service();collect();lism_esb_prx_slot_end_trace();esb_disable();sdk_ready=false;}
     nrf_radio_power_set(NRF_RADIO,false);nrf_radio_power_set(NRF_RADIO,true);__DSB();
     nrf_radio_shorts_disable(NRF_RADIO,0xffffffff);nrf_radio_int_disable(NRF_RADIO,0xffffffff);
     nrf_timer_int_disable(NRF_TIMER0,0xffffffff);nrf_timer_event_clear(NRF_TIMER0,NRF_TIMER_EVENT_COMPARE0);nrf_timer_event_clear(NRF_TIMER0,NRF_TIMER_EVENT_COMPARE1);NVIC_ClearPendingIRQ(RADIO_IRQn);
@@ -158,7 +188,7 @@ static void receive(void) {
         if(item.boot!=l->boot || (item.link && item.station!=kb_uplink_station_current()) || !valid_body(item.link,p))continue;
         unsigned pipe=p->pipe;uint32_t b=get32(p->data+4),s=get32(p->data+8);if(!b || !s || (item.link && get32(p->data+12)!=l->boot))continue;
         k_mutex_lock(&tx_lock,K_FOREVER);
-        if(b!=l->last_boot[pipe]) {if(b==l->previous_boot[pipe]){k_mutex_unlock(&tx_lock);continue;}l->previous_boot[pipe]=l->last_boot[pipe];l->last_boot[pipe]=b;l->last_seq[pipe]=0;if(!item.link)control_last_seq=0;}
+        if(b!=l->last_boot[pipe]) {if(b==l->previous_boot[pipe]){k_mutex_unlock(&tx_lock);continue;}l->previous_boot[pipe]=l->last_boot[pipe];l->last_boot[pipe]=b;l->last_seq[pipe]=0;if(!item.link){control_last_seq=0;kb_private_signal_invalidate(&private_left_signal);}}
         struct esb_event_envelope body={0};bool control=false;if(!item.link){memcpy(&body,p->data+LISM_WIRE_HEADER,p->length-LISM_WIRE_HEADER-sizeof(struct esb_msg_postfix));control=(int)body.payload.event.type==KB_LEFT_CONTROL;}
         uint32_t *sequence=control?&control_last_seq:&l->last_seq[pipe];
         if(s<=*sequence){k_mutex_unlock(&tx_lock);continue;}
@@ -168,7 +198,16 @@ static void receive(void) {
         bool accepted=false;
         if(item.link){accepted=kb_uplink_command(pipe,p->data+LISM_WIRE_HEADER,p->length-LISM_WIRE_HEADER,get32(p->data+16),b);}
         else {app_esb_event_t e={.evt_type=APP_ESB_EVT_RX,.pipe=pipe,.buf=p->data+LISM_WIRE_HEADER,.data_length=p->length-LISM_WIRE_HEADER};callback(&e);accepted=e.accepted;}
-        if(accepted) {k_mutex_lock(&tx_lock,K_FOREVER);*sequence=s;if(item.link)l->ack_boot[pipe]=b,l->ack_seq[pipe]=s;k_mutex_unlock(&tx_lock);}
+        if(accepted) {
+            k_mutex_lock(&tx_lock,K_FOREVER);*sequence=s;
+            if(item.link)l->ack_boot[pipe]=b,l->ack_seq[pipe]=s;
+            else if(pipe==0 && control){
+                struct kb_left_control c;memcpy(&c,&body.payload.event.data,sizeof(c));
+                struct kb_private_signal_tuple t=private_signal_tuple();
+                if(item.boot==t.authority)kb_private_signal_sample(&private_left_signal,&t,&c,b,p->rssi,item.sampled_ms,k_uptime_get_32());
+            }
+            k_mutex_unlock(&tx_lock);
+        }
     }
 }
 #include "hub_motion.inc"
@@ -262,7 +301,7 @@ static void radio_thread(void *a,void *b,void *c) {
     atomic_set(&ready,1);lism_notify_status();app_esb_event_t initial={.evt_type=APP_ESB_EVT_TX_FAIL};callback(&initial);
     int64_t next_log=0;
     for(;;) {
-        if((rc=atomic_set(&error,0)))break;receive();
+        if((rc=atomic_set(&error,0)))break;receive();prx_trace_poll();
         uint32_t transmitted=atomic_set(&probe_transmitted,0);if(transmitted)kb_route_probe_transmitted(kb_uplink_station_current(),transmitted);
         if(atomic_get(&idle)) {
             apply_station_request();
@@ -281,9 +320,24 @@ static void radio_thread(void *a,void *b,void *c) {
             /* A blocked/unplugged dongle never starves left reception. */
             if(k_uptime_get()>=next_private || !links[1].have){grant_link=0;next_private=k_uptime_get()+19+(rounds++%5);}
             else grant_link=1;
-            if(atomic_get(&enabled)){atomic_set(&idle,0);rc=mpsl_timeslot_request(session,&request);if(rc)atomic_set(&idle,1);}
+            if(atomic_get(&enabled)){
+                /* Only this thread requests grants, and only after SESSION_IDLE,
+                 * BLOCKED or CANCELLED ended the preceding request. idle stays
+                 * zero through START/end_slot/collect, so IRQ0 sees one immutable
+                 * request timestamp. Use a conservative request-time sample age;
+                 * collect must never call uptime or acquire a kernel lock. */
+                atomic_set(&idle,0);atomic_set(&grant_requested_ms,k_uptime_get_32());
+                rc=mpsl_timeslot_request(session,&request);if(rc)atomic_set(&idle,1);
+            }
         }
-        if(k_uptime_get()>=next_log){next_log=k_uptime_get()+5000;LOG_INF("ESB hub TX=%u/%u fail=%u/%u q=%u/%u motion_merge=%u stale=%u inflight_ms=%u ack=%u,%u",links[0].success,links[1].success,links[0].fail,links[1].fail,k_msgq_num_used_get(&left_tx),k_msgq_num_used_get(&dongle_tx),motion_merged,motion_expired,links[1].have?(unsigned)(k_uptime_get()-links[1].tx.since):0,links[1].ack_seq[0],links[1].ack_seq[1]);LOG_INF("ESB private left_boot=%u control_seq=%u route_epoch=%u phase=%u station=%u pending=%u cmd_seq=%u",links[0].last_boot[0],control_last_seq,left_route_epoch,left_route_phase,left_route_station,links[0].have,links[0].have?get32(links[0].tx.p.data+8):0);}
+        if(k_uptime_get()>=next_log){
+            next_log=k_uptime_get()+5000;
+            LOG_INF("ESB hub TX=%u/%u fail=%u/%u q=%u/%u motion_merge=%u stale=%u inflight_ms=%u ack=%u,%u",links[0].success,links[1].success,links[0].fail,links[1].fail,k_msgq_num_used_get(&left_tx),k_msgq_num_used_get(&dongle_tx),motion_merged,motion_expired,links[1].have?(unsigned)(k_uptime_get()-links[1].tx.since):0,links[1].ack_seq[0],links[1].ack_seq[1]);
+            LOG_INF("ESB private boot=%u left_boot=%u control_seq=%u route_epoch=%u phase=%u station=%u pending=%u cmd_seq=%u tx_peer=%u tx_gen=%u tx_age=%u",
+                links[0].boot,links[0].last_boot[0],control_last_seq,left_route_epoch,left_route_phase,left_route_station,links[0].have,links[0].have?get32(links[0].tx.p.data+8):0,links[0].have?links[0].tx.peer:0,links[0].have?links[0].tx.generation:0,links[0].have?(unsigned)(k_uptime_get()-links[0].tx.since):0);
+            LOG_INF("Right ACK41 prx=%u selected=%u load=%u load_fail=%u rx_ok=%u rx_fail=%u setup_fail=%u loaded_peer=%u loaded_gen=%u loaded_seq=%u bytes=%u rc=%d",
+                (unsigned)atomic_get(&diag_private_start),(unsigned)atomic_get(&diag_private_selected),(unsigned)atomic_get(&diag_ack_load),(unsigned)atomic_get(&diag_ack_fail),(unsigned)atomic_get(&diag_rx_start),(unsigned)atomic_get(&diag_rx_fail),(unsigned)atomic_get(&diag_setup_fail),(unsigned)atomic_get(&diag_loaded_peer),(unsigned)atomic_get(&diag_loaded_generation),(unsigned)atomic_get(&diag_loaded_sequence),(unsigned)atomic_get(&diag_loaded_bytes),(int)atomic_get(&diag_load_rc));
+        }
         k_sleep(K_MSEC(1));
     }
     mpsl_timeslot_session_close(session);

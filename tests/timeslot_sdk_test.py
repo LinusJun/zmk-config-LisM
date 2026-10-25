@@ -5,8 +5,10 @@ Checks isolation and bounded structure, not microsecond timing or RF behavior.
 from pathlib import Path
 import argparse,hashlib,importlib.util,json,re,subprocess,tempfile
 P=Path(__file__).resolve().parents[2]
-a=argparse.ArgumentParser();a.add_argument('--workspace',type=Path,required=True);W=a.parse_args().workspace
-generated=W/'build-dongle/modules/zmk-config-LisM/sdk_esb_mpsl.c'
+a=argparse.ArgumentParser();a.add_argument('--workspace',type=Path,required=True)
+a.add_argument('--target',default='dongle',choices=['dongle','right','dongle_a','dongle_b'])
+args=a.parse_args();W=args.workspace
+generated=W/('build-'+args.target)/'modules/zmk-config-LisM/sdk_esb_mpsl.c'
 sdk=generated.read_text();ppi=Path(str(generated)+'.ppi.c').read_text()
 def function(t,name):
     m=re.search(r'(?m)^(?:static )?[^\n;]+\b'+name+r'\([^;]*?\)\s*\{',t);assert m,name
@@ -54,6 +56,7 @@ pre=r'''
 #define ESB_TIMER_IRQ 10
 #define CONFIG_ESB_RX_FIFO_SIZE 16
 #define LOG_ERR(...) do {} while(0)
+#define LISM_PRX_TRACE(...) do {} while(0)
 enum {ESB_STATE_IDLE};
 struct esb_config {bool use_fast_ramp_up;void (*event_handler)(void);};
 static struct esb_config esb_cfg;

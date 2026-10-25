@@ -42,7 +42,7 @@ static enum station_stage stage=ST_STABLE;
 static uint8_t station=KB_STATION_NONE,preferred_station,desired_station=KB_STATION_NONE;
 static uint8_t gate_station=KB_STATION_NONE,drain_station=KB_STATION_NONE;
 static uint32_t receiver_boot,gate_boot,drain_boot;
-static bool selection_pending,settings_pending;
+static bool selection_pending,settings_pending,recovery_pending;
 static uint8_t hunt_station,offer_station=KB_STATION_NONE;
 static uint32_t probe_cookie,offer_boot;
 static int64_t hunt_started,station_started,next_probe,target_started;
@@ -52,7 +52,7 @@ static int64_t blocked_until[2];
 static bool monitor_probe;
 static void finish_commit_locked(void){
     current_mode=desired_mode;station=desired_mode==KB_ROUTE_DONGLE?desired_station:kb_uplink_station_current();
-    switching=boot_probe=false;stage=ST_STABLE;selection_pending=false;awaiting_left_applied=false;settings_pending=true;
+    switching=boot_probe=false;stage=ST_STABLE;selection_pending=recovery_pending=false;awaiting_left_applied=false;settings_pending=true;
     if(current_mode==KB_ROUTE_DONGLE)preferred_station=station;
 }
 void kb_route_left_telemetry(uint8_t*battery,uint8_t*online){k_spinlock_key_t k=k_spin_lock(&state_lock);*battery=physical[0].battery;*online=left_seen && k_uptime_get()-left_seen<LISM_LEASE_MS;k_spin_unlock(&state_lock,k);}
@@ -273,11 +273,13 @@ static bool neutral_ble(void){
 static void begin_transaction(int64_t now){
     k_spinlock_key_t key=k_spin_lock(&state_lock);
     switching=true;boot_probe=false;epoch++;if(!epoch)epoch++;
+    recovery_pending=false;
     stage=ST_DRAIN;quiet_at=now;drain_station=gate_station;drain_boot=gate_boot;ready_epoch=0;confirmed_at=0;
     awaiting_left_applied=false;monitor_probe=false;probe_cookie=0;left_disabled=true;
     k_spin_unlock(&state_lock,key);
     fence_sent=ble_fence_sent=false;atomic_clear(&fenced);atomic_clear(&ble_fenced);
     neutral_queued=current_mode==KB_ROUTE_BLE?0:7;
+    LOG_INF("Route transaction epoch=%u from=%u to=%u station=%u",epoch,current_mode,desired_mode,desired_station);
     kb_uplink_reset();kb_left_set_route(epoch,KB_LEFT_FREEZE,KB_ROUTE_BLE,KB_STATION_NONE,0);
     if(drain_station<KB_STATION_COUNT)probe_window(drain_station,now);
     publish();kb_route_ble_refresh();
@@ -334,13 +336,21 @@ static void route_work(struct k_work *w){
         /* Keep the in-flight tuple immutable while a physical key is held.
          * A newer request may replace this pending intent, never its epoch. */
         if(switching && !all_released()){atomic_cas(&requested,-1,request);goto again;}
+        recovery_pending=false;
+        LOG_INF("Route request action=%d stage=%u epoch=%u",request,stage,epoch);
         if(request<2){desired_mode=request;selected=-1;desired_station=preferred_station;selection_pending=!(stage==ST_STABLE && current_mode==request && (request==KB_ROUTE_BLE || dongle_confirmed()));}
         else if(request>=30 && request<32){desired_mode=KB_ROUTE_DONGLE;desired_station=request-30;selected=-1;selection_pending=!(stage==ST_STABLE && current_mode==KB_ROUTE_DONGLE && station==desired_station && dongle_confirmed());}
         else if(request>=10 && request<15 && current_mode==KB_ROUTE_BLE){desired_mode=KB_ROUTE_BLE;selected=request-10;selection_pending=selected!=zmk_ble_active_profile_index();}
         if(selection_pending && switching && all_released())begin_transaction(now);
     }
     if(!initialized)goto again;
-    if(stage==ST_STABLE && !selection_pending && current_mode==KB_ROUTE_DONGLE && !dongle_confirmed()){desired_mode=KB_ROUTE_DONGLE;desired_station=station;selection_pending=true;}
+    if(stage==ST_STABLE && recovery_pending && dongle_confirmed()){
+        selection_pending=recovery_pending=false;LOG_INF("Dongle confirmation recovered before reconnect epoch=%u",epoch);
+    }
+    if(stage==ST_STABLE && !selection_pending && current_mode==KB_ROUTE_DONGLE && !dongle_confirmed()){
+        desired_mode=KB_ROUTE_DONGLE;desired_station=station;selection_pending=recovery_pending=true;
+        LOG_INF("Dongle confirmation expired epoch=%u age_ms=%u waiting_keys=%u",epoch,confirmed_at && now>=confirmed_at?(unsigned)(now-confirmed_at):UINT32_MAX,!all_released());
+    }
     if(stage==ST_STABLE && selection_pending){if(!all_released())goto again;begin_transaction(now);}
     if(stage==ST_DRAIN){
         /* Presence probes never renew a receiver input lease. A fresh nonce

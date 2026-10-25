@@ -6,8 +6,10 @@ P=Path(__file__).resolve().parents[1]
 b=runpy.run_path(str(P/'tests/kb_route_native_test.py'));pre=b['pre'];function=b['function'];radio=b['radio'];hub=b['hub'];link=b['link']
 common=Path('/work/workspace/module-right/src/split/esb/common.h').read_text();common=common[common.index('#define ZMK_SPLIT_ESB_ENVELOPE_MAGIC_PREFIX'):common.index('typedef void (*zmk_split_esb_process')]
 pre+=common+r'''
-#define KB_MIRROR_EVENT 125
-struct kb_mirror {uint32_t epoch;uint8_t version,wpm,layer,mods,indicators,profile,host_connected,left_battery,left_online;} __packed;
+#include "/work/source/src/kb_route/private_signal.h"
+static struct kb_private_signal_cache private_left_signal;
+static uint32_t k_uptime_get_32(void){return (uint32_t)now;}
+#include "/work/source/src/kb_route/mirror.h"
 struct esb_payload {uint8_t pipe,length,rssi;bool noack;uint8_t data[64];};
 typedef struct {uint8_t pipe;const uint8_t *data;size_t len;} app_esb_data_t;
 typedef struct {int evt_type;unsigned pipe;uint8_t *buf;size_t data_length;bool accepted;} app_esb_event_t;
@@ -17,7 +19,7 @@ typedef struct {int evt_type;unsigned pipe;uint8_t *buf;size_t data_length;bool 
 struct hub_tx {struct esb_payload p;uint32_t peer,generation,local_boot;uint8_t station;int64_t since;};
 struct hub_link {uint32_t boot,next_seq,last_boot[2],previous_boot[2],last_seq[2],ack_boot[2],ack_seq[2];struct hub_tx tx;bool have;atomic_t result;uint32_t success,fail;};
 static struct hub_link links[2];static struct hub_tx latest_mirror;static bool mirror_pending;
-struct hub_rx {struct esb_payload p;uint8_t link,station;uint32_t boot;};
+struct hub_rx {struct esb_payload p;uint8_t link,station;uint32_t boot,sampled_ms;};
 static struct hub_rx rx[64];static atomic_t head,tail,uplink_generation;static int tx_lock;static uint32_t left_route_epoch,control_last_seq;static uint8_t left_route_phase,left_route_target,left_route_station;static uint32_t left_route_receiver_boot;
 static atomic_t station_selected,station_requested;static int64_t uplink_seen;
 struct queue;static void k_msgq_purge(struct queue*q);
@@ -54,7 +56,7 @@ static struct k_spinlock signal_lock;static struct {int8_t dbm;int64_t seen;} si
 static unsigned d_mirrors,d_events;
 static void d_callback(app_esb_event_t*e){struct esb_event_envelope env={0};memcpy(&env,e->buf,e->data_length-sizeof(struct esb_msg_postfix));d_events++;if(env.payload.event.type==KB_MIRROR_EVENT)d_mirrors++;e->accepted=true;}
 '''
-code=pre+'\n'+(P/'src/esb_upstream/hub_motion.inc').read_text()+'\n'+ '\n'.join(function(t,n) for t,n in [(radio,'get32'),(radio,'put32'),(link,'lism_valid_event'),((P/'src/esb_upstream/common.c').read_text(),'lism_wire_valid'),(hub,'kb_uplink_valid'),(radio,'valid_body'),(radio,'receive'),(radio,'enqueue'),(radio,'kb_uplink_send'),(radio,'next_tx'),(radio,'tx_live'),(radio,'apply_station_request')])+'\n'+receiver
+code=pre+'\n'+(P/'src/esb_upstream/hub_motion.inc').read_text()+'\n'+ '\n'.join(function(t,n) for t,n in [(radio,'get32'),(radio,'put32'),(link,'lism_valid_event'),((P/'src/esb_upstream/common.c').read_text(),'lism_wire_valid'),(hub,'kb_uplink_valid'),(radio,'private_signal_tuple'),(radio,'valid_body'),(radio,'receive'),(radio,'enqueue'),(radio,'kb_uplink_send'),(radio,'next_tx'),(radio,'tx_live'),(radio,'apply_station_request')])+'\n'+receiver
 main=r'''
 static struct esb_payload frame(unsigned net,unsigned source,uint32_t peer_boot,uint32_t seq,uint32_t target,bool command){
  struct esb_payload p={.pipe=source};uint8_t body[64]={0};size_t n;

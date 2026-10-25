@@ -1,0 +1,4 @@
+/* A-only diagnostic comparison; no controller state changes. */
+&st7789 {
+    mipi-max-frequency = <8000000>;
+};

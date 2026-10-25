@@ -1593,3 +1593,16 @@ bool lism_input_host_signal(int8_t*dbm){
     }
     k_spin_unlock(&identity_lock,k);*dbm=weakest;return found;
 }
+
+/* UI-only partition of existing RSSI samples; retain the 3-second worker. */
+bool lism_input_host_slot_signal(unsigned slot,int8_t *dbm){
+    if(slot>=LISM_INPUT_PEERS || !dbm || !lism_input_host_enabled())return false;
+    bool found=false;k_spinlock_key_t k=k_spin_lock(&identity_lock);
+    if(identities[slot].conn && atomic_get(&sessions[slot].input_ready) &&
+       rssi_cache[slot].seen && k_uptime_get()-rssi_cache[slot].seen<8000 &&
+       rssi_cache[slot].disabled==(uint32_t)atomic_get(&disable_generation) &&
+       identities[slot].conn==rssi_cache[slot].conn && identities[slot].epoch==rssi_cache[slot].epoch){
+        *dbm=rssi_cache[slot].dbm;found=true;
+    }
+    k_spin_unlock(&identity_lock,k);return found;
+}

@@ -26,13 +26,17 @@ code=pre+'\n'.join(function(mirror,n) for n in ['kb_mirror_received','kb_mirror_
 #define SYS_SLIST_FOR_EACH_CONTAINER(list,item,node) for(item=(void*)&fixture;item!=NULL;item=NULL)
 enum modifier_type{MOD_TYPE_GUI,MOD_TYPE_ALT,MOD_TYPE_CTRL,MOD_TYPE_SHIFT};
 static int modifier_order_get(int i){return i;}
-struct zmk_widget_modifier_indicator{lv_obj_t *mod_labels[4];};struct zmk_widget_layer_display{lv_obj_t*dots[6];};struct zmk_widget_output{int x;};
+struct zmk_widget_modifier_indicator{lv_obj_t *mod_labels[4];lv_obj_t *obj;};struct zmk_widget_layer_display{lv_obj_t*dots[6];};struct zmk_widget_output{int x;};
 static struct {lv_obj_t*labels[6];} fixture;static lv_obj_t ids[6];
 static bool mod_colors[4];static int dot_colors[6];static uint32_t cap_color,num_color;
 static void set_modifier_color(lv_obj_t *l,bool active){mod_colors[l-ids]=active;}
 static int lv_color_hex(int color){return color;}
 static void lv_obj_set_style_bg_color(lv_obj_t*l,int color,int part){(void)part;dot_colors[l-ids]=color;}
 static lv_obj_t *caps_label=(lv_obj_t*)1,*num_label=(lv_obj_t*)2;
+/* This fixture checks telemetry selection; modifier_refresh_native_test checks
+ * actual LVGL invalidation and pixels with the real modifier band helper. */
+static lv_obj_t *lv_obj_get_parent(lv_obj_t *obj){(void)obj;return NULL;}
+static void kb_modifier_band_refresh(lv_obj_t *obj){(void)obj;}
 static void lv_obj_set_style_text_color(lv_obj_t*l,int color,int part){(void)part;if(l==caps_label)cap_color=color;else if(l==num_label)num_color=color;else assert(0);}
 static bool create_lock_indicator_row(void){return true;}static int deferred_init_work;
 static int k_work_reschedule(void*w,int t){(void)w;(void)t;return 0;}
@@ -77,6 +81,7 @@ hid=Path('/deps/zmk/app/src/hid.c').read_text()
 emitter=(P/'src/kb_route/mirror_hub.c').read_text()
 hid_fixture=b['pre']+r'''
 void kb_route_left_telemetry(uint8_t*b,uint8_t*o){*b=81;*o=1;}
+bool kb_private_left_signal(int8_t *dbm){*dbm=-61;return true;}
 '''+(P/'src/kb_route/mirror.h').read_text()+r'''
 typedef uint8_t zmk_mod_flags_t;typedef uint8_t zmk_mod_t;
 #define LOG_DBG(...) ((void)0)

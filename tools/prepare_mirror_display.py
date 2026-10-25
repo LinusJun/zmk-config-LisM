@@ -19,4 +19,8 @@ def prepare(operator):
 #ifdef CONFIG_DT_HAS_ZMK_BEHAVIOR_CAPS_WORD_ENABLED
         state.caps_word=false;
 #endif
-    }''');s+='\nvoid kb_mirror_mods_refresh(void) {modifier_indicator_update_cb(modifier_indicator_get_state(NULL));}\n';f.write_text(s)
+    }''')
+    s='#include <kb_route/modifier_band.h>\n'+s
+    s=replace(s,'            set_modifier_color(widget->mod_labels[i], state.mods[type]);\n        }',
+        '            set_modifier_color(widget->mod_labels[i], state.mods[type]);\n        }\n        kb_modifier_band_refresh(widget->obj);')
+    s+='\nvoid kb_mirror_mods_refresh(void) {modifier_indicator_update_cb(modifier_indicator_get_state(NULL));}\n';f.write_text(s)

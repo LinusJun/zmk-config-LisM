@@ -83,6 +83,51 @@ void lism_esb_slot_service(void) {
     NVIC_ClearPendingIRQ(ESB_EVT_IRQ_NUMBER);
 }
 '''
+    # Read-only right-hand trace of the actual SDK ACK state machine. Other
+    # targets compile these calls away; no radio/clock/lease setting changes.
+    t='''#include <stdint.h>
+#if defined(CONFIG_SHIELD_LISM_R)
+extern void lism_esb_prx_trace(unsigned event, const uint8_t *rx, unsigned rx_len,
+                             const uint8_t *tx, unsigned tx_len, unsigned detail);
+#define LISM_PRX_TRACE(...) lism_esb_prx_trace(__VA_ARGS__)
+#else
+#define LISM_PRX_TRACE(...) do {} while (0)
+#endif
+'''+t
+    t=replace(t, '\ttx_pdu->type.dpl_pdu.no_ack = rx_pdu->type.dpl_pdu.no_ack;',
+                '''\ttx_pdu->type.dpl_pdu.no_ack = rx_pdu->type.dpl_pdu.no_ack;
+    LISM_PRX_TRACE(1, rx_pdu->data, rx_pdu->type.dpl_pdu.length,
+                   tx_pdu->data, tx_pdu->type.dpl_pdu.length,
+                   rx_pdu->type.dpl_pdu.pid | (retransmit_payload ? 4U : 0U));''')
+    t=replace(t, 'static void on_radio_disabled_rx_ack(void)\n{',
+                '''static void on_radio_disabled_rx_ack(void)
+{
+    struct esb_radio_pdu *trace_tx = (struct esb_radio_pdu *)tx_payload_buffer;
+    LISM_PRX_TRACE(2, NULL, 0, trace_tx->data,
+                   trace_tx->type.dpl_pdu.length, trace_tx->type.dpl_pdu.pid);''')
+    # These anchors are the real PRX error paths, before bounded recovery.
+    t=replace(t, '''\tif (!nrf_radio_crc_status_check(NRF_RADIO)) {
+\t\tclear_events_restart_rx();''', '''\tif (!nrf_radio_crc_status_check(NRF_RADIO)) {
+        LISM_PRX_TRACE(4, NULL, 0, NULL, 0, 0);
+\t\tclear_events_restart_rx();''')
+    t=replace(t, '''\tif (rx_fifo.count >= CONFIG_ESB_RX_FIFO_SIZE) {
+\t\tclear_events_restart_rx();''', '''\tif (rx_fifo.count >= CONFIG_ESB_RX_FIFO_SIZE) {
+        LISM_PRX_TRACE(5, NULL, 0, NULL, 0, 0);
+\t\tclear_events_restart_rx();''')
+    t+='''
+void lism_esb_prx_slot_end_trace(void)
+{
+    if (esb_cfg.mode == ESB_MODE_PRX) {
+        struct esb_radio_pdu *trace_tx = (struct esb_radio_pdu *)tx_payload_buffer;
+        /* Snapshot before esb_disable clears state/POWER. A pending END may
+         * mean the packet finished before its callback; retain that distinction. */
+        LISM_PRX_TRACE(3, NULL, 0, trace_tx->data,
+                       esb_state == ESB_STATE_PRX_SEND_ACK ? trace_tx->type.dpl_pdu.length : 0,
+                       (esb_state == ESB_STATE_PRX_SEND_ACK ? 1U : 0U) |
+                       (nrf_radio_event_check(NRF_RADIO, ESB_RADIO_EVENT_END) ? 2U : 0U));
+    }
+}
+'''
     Path(destination).write_text(t)
 
 def prepare_ppi(source, destination):

@@ -20,6 +20,8 @@ static int64_t now=1000;static int64_t k_uptime_get(void){return now;}
 static uint32_t boot=123,peer=456;static uint32_t kb_receiver_boot(void){return boot;}static uint32_t kb_receiver_peer_boot(unsigned n){assert(n==1);return peer;}
 struct kb_route_status{uint8_t version,mode,profile;uint32_t epoch,authority;uint8_t phase,target,station,owner_station;uint32_t receiver_boot;} __attribute__((packed));
 static struct kb_route_view view={.mode=KB_ROUTE_UNKNOWN};static struct k_spinlock lock;static uint32_t authority,wire_boot,local_route_generation=1;
+static uint32_t echo_generation=1,established_echo_generation,echo_receiver_boot;
+static bool echo_dongle_commit;
 static int echo_epoch,echo_phase,send_command;static void atomic_set(int*p,int v){*p=v;}static void k_work_reschedule(void*p,int n){(void)p;(void)n;}
 static unsigned flushes,commands;static void kb_route_flush_commands(void){flushes++;}
 struct zmk_behavior_binding {const char*behavior_dev;uint32_t param1,param2;};

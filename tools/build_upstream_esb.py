@@ -4,6 +4,7 @@ import argparse,subprocess,os,hashlib,json,shutil
 from prepare_upstream_esb import prepare,replace
 from prepare_esb_kconfig import generate
 from prepare_mirror_display import prepare as prepare_mirror
+from prepare_lcd_diagnostics import prepare as prepare_lcd_diagnostics
 from check_esb_artifacts import validate_uf2,check_radio_vectors
 ROOT=Path(__file__).resolve().parents[1]
 BASE='b116964cbc5669bc9acca233c5d0974d1be9cd32'
@@ -46,6 +47,8 @@ def build(target,ws,modules=None,driver=None):
     if xiao:
         shutil.copyfile(ROOT/'src/display_jd9853a.c',display/'drivers/display/display_st7789v.c')
         (display/'boards/shields/prospector_adapter/src/display_rotate_init.c').write_text('/* Fixed native landscape; no rotation buffer. */\n')
+    if target=='dongle_a':
+        prepare_lcd_diagnostics(display/'drivers/display/display_st7789v.c')
     p=display/'CMakeLists.txt';p.write_text(replace(p.read_text(),'        zephyr_library_sources(src/split/bluetooth/central_status_changed_observer.c)','        # ESB link emits the existing peripheral-status event directly.'))
     operator=display/'boards/shields/prospector_adapter/src/layouts/operator'
     for suffix in ['c','h']:
@@ -60,10 +63,32 @@ def build(target,ws,modules=None,driver=None):
     p=operator/'wpm_meter.c'
     p.write_text(replace(p.read_text(),'    lv_obj_set_size(widget->obj, 260, 90);','    lv_obj_set_size(widget->obj, 260, 90);\n    lv_obj_remove_flag(widget->obj, LV_OBJ_FLAG_SCROLLABLE);\n    lv_obj_set_scrollbar_mode(widget->obj, LV_SCROLLBAR_MODE_OFF);'))
     prepare_mirror(operator)
+    if display_central:
+        # One bounded plot recovery only when WPM/its old peak actually reaches
+        # zero. No periodic/full-screen refresh and no synchronous LVGL call.
+        text=p.read_text()
+        text=replace(text,'        if (dirty) wpm_meter_render(0);',
+            '        if (dirty) {\n'
+            '            wpm_meter_render(0);\n'
+            '            struct zmk_widget_wpm_meter *widget;\n'
+            '            SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {\n'
+            '                lv_obj_invalidate(widget->obj);\n'
+            '            }\n'
+            '        }')
+        p.write_text(text)
     p=operator/'status_screen.c'
     text=p.read_text()
-    text=replace(text,'#include <lvgl.h>','#include <lvgl.h>\n#include <lism_screen.h>\n#include <kb_route/icons.h>\n#include <kb_route/mirror.h>')
+    text=replace(text,'#include <lvgl.h>','#include <lvgl.h>\n#include <lism_screen.h>\n#include <kb_route/icons.h>\n#include <kb_route/mirror.h>\n#include <kb_route/modifier_band.h>\n#include <kb_route/prospector169_layout.h>')
     text=replace(text,'    return screen;','    kb_route_icons_create(screen);\n    kb_mirror_ui_start();\n    lism_screen_create(screen);\n    return screen;')
+    text=replace(text,'    return screen;','    kb_modifier_band_layout(zmk_widget_modifier_indicator_obj(&modifier_indicator_widget));\n    return screen;')
+    text=replace(text,'    return screen;',
+        '    kb_prospector169_wpm_layout(wpm_meter_widget.obj,wpm_meter_widget.bars,WPM_BAR_COUNT,wpm_meter_widget.peak_indicator);\n'
+        '    kb_prospector169_layer_row_layout(layer_display_widget.obj);\n'
+        '    return screen;')
+    if target=='dongle_a':
+        text='#include <kb_route/lcd_ui_diagnostics.h>\n'+text
+        text=replace(text,'    return screen;',
+                     '    lism_lcd_ui_diagnostics_start(screen,wpm_meter_widget.wpm_label,output_widget.ble_btn);\n    return screen;')
     if xiao:
         text='#include "xiao147_ui.h"\n'+text
         text=replace(text,'    return screen;','    xiao147_ui_start(screen);\n    return screen;')
@@ -73,6 +98,7 @@ def build(target,ws,modules=None,driver=None):
     mods=list(dict.fromkeys([str(ROOT),str(prepared),str(display),str(ws/'nrf'),str(ws/'nrfxlib')]+mods))
     shield={'left':'lism_left rgbled_adapter','right':'lism_right rgbled_adapter','dongle_a':'lism_dongle prospector_adapter','dongle_b':'lism_dongle prospector_adapter xiao_plus_147_touch','reset':'settings_reset'}[target]
     options=[];overlay=str(ROOT/'config/esb-upstream.overlay')
+    if target=='dongle_a':overlay+=';'+str(ROOT/'config/prospector169-lcd-8mhz.overlay')
     if target!='reset':
         options=['-DEXTRA_CONF_FILE='+str(ROOT/'config/esb-upstream.conf'),'-DCONFIG_ZMK_SPLIT=y','-DCONFIG_ZMK_SPLIT_ROLE_CENTRAL='+('y' if central else 'n'),'-DLISM_COMPAT_INCLUDE='+str(compat.parent),'-DLISM_ESB_FOLDER='+str(prepared/'src/split/esb')]
         if display_central:options+=['-DCONFIG_SYS_HEAP_RUNTIME_STATS=y','-DCONFIG_LISM_DONGLE_STATION='+('1' if xiao else '0')]
@@ -88,7 +114,7 @@ def build(target,ws,modules=None,driver=None):
                       '-DCONFIG_BT_KEYS_OVERWRITE_OLDEST=n','-DCONFIG_MPSL_TIMESLOT_SESSION_COUNT=1',
                       '-DCONFIG_MPSL_FEM_ONLY=n','-DCONFIG_MPSL_DYNAMIC_INTERRUPTS=n',
                       '-DCONFIG_ZMK_SPLIT_ESB_USE_TIMESLOT=y',
-                      '-DCONFIG_LV_Z_VDB_SIZE=20','-DCONFIG_LV_Z_DOUBLE_VDB=n','-DCONFIG_LV_Z_MEM_POOL_SIZE='+('32768' if xiao else '24000'),'-DCONFIG_LV_FONT_MONTSERRAT_10=y','-DCONFIG_LV_FONT_MONTSERRAT_18=y','-DCONFIG_LV_FONT_MONTSERRAT_12=y','-DCONFIG_LV_FONT_MONTSERRAT_14=y','-DCONFIG_LV_USE_CUSTOM_SPRINTF=y']
+                      '-DCONFIG_LV_Z_VDB_SIZE=20','-DCONFIG_LV_Z_DOUBLE_VDB=y','-DCONFIG_LV_Z_MEM_POOL_SIZE='+('32768' if xiao else '24000'),'-DCONFIG_LV_FONT_MONTSERRAT_10=y','-DCONFIG_LV_FONT_MONTSERRAT_18=y','-DCONFIG_LV_FONT_MONTSERRAT_12=y','-DCONFIG_LV_FONT_MONTSERRAT_14=y','-DCONFIG_LV_USE_CUSTOM_SPRINTF=y']
             if not display_central:
                 options=[o for o in options if not o.startswith('-DCONFIG_LV_')]
                 options+=['-DCONFIG_LISM_BLE_INPUT_BRIDGE=n','-DCONFIG_ZMK_USB=n','-DCONFIG_ZMK_WPM=y','-DCONFIG_ZMK_HID_INDICATORS=y','-DCONFIG_ZMK_SPLIT_BLE_CENTRAL_PERIPHERALS=2','-DCONFIG_ZMK_SPLIT_BLE_CENTRAL_BATTERY_LEVEL_QUEUE_SIZE=16','-DCONFIG_ZMK_SPLIT_ESB_PERIPHERAL_ID=1','-DCONFIG_ZMK_KEYBOARD_NAME="LisM Keyboard"']
@@ -136,7 +162,7 @@ def build(target,ws,modules=None,driver=None):
     assert production_fingerprint()[0]==fingerprint,'Production sources changed during this build; rebuild required'
     data=(dest/'zephyr/zmk.uf2').read_bytes();validate_uf2(data)
     out=ROOT/'artifacts';out.mkdir(exist_ok=True)
-    name={'left':'LisM_ESBv504_DIAG_Left_4waystick.uf2','right':'LisM_ESBv504_DIAG_Right_Trackball_BLE5_Hub.uf2','dongle_a':'LisM_ESBv504_DIAG_Dongle_A_Prospector169.uf2','dongle_b':'LisM_ESBv504_DIAG_Dongle_B_XIAO147_Touch.uf2','reset':'settings_reset_XIAO_nRF52840.uf2'}[target]
+    name={'left':'LisM_ESBv50414_PRIVATE76_TEST_Left_4waystick.uf2','right':'LisM_ESBv50417_LEFT_RSSI_TEST_Right_Trackball_BLE5_Hub.uf2','dongle_a':'LisM_ESBv50417_LEFT_RSSI_TEST_Dongle_A_Prospector169.uf2','dongle_b':'LisM_ESBv50418_FULL_TEST_Dongle_B_XIAO147_Touch.uf2','reset':'settings_reset_XIAO_nRF52840.uf2'}[target]
     (out/name).write_bytes(data);(out/(target+'.config')).write_text(conf);(out/(target+'.dts')).write_bytes((dest/'zephyr/zephyr.dts').read_bytes())
     rec={'target':target,'file':name,'sha256':hashlib.sha256(data).hexdigest(),'bytes':len(data),'verified_base':BASE,'keymap_sha256':KEYMAP,'upstream_esb':'314c7cbaf4a74e1add1d6ffc8249de3e29965b8c','host_profiles':5 if central else 0,'simultaneous_host_connections':5 if central else 0,'host_ble':central,'split_transport':'ESB only' if target!='reset' else None,'hardware_tested':False,'pins':PINS,'production_fingerprint':fingerprint,'source_hashes':source_hashes,**mem}
     (out/(target+'-build.json')).write_text(json.dumps(rec,indent=2)+'\n');print('SUCCESS',json.dumps({k:rec[k] for k in ['target','file','sha256','bytes','production_fingerprint'] }|mem),flush=True)

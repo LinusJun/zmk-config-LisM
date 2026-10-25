@@ -31,6 +31,8 @@ struct kb_route_status{uint8_t version,mode,profile;uint32_t epoch,authority;uin
 ''' + strip((P/'src/kb_route/view.h').read_text()) + r'''
 static struct kb_route_view view={.mode=KB_ROUTE_UNKNOWN};
 static struct k_spinlock lock;static uint32_t authority,wire_boot,local_route_generation=1;
+static uint32_t echo_generation=1,established_echo_generation,echo_receiver_boot;
+static bool echo_dongle_commit;
 '''+''.join(function(status,n) for n in ['kb_route_status_valid','kb_receiver_route_generation','kb_route_status_received','kb_route_snapshot'])+r'''
 int main(void){
  struct kb_route_status s={.version=3,.mode=KB_ROUTE_DONGLE,.profile=0,.epoch=7,.authority=123,.phase=1,.target=0,.station=0,.owner_station=0,.receiver_boot=777};

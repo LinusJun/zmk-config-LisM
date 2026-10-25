@@ -60,9 +60,17 @@ int main(void){
  enabled=true;disable_during_query=false;reply_rssi=127;run(2);assert(!lism_input_host_signal(&dbm));
  reply_rssi=-71;run(2);assert(lism_input_host_signal(&dbm)&&dbm==-71);
  sessions[0].input_ready=0;assert(!lism_input_host_signal(&dbm));
+ sessions[0].input_ready=1;assert(lism_input_host_slot_signal(0,&dbm)&&dbm==-71);
+ assert(!lism_input_host_slot_signal(1,&dbm)&&!lism_input_host_slot_signal(2,&dbm)&&!lism_input_host_slot_signal(0,NULL));
+ before=queries;for(unsigned n=0;n<1000;n++)assert(lism_input_host_slot_signal(0,&dbm));assert(queries==before);
+ identities[0].conn=&b;assert(!lism_input_host_slot_signal(0,&dbm));identities[0].conn=&a;
+ identities[0].epoch++;assert(!lism_input_host_slot_signal(0,&dbm));identities[0].epoch--;
+ disable_generation++;assert(!lism_input_host_slot_signal(0,&dbm));disable_generation--;
+ enabled=false;assert(!lism_input_host_slot_signal(0,&dbm));
+ puts("PASS actual per-slot RSSI: cache-only 1000 reads issue no HCI, invalid slot/null/off/epoch/replaced identity blocked");
  puts("PASS actual RSSI worker/cache: zero HCI while OFF, one peer per 3s, cache expiry, connection epoch, OFF during query, invalid RSSI, ready-only cache");
 }
 '''
 with tempfile.TemporaryDirectory() as t:
- f=Path(t)/'signal.c';o=Path(t)/'signal';f.write_text(pre+cache+function(s,'rssi_worker')+function(s,'lism_input_host_signal')+main)
+ f=Path(t)/'signal.c';o=Path(t)/'signal';f.write_text(pre+cache+function(s,'rssi_worker')+function(s,'lism_input_host_signal')+function(s,'lism_input_host_slot_signal')+main)
  subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=address,undefined',str(f),'-o',str(o)],check=True);subprocess.run([str(o)],check=True)

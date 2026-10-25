@@ -26,7 +26,7 @@ zephyr_library_sources(common.c app_esb.c link.c)
 zephyr_library_sources_ifdef(CONFIG_ZMK_SPLIT_ROLE_CENTRAL central.c)
 zephyr_library_sources_ifndef(CONFIG_ZMK_SPLIT_ROLE_CENTRAL peripheral.c)
 ''')
-    for source,name in [('common.c','common.c'),('radio.c','app_esb.c'),('link.c','link.c'),('link.h','link.h'),('hub_radio.inc','hub_radio.inc'),('hub_motion.inc','hub_motion.inc'),('left_radio.inc','left_radio.inc')]:
+    for source,name in [('common.c','common.c'),('radio.c','app_esb.c'),('link.c','link.c'),('link.h','link.h'),('hub_radio.inc','hub_radio.inc'),('hub_motion.inc','hub_motion.inc'),('hub_prx_trace.inc','hub_prx_trace.inc'),('left_radio.inc','left_radio.inc')]:
         shutil.copyfile(ROOT/'src/esb_upstream'/source,folder/name)
     p=folder/'common.h';p.write_text(p.read_text()+'\n#include "link.h"\n')
     for name in ['central.c','peripheral.c']:

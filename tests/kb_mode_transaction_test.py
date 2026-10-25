@@ -14,7 +14,7 @@ static enum station_stage stage=ST_STABLE;
 static uint8_t station=KB_STATION_NONE,preferred_station,desired_station=KB_STATION_NONE;
 static uint8_t gate_station=KB_STATION_NONE,drain_station=KB_STATION_NONE;
 static uint32_t receiver_boot,gate_boot,drain_boot;
-static bool selection_pending=true,settings_pending;
+static bool selection_pending=true,settings_pending,recovery_pending;
 static uint8_t hunt_station,offer_station=KB_STATION_NONE;
 static uint32_t probe_cookie,offer_boot;
 static int64_t hunt_started,hunt_deadline,station_started,next_probe,target_started;

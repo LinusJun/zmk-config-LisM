@@ -237,7 +237,7 @@ int lism_handle_event(uint8_t source,const struct zmk_split_transport_peripheral
     }
 #if !IS_ENABLED(CONFIG_LISM_KB_HUB)
     if((int)e->type==KB_MIRROR_EVENT){struct kb_mirror m;memcpy(&m,&e->data,sizeof(m));kb_mirror_received(&m);
-        if(!kb_route_dongle_key_allowed() && m.left_online && m.left_battery<=100){struct lism_snapshot s={.battery=m.left_battery};struct zmk_split_transport_peripheral_event b={.type=LISM_SNAPSHOT_TYPE};memcpy(&b.data,&s,sizeof(s));lism_handle_event(0,&b);}return 0;}
+        if(!kb_route_dongle_key_allowed() && kb_mirror_left_online(m.left_online) && m.left_battery<=100){struct lism_snapshot s={.battery=m.left_battery};struct zmk_split_transport_peripheral_event b={.type=LISM_SNAPSHOT_TYPE};memcpy(&b.data,&s,sizeof(s));lism_handle_event(0,&b);}return 0;}
     if((int)e->type==KB_ROUTE_EVENT) {
         struct kb_route_status s;memcpy(&s,&e->data,sizeof(s));
         if(!kb_route_status_valid(&s))return -EINVAL;

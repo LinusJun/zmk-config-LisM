@@ -16,6 +16,7 @@
 #include "link.h"
 #include <kb_route/route.h>
 #include <kb_route/signal.h>
+#include <kb_route/mirror.h>
 #include <esb.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/crc.h>
@@ -52,7 +53,12 @@ static atomic_t command_generation;
 static struct k_spinlock signal_lock;
 static struct {int8_t dbm;int64_t seen;} signals[2];
 bool kb_esb_signal(unsigned source,int8_t*dbm){
-    if(source>=2)return false;k_spinlock_key_t k=k_spin_lock(&signal_lock);
+    if(source>=2 || !dbm)return false;
+    if(source==0) {
+        struct kb_mirror m;int owner=kb_mirror_snapshot(&m);
+        if(owner)return owner>0 && kb_mirror_left_rssi(m.left_online,dbm);
+    }
+    k_spinlock_key_t k=k_spin_lock(&signal_lock);
     bool valid=signals[source].seen && k_uptime_get()-signals[source].seen<3000;
     *dbm=signals[source].dbm;k_spin_unlock(&signal_lock,k);return valid;
 }

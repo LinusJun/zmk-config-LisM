@@ -8,6 +8,7 @@
 
 #include <lvgl.h>
 #include <kb_route/mirror.h>
+#include <kb_route/modifier_band.h>
 #include <zephyr/init.h>
 #include <zephyr/kernel.h>
 
@@ -49,6 +50,7 @@ static lv_obj_t *get_operator_modifier_row(lv_obj_t *screen) {
 
     lv_obj_set_pos(modifiers, 10, 8);
     lv_obj_set_size(modifiers, lv_obj_get_width(screen) - 20, 24);
+    kb_modifier_band_layout(modifiers);
 
     static const char *const modifier_labels[] = {"GUI", "ALT", "CTL", "SFT"};
 
@@ -116,6 +118,7 @@ static void lock_indicator_update_cb(struct lock_indicator_state state) {
         caps_label, lv_color_hex(caps_active ? COLOR_CAPS_ACTIVE : COLOR_INACTIVE), LV_PART_MAIN);
     lv_obj_set_style_text_color(
         num_label, lv_color_hex(num_active ? COLOR_NUM_ACTIVE : COLOR_INACTIVE), LV_PART_MAIN);
+    kb_modifier_band_refresh(lv_obj_get_parent(caps_label));
 }
 
 static struct lock_indicator_state lock_indicator_get_state(const zmk_event_t *eh) {
